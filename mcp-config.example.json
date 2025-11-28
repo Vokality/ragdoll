@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ragdoll": {
+      "command": "/Users/lemi/.asdf/shims/bun",
+      "args": ["run", "/Users/lemi/vokality/ragdoll/ragdoll/src/packages/mcp/ragdoll-mcp-server.ts"],
+      "env": {}
+    }
+  }
+}
+
