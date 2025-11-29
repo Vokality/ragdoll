@@ -24,6 +24,10 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build ragdoll package
+        working-directory: packages/ragdoll
+        run: bun run build
+
       - name: Build production artifacts
         run: bun run build:prod
 
