@@ -1,6 +1,6 @@
 {
   "name": "@vokality/ragdoll",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An animated character framework with facial expressions, head poses, themes, and speech bubbles. Built with React and SVG.",
   "type": "module",
   "license": "MIT",
@@ -36,8 +36,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "clean": "rm -rf dist"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
@@ -47,4 +46,3 @@
     "typescript": "~5.9.3"
   }
 }
-
