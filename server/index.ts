@@ -1,23 +1,34 @@
 import { RagdollAPIServer } from '../src/packages/api/server';
 import { CharacterController } from '../src/packages/character/controllers/character-controller';
 
-// Create and start the API server
-const server = new RagdollAPIServer(3001);
+// Read port from environment variables or default to 3001
+const port = Number.parseInt(
+  process.env.PORT || 
+  process.env.RAGDOLL_API_PORT || 
+  '3001',
+  10
+);
 
-// Create a character controller for the API server
+// Create and start the API server
+const server = new RagdollAPIServer(port);
+
+// Create a character controller for the default session (backward compatibility)
 const characterController = new CharacterController();
 server.setCharacterController(characterController);
 
-// Update the character controller at 60fps
+// Update all character controllers at 60fps
+// The server manages multiple sessions internally, each with its own controller
 setInterval(() => {
-  characterController.update(1 / 60);
+  server.updateAllControllers(1 / 60);
 }, 1000 / 60);
+
+const frontendPort = process.env.VITE_PORT || '5173';
 
 server.start().then(() => {
   console.log('✓ Ragdoll API server started successfully');
   console.log('✓ Character controller initialized');
-  console.log('✓ Interact with the character via the web interface at http://localhost:5173');
-  console.log('✓ Or use the API directly at http://localhost:3001/api');
+  console.log(`✓ Interact with the character via the web interface at http://localhost:${frontendPort}`);
+  console.log(`✓ Or use the API directly at http://localhost:${port}/api`);
 }).catch((error) => {
   console.error('Failed to start API server:', error);
   process.exit(1);

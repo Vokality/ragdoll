@@ -1,30 +1,51 @@
 {
   "name": "ragdoll",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A controllable animated character with facial expressions, head poses, and speech bubbles. Control via REST API, WebSocket, or MCP (Model Context Protocol).",
   "type": "module",
+  "license": "MIT",
+  "author": "Vokality",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vokality/ragdoll.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vokality/ragdoll/issues"
+  },
+  "homepage": "https://github.com/vokality/ragdoll#readme",
+  "keywords": [
+    "ragdoll",
+    "character",
+    "animation",
+    "facial-expressions",
+    "mcp",
+    "model-context-protocol",
+    "react",
+    "svg",
+    "avatar",
+    "ai-assistant"
+  ],
   "scripts": {
     "dev": "vite",
-    "dev:server": "tsx server/index.ts",
+    "dev:server": "bun run server/index.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "tsx server/index.ts",
-    "mcp-server": "tsx src/packages/mcp/ragdoll-mcp-server.ts"
+    "server": "bun run server/index.ts",
+    "mcp-server": "bun run src/packages/mcp/ragdoll-mcp-server.ts",
+    "docker:dev": "concurrently -n API,FRONTEND -c cyan,yellow \"bun run server\" \"bun run dev -- --host 0.0.0.0\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.4.0",
     "@types/matter-js": "^0.20.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "framer-motion": "^12.23.24",
     "matter-js": "^0.20.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
-    "three": "^0.181.2"
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -35,6 +56,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "babel-plugin-react-compiler": "^1.0.0",
+    "concurrently": "^9.1.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

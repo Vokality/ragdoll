@@ -5,14 +5,45 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { fileURLToPath } from 'url';
-import type { FacialStatePayload } from '../character/types';
+import type { FacialStatePayload, FacialMood } from '../character/types';
+
+// MCP Tool argument types
+interface SetMoodArgs {
+  mood: string;
+  duration?: number;
+  sessionId?: string;
+}
+
+interface TriggerActionArgs {
+  action: 'wink' | 'talk';
+  duration?: number;
+  sessionId?: string;
+}
+
+interface ClearActionArgs {
+  sessionId?: string;
+}
+
+interface SetHeadPoseArgs {
+  yawDegrees?: number;
+  pitchDegrees?: number;
+  duration?: number;
+  sessionId?: string;
+}
+
+interface SetSpeechBubbleArgs {
+  text?: string;
+  tone?: 'default' | 'whisper' | 'shout';
+  sessionId?: string;
+}
 
 export class RagdollMCPServer {
   private server: Server;
   private apiBaseUrl: string;
 
-  constructor(apiBaseUrl: string = 'http://localhost:3001') {
-    this.apiBaseUrl = apiBaseUrl;
+  constructor(apiBaseUrl?: string) {
+    // Read from environment variable, constructor parameter, or default
+    this.apiBaseUrl = apiBaseUrl || process.env.RAGDOLL_API_URL || 'http://localhost:3001';
     this.server = new Server(
       {
         name: 'ragdoll-face-controller',
@@ -39,12 +70,16 @@ export class RagdollMCPServer {
             properties: {
               mood: {
                 type: 'string',
-                enum: ['neutral', 'smile', 'frown', 'laugh', 'angry', 'sad'],
+                enum: ['neutral', 'smile', 'frown', 'laugh', 'angry', 'sad', 'surprise', 'confusion', 'thinking'],
               },
               duration: {
                 type: 'number',
                 description: 'Transition duration in seconds',
                 minimum: 0,
+              },
+              sessionId: {
+                type: 'string',
+                description: 'Optional session ID. If not provided, uses default session.',
               },
             },
             required: ['mood'],
@@ -64,6 +99,10 @@ export class RagdollMCPServer {
                 type: 'number',
                 minimum: 0.2,
               },
+              sessionId: {
+                type: 'string',
+                description: 'Optional session ID. If not provided, uses default session.',
+              },
             },
             required: ['action'],
           },
@@ -73,7 +112,12 @@ export class RagdollMCPServer {
           description: 'Clear the active facial action (stop talking, etc.)',
           inputSchema: {
             type: 'object',
-            properties: {},
+            properties: {
+              sessionId: {
+                type: 'string',
+                description: 'Optional session ID. If not provided, uses default session.',
+              },
+            },
           },
         },
         {
@@ -98,6 +142,10 @@ export class RagdollMCPServer {
                 type: 'number',
                 minimum: 0.1,
               },
+              sessionId: {
+                type: 'string',
+                description: 'Optional session ID. If not provided, uses default session.',
+              },
             },
           },
         },
@@ -115,6 +163,10 @@ export class RagdollMCPServer {
                 type: 'string',
                 enum: ['default', 'whisper', 'shout'],
               },
+              sessionId: {
+                type: 'string',
+                description: 'Optional session ID. If not provided, uses default session.',
+              },
             },
           },
         },
@@ -127,15 +179,15 @@ export class RagdollMCPServer {
       try {
         switch (name) {
           case 'setMood':
-            return await this.handleSetMood(args as any);
+            return await this.handleSetMood(args as unknown as SetMoodArgs);
           case 'triggerAction':
-            return await this.handleTriggerAction(args as any);
+            return await this.handleTriggerAction(args as unknown as TriggerActionArgs);
           case 'clearAction':
-            return await this.handleClearAction();
+            return await this.handleClearAction(args as unknown as ClearActionArgs | undefined);
           case 'setHeadPose':
-            return await this.handleHeadPose(args as any);
+            return await this.handleHeadPose(args as unknown as SetHeadPoseArgs);
           case 'setSpeechBubble':
-            return await this.handleSpeechBubble(args as any);
+            return await this.handleSpeechBubble(args as unknown as SetSpeechBubbleArgs);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -152,55 +204,55 @@ export class RagdollMCPServer {
     });
   }
 
-  private async handleSetMood(args: { mood: string; duration?: number }) {
+  private async handleSetMood(args: SetMoodArgs) {
     await this.postFacialState({
-      mood: { value: args.mood as any, duration: args.duration },
-    });
+      mood: { value: args.mood as FacialMood, duration: args.duration },
+    }, args.sessionId);
 
     return {
-      content: [{ type: 'text', text: `Mood set to ${args.mood}` }],
+      content: [{ type: 'text', text: `Mood set to ${args.mood}${args.sessionId ? ` (session: ${args.sessionId})` : ''}` }],
     };
   }
 
-  private async handleTriggerAction(args: { action: 'wink' | 'talk'; duration?: number }) {
+  private async handleTriggerAction(args: TriggerActionArgs) {
     await this.postFacialState({
       action: { type: args.action, duration: args.duration },
-    });
+    }, args.sessionId);
 
     return {
-      content: [{ type: 'text', text: `Action triggered: ${args.action}` }],
+      content: [{ type: 'text', text: `Action triggered: ${args.action}${args.sessionId ? ` (session: ${args.sessionId})` : ''}` }],
     };
   }
 
-  private async handleClearAction() {
-    await this.postFacialState({ clearAction: true });
+  private async handleClearAction(args?: ClearActionArgs) {
+    await this.postFacialState({ clearAction: true }, args?.sessionId);
 
     return {
       content: [{ type: 'text', text: 'Active action cleared' }],
     };
   }
 
-  private async handleHeadPose(args: { yawDegrees?: number; pitchDegrees?: number; duration?: number }) {
+  private async handleHeadPose(args: SetHeadPoseArgs) {
     await this.postFacialState({
       headPose: {
         yaw: args.yawDegrees !== undefined ? this.degToRad(args.yawDegrees) : undefined,
         pitch: args.pitchDegrees !== undefined ? this.degToRad(args.pitchDegrees) : undefined,
         duration: args.duration,
       },
-    });
+    }, args.sessionId);
 
     return {
       content: [{ type: 'text', text: 'Head pose updated' }],
     };
   }
 
-  private async handleSpeechBubble(args: { text?: string; tone?: 'default' | 'whisper' | 'shout' }) {
+  private async handleSpeechBubble(args: SetSpeechBubbleArgs) {
     await this.postFacialState({
       bubble: {
         text: args.text?.trim() ? args.text : null,
         tone: args.tone,
       },
-    });
+    }, args.sessionId);
 
     return {
       content: [
@@ -212,8 +264,12 @@ export class RagdollMCPServer {
     };
   }
 
-  private async postFacialState(payload: FacialStatePayload): Promise<void> {
-    await fetch(`${this.apiBaseUrl}/api/facial-state`, {
+  private async postFacialState(payload: FacialStatePayload, sessionId?: string): Promise<void> {
+    const url = new URL(`${this.apiBaseUrl}/api/facial-state`);
+    if (sessionId) {
+      url.searchParams.set('sessionId', sessionId);
+    }
+    await fetch(url.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -237,6 +293,8 @@ const isMainModule = currentFilePath === executedFilePath ||
                      executedFilePath?.endsWith('ragdoll-mcp-server.ts');
 
 if (isMainModule) {
-  const server = new RagdollMCPServer();
+  // API URL can be set via RAGDOLL_API_URL environment variable
+  const apiUrl = process.env.RAGDOLL_API_URL;
+  const server = new RagdollMCPServer(apiUrl);
   server.start().catch(console.error);
 }

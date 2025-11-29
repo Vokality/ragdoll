@@ -10,6 +10,7 @@ import type {
 interface UseServerSyncOptions {
   serverUrl?: string;
   autoConnect?: boolean;
+  sessionId?: string;
 }
 
 interface ServerSyncState {
@@ -17,11 +18,14 @@ interface ServerSyncState {
   error: string | null;
 }
 
+// Get default API URL from environment
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export function useServerSync(
   controller: CharacterController | null,
   options: UseServerSyncOptions = {}
 ) {
-  const { serverUrl = 'http://localhost:3001', autoConnect = true } = options;
+  const { serverUrl = DEFAULT_API_URL, autoConnect = true, sessionId } = options;
   const socketRef = useRef<Socket | null>(null);
   const [state, setState] = useState<ServerSyncState>({
     isConnected: false,
@@ -39,6 +43,15 @@ export function useServerSync(
     socket.on('connect', () => {
       console.log('Connected to ragdoll server');
       setState({ isConnected: true, error: null });
+      
+      // Join session if provided
+      if (sessionId) {
+        socket.emit('join-session', sessionId);
+      }
+    });
+
+    socket.on('session-joined', (data: { sessionId: string }) => {
+      console.log('Joined session:', data.sessionId);
     });
 
     socket.on('disconnect', () => {
@@ -63,7 +76,7 @@ export function useServerSync(
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [controller, serverUrl, autoConnect]);
+  }, [controller, serverUrl, autoConnect, sessionId]);
 
   const disconnect = () => {
     socketRef.current?.disconnect();

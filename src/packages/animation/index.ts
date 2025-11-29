@@ -6,9 +6,8 @@
 // Easing functions
 export * from './easing';
 
-// Spring physics
-export * from './spring';
-
-// Secondary motion effects
-export * from './secondary-motion';
+// Note: Spring physics and secondary motion are now handled by Framer Motion
+// The old Three.js-based implementations are deprecated
+// export * from './spring';
+// export * from './secondary-motion';
 

@@ -1,8 +1,12 @@
-import * as THREE from 'three';
 import { RagdollSkeleton } from '../models/ragdoll-skeleton';
 import { RagdollGeometry } from '../models/ragdoll-geometry';
+import type { ExpressionConfig } from '../models/ragdoll-geometry';
 import { ExpressionController } from './expression-controller';
 import { HeadPoseController } from './head-pose-controller';
+import { IdleController } from './idle-controller';
+import type { IdleState } from './idle-controller';
+import type { RagdollTheme } from '../themes/types';
+import { getTheme, getDefaultTheme } from '../themes';
 import type {
   CharacterState,
   FacialCommand,
@@ -12,6 +16,7 @@ import type {
   SpeechBubbleState,
   JointCommand,
   JointName,
+  HeadPose,
 } from '../types';
 
 export class CharacterController {
@@ -19,13 +24,17 @@ export class CharacterController {
   private geometry: RagdollGeometry;
   private expressionController: ExpressionController;
   private headPoseController: HeadPoseController;
+  private idleController: IdleController;
   private speechBubble: SpeechBubbleState = { text: null, tone: 'default' };
+  private theme: RagdollTheme;
 
-  constructor() {
+  constructor(themeId?: string) {
     this.skeleton = new RagdollSkeleton();
-    this.geometry = new RagdollGeometry(this.skeleton);
+    this.geometry = new RagdollGeometry();
+    this.theme = themeId ? getTheme(themeId) : getDefaultTheme();
     this.expressionController = new ExpressionController(this.geometry);
     this.headPoseController = new HeadPoseController(this.skeleton);
+    this.idleController = new IdleController();
   }
 
   public executeCommand(command: FacialCommand): void {
@@ -60,11 +69,11 @@ export class CharacterController {
     this.expressionController.clearAction();
   }
 
-  public setHeadPose(pose: Partial<{ yaw: number; pitch: number }>, duration?: number): void {
+  public setHeadPose(pose: Partial<HeadPose>, duration?: number): void {
     this.headPoseController.setTargetPose(pose, duration);
   }
 
-  public nudgeHead(delta: Partial<{ yaw: number; pitch: number }>, duration?: number): void {
+  public nudgeHead(delta: Partial<HeadPose>, duration?: number): void {
     this.headPoseController.nudge(delta, duration);
   }
 
@@ -85,36 +94,37 @@ export class CharacterController {
 
   public setJointRotation(command: JointCommand): void {
     if (command.angle) {
-      this.skeleton.setJointRotation(command.joint, command.angle);
+      const rotation = command.angle.y ?? command.angle.x ?? 0;
+      this.skeleton.setJointRotation(command.joint, rotation);
     }
   }
 
-  public getJointRotation(joint: JointName): THREE.Vector3 | null {
+  public getJointRotation(joint: JointName): number | null {
     return this.skeleton.getJointRotation(joint);
-  }
-
-  public getGroup(): THREE.Group {
-    return this.geometry.getGroup();
   }
 
   public update(deltaTime: number): void {
     this.expressionController.update(deltaTime);
     this.headPoseController.update(deltaTime);
+    this.idleController.update(deltaTime);
     this.skeleton.update(deltaTime);
   }
 
   public getState(): CharacterState {
-    const joints: Record<JointName, THREE.Vector3> = {} as Record<JointName, THREE.Vector3>;
+    const joints: Record<JointName, { x: number; y: number; z: number }> = {} as Record<
+      JointName,
+      { x: number; y: number; z: number }
+    >;
     this.skeleton.skeleton.joints.forEach((_joint, name) => {
       const rotation = this.skeleton.getJointRotation(name);
-      if (rotation) {
-        joints[name] = rotation.clone();
+      if (rotation !== null) {
+        joints[name] = { x: 0, y: rotation, z: 0 };
       }
     });
 
     return {
       headPose: this.headPoseController.getPose(),
-      joints,
+      joints: joints as Record<JointName, { x: number; y: number; z: number }>,
       mood: this.expressionController.getCurrentMood(),
       action: this.expressionController.getActiveAction(),
       bubble: this.getSpeechBubble(),
@@ -130,9 +140,47 @@ export class CharacterController {
     return { ...this.speechBubble };
   }
 
-  public getHeadWorldPosition(): THREE.Vector3 {
-    const position = new THREE.Vector3();
-    this.geometry.facialMeshes.head.getWorldPosition(position);
-    return position;
+  public getHeadWorldPosition(): { x: number; y: number; z: number } {
+    return { x: 0, y: -200, z: 0 };
+  }
+
+  public getExpression(): ExpressionConfig {
+    return this.expressionController.getExpression();
+  }
+
+  public getExpressionWithAction(): ExpressionConfig {
+    return this.expressionController.getExpressionWithAction();
+  }
+
+  public getGeometry(): RagdollGeometry {
+    return this.geometry;
+  }
+
+  public getIdleState(): IdleState {
+    return this.idleController.getState();
+  }
+
+  public getIdleController(): IdleController {
+    return this.idleController;
+  }
+
+  public triggerBlink(): void {
+    this.idleController.triggerBlink();
+  }
+
+  public setIdleEnabled(enabled: boolean): void {
+    this.idleController.setEnabled(enabled);
+  }
+
+  public getTheme(): RagdollTheme {
+    return this.theme;
+  }
+
+  public setTheme(themeId: string): void {
+    this.theme = getTheme(themeId);
+  }
+
+  public getThemeId(): string {
+    return this.theme.id;
   }
 }

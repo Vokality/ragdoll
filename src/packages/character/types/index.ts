@@ -1,8 +1,6 @@
-import * as THREE from 'three';
-
 export type JointName = 'headPivot' | 'neck';
 
-export type FacialMood = 'neutral' | 'smile' | 'frown' | 'laugh' | 'angry' | 'sad';
+export type FacialMood = 'neutral' | 'smile' | 'frown' | 'laugh' | 'angry' | 'sad' | 'surprise' | 'confusion' | 'thinking';
 
 export type FacialAction = 'none' | 'wink' | 'talk';
 
@@ -11,25 +9,29 @@ export interface HeadPose {
   pitch: number;
 }
 
+// Vector3-like interface for compatibility
+export interface Vector3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface Joint {
   name: JointName;
-  bone: THREE.Bone;
-  minAngle: THREE.Vector3;
-  maxAngle: THREE.Vector3;
-  currentAngle: THREE.Vector3;
+  minAngle: Vector3Like;
+  maxAngle: Vector3Like;
+  currentAngle: Vector3Like;
 }
 
 export interface Skeleton {
-  root: THREE.Bone;
   joints: Map<JointName, Joint>;
   ikChains: IKChain[];
 }
 
 export interface IKChain {
   name: string;
-  bones: THREE.Bone[];
-  target: THREE.Vector3;
-  poleTarget?: THREE.Vector3;
+  target: Vector3Like;
+  poleTarget?: Vector3Like;
 }
 
 export interface FacialAnimationState {
@@ -45,7 +47,7 @@ export interface SpeechBubbleState {
 
 export interface CharacterState {
   headPose: HeadPose;
-  joints: Record<JointName, THREE.Vector3>;
+  joints: Record<JointName, Vector3Like>;
   mood: FacialMood;
   action: FacialAction | null;
   bubble: SpeechBubbleState;
@@ -108,6 +110,6 @@ export interface FacialStatePayload {
 
 export interface JointCommand {
   joint: JointName;
-  angle?: THREE.Vector3;
-  rotation?: THREE.Euler;
+  angle?: Vector3Like;
+  rotation?: { x: number; y: number; z: number };
 }

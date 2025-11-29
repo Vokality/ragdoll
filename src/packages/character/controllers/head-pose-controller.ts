@@ -1,9 +1,8 @@
-import * as THREE from 'three';
 import type { HeadPose } from '../types';
 import { RagdollSkeleton } from '../models/ragdoll-skeleton';
 
-const MAX_YAW = THREE.MathUtils.degToRad(35);
-const MAX_PITCH = THREE.MathUtils.degToRad(20);
+const MAX_YAW = (35 * Math.PI) / 180;
+const MAX_PITCH = (20 * Math.PI) / 180;
 
 export class HeadPoseController {
   private skeleton: RagdollSkeleton;
@@ -45,12 +44,13 @@ export class HeadPoseController {
     if (this.elapsed < this.transitionDuration) {
       this.elapsed += deltaTime;
     }
-    const t = this.transitionDuration === 0 ? 1 : Math.min(1, this.elapsed / this.transitionDuration);
+    const t =
+      this.transitionDuration === 0 ? 1 : Math.min(1, this.elapsed / this.transitionDuration);
     const eased = this.easeOutQuad(t);
 
     this.currentPose = {
-      yaw: THREE.MathUtils.lerp(this.startPose.yaw, this.targetPose.yaw, eased),
-      pitch: THREE.MathUtils.lerp(this.startPose.pitch, this.targetPose.pitch, eased),
+      yaw: this.lerp(this.startPose.yaw, this.targetPose.yaw, eased),
+      pitch: this.lerp(this.startPose.pitch, this.targetPose.pitch, eased),
     };
 
     this.applyPose(this.currentPose);
@@ -61,19 +61,24 @@ export class HeadPoseController {
   }
 
   private applyPose(pose: HeadPose): void {
-    this.skeleton.setJointRotation('headPivot', new THREE.Vector3(0, pose.yaw, 0));
-    this.skeleton.setJointRotation('neck', new THREE.Vector3(pose.pitch, 0, 0));
+    this.skeleton.setJointRotation('headPivot', pose.yaw);
+    this.skeleton.setJointRotation('neck', pose.pitch);
   }
 
   private clampYaw(value: number): number {
-    return THREE.MathUtils.clamp(value, -MAX_YAW, MAX_YAW);
+    return Math.max(-MAX_YAW, Math.min(MAX_YAW, value));
   }
 
   private clampPitch(value: number): number {
-    return THREE.MathUtils.clamp(value, -MAX_PITCH, MAX_PITCH);
+    return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, value));
+  }
+
+  private lerp(a: number, b: number, t: number): number {
+    return a + (b - a) * t;
   }
 
   private easeOutQuad(t: number): number {
     return 1 - (1 - t) * (1 - t);
   }
 }
+

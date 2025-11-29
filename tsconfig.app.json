@@ -31,6 +31,8 @@
     "src/packages/mcp-server",
     "src/packages/physics",
     "src/packages/ragdoll",
-    "src/packages/visualization"
+    "src/packages/visualization",
+    "src/packages/animation/spring.ts",
+    "src/packages/animation/secondary-motion.ts"
   ]
 }

@@ -1,10 +1,12 @@
 {
   "mcpServers": {
     "ragdoll": {
-      "command": "/Users/lemi/.asdf/shims/bun",
-      "args": ["run", "/Users/lemi/vokality/ragdoll/ragdoll/src/packages/mcp/ragdoll-mcp-server.ts"],
-      "env": {}
+      "command": "bun",
+      "args": ["run", "mcp-server"],
+      "cwd": "/path/to/ragdoll",
+      "env": {
+        "RAGDOLL_API_URL": "http://localhost:3001"
+      }
     }
   }
 }
-
