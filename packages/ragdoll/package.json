@@ -1,6 +1,10 @@
 {
   "name": "@vokality/ragdoll",
+<<<<<<< Updated upstream
   "version": "0.1.3",
+=======
+  "version": "0.1.4",
+>>>>>>> Stashed changes
   "description": "An animated character framework with facial expressions, head poses, themes, and speech bubbles. Built with React and SVG.",
   "type": "module",
   "license": "MIT",
