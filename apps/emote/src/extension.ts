@@ -427,11 +427,33 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Theme command
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setTheme", (themeId?: string) => {
+    vscode.commands.registerCommand("emote.setTheme", async (themeId?: string) => {
+      // If themeId is provided, use it directly (e.g., from MCP command)
       if (themeId && VALID_THEMES.includes(themeId as ThemeId)) {
         void setThemeSetting(themeId as ThemeId);
         if (RagdollPanel.currentPanel) {
           RagdollPanel.currentPanel.postMessage({ type: "setTheme", themeId });
+        }
+        return;
+      }
+
+      // Otherwise, show quick pick dialog for user selection
+      const themeOptions: Array<{ label: string; description: string; id: ThemeId }> = [
+        { label: "Default", description: "Warm, human-like appearance", id: "default" },
+        { label: "Robot", description: "Metallic, futuristic robot", id: "robot" },
+        { label: "Alien", description: "Green, otherworldly alien", id: "alien" },
+        { label: "Monochrome", description: "Classic black and white", id: "monochrome" },
+      ];
+
+      const currentTheme = getThemeSetting();
+      const selected = await vscode.window.showQuickPick(themeOptions, {
+        placeHolder: `Select theme (current: ${currentTheme})`,
+      });
+
+      if (selected) {
+        void setThemeSetting(selected.id);
+        if (RagdollPanel.currentPanel) {
+          RagdollPanel.currentPanel.postMessage({ type: "setTheme", themeId: selected.id });
         }
       }
     })

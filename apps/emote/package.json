@@ -80,12 +80,6 @@
         "category": "Emote"
       },
       {
-        "command": "emote.setMood",
-        "title": "Emote: Set Mood",
-        "shortTitle": "Set Mood",
-        "category": "Emote"
-      },
-      {
         "command": "emote.triggerAction",
         "title": "Emote: Trigger Action",
         "shortTitle": "Trigger Action",
@@ -95,18 +89,6 @@
         "command": "emote.clearAction",
         "title": "Emote: Clear Action",
         "shortTitle": "Clear Action",
-        "category": "Emote"
-      },
-      {
-        "command": "emote.setHeadPose",
-        "title": "Emote: Set Head Pose",
-        "shortTitle": "Head Pose",
-        "category": "Emote"
-      },
-      {
-        "command": "emote.setSpeechBubble",
-        "title": "Emote: Set Speech Bubble",
-        "shortTitle": "Speech Bubble",
         "category": "Emote"
       },
       {
