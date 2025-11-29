@@ -4,20 +4,20 @@
  */
 
 // Character domain
-export * from './character/types';
-export { RagdollSkeleton } from './character/models/ragdoll-skeleton';
-export { RagdollGeometry } from './character/models/ragdoll-geometry';
-export { ExpressionController } from './character/controllers/expression-controller';
-export { HeadPoseController } from './character/controllers/head-pose-controller';
-export { CharacterController } from './character/controllers/character-controller';
-export { RagdollCharacter } from './character/components/ragdoll-character';
+export * from "./character/types";
+export { RagdollSkeleton } from "./character/models/ragdoll-skeleton";
+export { RagdollGeometry } from "./character/models/ragdoll-geometry";
+export { ExpressionController } from "./character/controllers/expression-controller";
+export { HeadPoseController } from "./character/controllers/head-pose-controller";
+export { CharacterController } from "./character/controllers/character-controller";
+export { RagdollCharacter } from "./character/components/ragdoll-character";
 
 // UI domain
-export { ControlPanel } from './ui/components/control-panel';
-export { Scene } from './ui/components/scene';
+export { ControlPanel } from "./ui/components/control-panel";
+export { Scene } from "./ui/components/scene";
 
 // Animation utilities
-export * from './animation';
+export * from "./animation";
 
 // Note: API server and MCP server are server-side only and should be imported separately
 // import { RagdollAPIServer } from './packages/api/server'; (Node.js only)

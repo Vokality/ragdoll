@@ -1,4 +1,4 @@
-import type { FacialMood, FacialAction } from '../types';
+import type { FacialMood, FacialAction } from "../types";
 
 /**
  * Point interface for 2D coordinates
@@ -68,7 +68,7 @@ export interface FaceDimensions {
   headHeight: number;
   jawWidth: number;
   chinHeight: number;
-  
+
   // Eyes
   eyeWidth: number;
   eyeHeight: number;
@@ -76,26 +76,26 @@ export interface FaceDimensions {
   eyeY: number; // Y position from center
   irisRadius: number;
   pupilRadius: number;
-  
+
   // Eyebrows
   eyebrowWidth: number;
   eyebrowThickness: number;
   eyebrowY: number; // Y offset above eyes
-  
+
   // Nose
   noseWidth: number;
   noseHeight: number;
   noseY: number;
-  
+
   // Mouth
   mouthWidth: number;
   mouthY: number;
   lipThickness: number;
-  
+
   // Ears
   earWidth: number;
   earHeight: number;
-  
+
   // Neck
   neckWidth: number;
   neckHeight: number;
@@ -106,7 +106,7 @@ export interface FaceDimensions {
  */
 export class RagdollGeometry {
   public currentExpression: ExpressionConfig;
-  
+
   // Human-like facial proportions
   public readonly dimensions: FaceDimensions = {
     // Head - slightly taller than wide for natural look
@@ -114,7 +114,7 @@ export class RagdollGeometry {
     headHeight: 170,
     jawWidth: 120,
     chinHeight: 40,
-    
+
     // Eyes - positioned in upper third of face
     eyeWidth: 28,
     eyeHeight: 18,
@@ -122,26 +122,26 @@ export class RagdollGeometry {
     eyeY: -15, // Slightly above center
     irisRadius: 9,
     pupilRadius: 4,
-    
+
     // Eyebrows
     eyebrowWidth: 34,
     eyebrowThickness: 4,
     eyebrowY: 22, // Above eyes
-    
+
     // Nose - centered, in middle third
     noseWidth: 20,
     noseHeight: 35,
     noseY: 15,
-    
+
     // Mouth - lower third of face
     mouthWidth: 40,
     mouthY: 50,
     lipThickness: 8,
-    
+
     // Ears
     earWidth: 18,
     earHeight: 40,
-    
+
     // Neck
     neckWidth: 45,
     neckHeight: 55,
@@ -196,7 +196,7 @@ export class RagdollGeometry {
     const base = this.createNeutralExpression();
 
     switch (mood) {
-      case 'smile':
+      case "smile":
         return {
           ...base,
           leftEye: { ...base.leftEye, openness: 0.9, squint: 0.2 },
@@ -213,13 +213,23 @@ export class RagdollGeometry {
           cheekPuff: 0.15,
         };
 
-      case 'frown':
+      case "frown":
         return {
           ...base,
           leftEye: { ...base.leftEye, openness: 0.85 },
           rightEye: { ...base.rightEye, openness: 0.85 },
-          leftEyebrow: { ...base.leftEyebrow, innerY: -4, arcY: -2, rotation: 0.15 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: -4, arcY: -2, rotation: -0.15 },
+          leftEyebrow: {
+            ...base.leftEyebrow,
+            innerY: -4,
+            arcY: -2,
+            rotation: 0.15,
+          },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: -4,
+            arcY: -2,
+            rotation: -0.15,
+          },
           mouth: {
             ...base.mouth,
             upperLipBottom: 1,
@@ -229,7 +239,7 @@ export class RagdollGeometry {
           },
         };
 
-      case 'laugh':
+      case "laugh":
         return {
           ...base,
           leftEye: { ...base.leftEye, openness: 0.5, squint: 0.6 },
@@ -247,13 +257,25 @@ export class RagdollGeometry {
           cheekPuff: 0.3,
         };
 
-      case 'angry':
+      case "angry":
         return {
           ...base,
           leftEye: { ...base.leftEye, openness: 0.7, squint: 0.3 },
           rightEye: { ...base.rightEye, openness: 0.7, squint: 0.3 },
-          leftEyebrow: { ...base.leftEyebrow, innerY: -8, arcY: -4, outerY: 2, rotation: 0.25 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: -8, arcY: -4, outerY: 2, rotation: -0.25 },
+          leftEyebrow: {
+            ...base.leftEyebrow,
+            innerY: -8,
+            arcY: -4,
+            outerY: 2,
+            rotation: 0.25,
+          },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: -8,
+            arcY: -4,
+            outerY: 2,
+            rotation: -0.25,
+          },
           mouth: {
             ...base.mouth,
             upperLipBottom: 2,
@@ -264,13 +286,33 @@ export class RagdollGeometry {
           noseScrunch: 0.4,
         };
 
-      case 'sad':
+      case "sad":
         return {
           ...base,
-          leftEye: { ...base.leftEye, openness: 0.75, pupilOffset: { x: 0, y: 2 } },
-          rightEye: { ...base.rightEye, openness: 0.75, pupilOffset: { x: 0, y: 2 } },
-          leftEyebrow: { ...base.leftEyebrow, innerY: 6, arcY: -2, outerY: -4, rotation: -0.2 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: 6, arcY: -2, outerY: -4, rotation: 0.2 },
+          leftEye: {
+            ...base.leftEye,
+            openness: 0.75,
+            pupilOffset: { x: 0, y: 2 },
+          },
+          rightEye: {
+            ...base.rightEye,
+            openness: 0.75,
+            pupilOffset: { x: 0, y: 2 },
+          },
+          leftEyebrow: {
+            ...base.leftEyebrow,
+            innerY: 6,
+            arcY: -2,
+            outerY: -4,
+            rotation: -0.2,
+          },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: 6,
+            arcY: -2,
+            outerY: -4,
+            rotation: 0.2,
+          },
           mouth: {
             ...base.mouth,
             upperLipBottom: 1,
@@ -281,13 +323,18 @@ export class RagdollGeometry {
           },
         };
 
-      case 'surprise':
+      case "surprise":
         return {
           ...base,
           leftEye: { ...base.leftEye, openness: 1.3, pupilSize: 1.3 },
           rightEye: { ...base.rightEye, openness: 1.3, pupilSize: 1.3 },
           leftEyebrow: { ...base.leftEyebrow, innerY: 10, arcY: 12, outerY: 8 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: 10, arcY: 12, outerY: 8 },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: 10,
+            arcY: 12,
+            outerY: 8,
+          },
           mouth: {
             ...base.mouth,
             upperLipTop: -2,
@@ -299,13 +346,27 @@ export class RagdollGeometry {
           },
         };
 
-      case 'confusion':
+      case "confusion":
         return {
           ...base,
-          leftEye: { ...base.leftEye, openness: 0.95, pupilOffset: { x: 2, y: -1 } },
-          rightEye: { ...base.rightEye, openness: 0.8, pupilOffset: { x: -2, y: 1 } },
+          leftEye: {
+            ...base.leftEye,
+            openness: 0.95,
+            pupilOffset: { x: 2, y: -1 },
+          },
+          rightEye: {
+            ...base.rightEye,
+            openness: 0.8,
+            pupilOffset: { x: -2, y: 1 },
+          },
           leftEyebrow: { ...base.leftEyebrow, innerY: 4, arcY: 6, outerY: 2 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: -2, arcY: -1, outerY: -3, rotation: -0.1 },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: -2,
+            arcY: -1,
+            outerY: -3,
+            rotation: -0.1,
+          },
           mouth: {
             ...base.mouth,
             upperLipBottom: 2,
@@ -315,13 +376,26 @@ export class RagdollGeometry {
           },
         };
 
-      case 'thinking':
+      case "thinking":
         return {
           ...base,
-          leftEye: { ...base.leftEye, openness: 0.85, pupilOffset: { x: 4, y: -3 } },
-          rightEye: { ...base.rightEye, openness: 0.85, pupilOffset: { x: 4, y: -3 } },
+          leftEye: {
+            ...base.leftEye,
+            openness: 0.85,
+            pupilOffset: { x: 4, y: -3 },
+          },
+          rightEye: {
+            ...base.rightEye,
+            openness: 0.85,
+            pupilOffset: { x: 4, y: -3 },
+          },
           leftEyebrow: { ...base.leftEyebrow, innerY: 2, arcY: 5, outerY: 3 },
-          rightEyebrow: { ...base.rightEyebrow, innerY: -1, arcY: 2, outerY: 0 },
+          rightEyebrow: {
+            ...base.rightEyebrow,
+            innerY: -1,
+            arcY: 2,
+            outerY: 0,
+          },
           mouth: {
             ...base.mouth,
             upperLipBottom: 1,
@@ -339,20 +413,21 @@ export class RagdollGeometry {
   public getActionOverlay(
     action: FacialAction | null,
     elapsed: number,
-    currentExpression: ExpressionConfig
+    currentExpression: ExpressionConfig,
   ): Partial<ExpressionConfig> {
-    if (!action || action === 'none') {
+    if (!action || action === "none") {
       return {};
     }
 
-    if (action === 'wink') {
+    if (action === "wink") {
       // Wink affects only the right eye (character's left from viewer)
       const progress = Math.min(1, elapsed / 0.4);
       // Quick close, slower open
-      const winkCurve = progress < 0.3 
-        ? Math.sin((progress / 0.3) * Math.PI / 2) 
-        : Math.cos(((progress - 0.3) / 0.7) * Math.PI / 2);
-      
+      const winkCurve =
+        progress < 0.3
+          ? Math.sin(((progress / 0.3) * Math.PI) / 2)
+          : Math.cos((((progress - 0.3) / 0.7) * Math.PI) / 2);
+
       return {
         rightEye: {
           ...currentExpression.rightEye,
@@ -363,22 +438,25 @@ export class RagdollGeometry {
       };
     }
 
-    if (action === 'talk') {
+    if (action === "talk") {
       // Organic talking animation with varied mouth shapes
       const baseFreq = 6;
       const variation = Math.sin(elapsed * 1.7) * 0.3;
       const cycle = Math.sin(elapsed * baseFreq + variation);
       const cycle2 = Math.sin(elapsed * baseFreq * 1.3);
-      
+
       const openAmount = Math.abs(cycle) * 0.7 + Math.abs(cycle2) * 0.3;
-      
+
       return {
         mouth: {
           ...currentExpression.mouth,
-          upperLipBottom: currentExpression.mouth.upperLipBottom + openAmount * 4,
+          upperLipBottom:
+            currentExpression.mouth.upperLipBottom + openAmount * 4,
           lowerLipTop: currentExpression.mouth.lowerLipTop + openAmount * 10,
-          lowerLipBottom: currentExpression.mouth.lowerLipBottom + openAmount * 6,
-          width: currentExpression.mouth.width * (1 + Math.sin(elapsed * 4) * 0.08),
+          lowerLipBottom:
+            currentExpression.mouth.lowerLipBottom + openAmount * 6,
+          width:
+            currentExpression.mouth.width * (1 + Math.sin(elapsed * 4) * 0.08),
         },
       };
     }
@@ -395,7 +473,7 @@ export class RagdollGeometry {
     const hh = d.headHeight / 2;
     const jw = d.jawWidth / 2;
     const ch = d.chinHeight;
-    
+
     // Face path with forehead, temples, cheeks, jaw, and chin
     return `
       M 0 ${-hh}
@@ -412,17 +490,20 @@ export class RagdollGeometry {
   /**
    * Generate SVG path for an eye shape
    */
-  public getEyePath(isLeft: boolean, eyeState: EyeState): { sclera: string; upperLid: string; lowerLid: string } {
+  public getEyePath(
+    isLeft: boolean,
+    eyeState: EyeState,
+  ): { sclera: string; upperLid: string; lowerLid: string } {
     const d = this.dimensions;
     const sign = isLeft ? 1 : -1;
-    const cx = sign * d.eyeSpacing / 2;
+    const cx = (sign * d.eyeSpacing) / 2;
     const cy = d.eyeY;
     const w = d.eyeWidth / 2;
     const h = d.eyeHeight / 2;
-    
+
     const openness = Math.max(0, Math.min(1.3, eyeState.openness));
     const squint = eyeState.squint;
-    
+
     // Eye sclera (white) - almond shape
     const sclera = `
       M ${cx - w} ${cy}
@@ -432,7 +513,7 @@ export class RagdollGeometry {
       Q ${cx - w * 0.5} ${cy + h} ${cx - w} ${cy}
       Z
     `;
-    
+
     // Upper eyelid - covers eye based on openness
     const upperLidY = cy - h + (1 - openness) * h * 1.5;
     const upperLid = `
@@ -442,7 +523,7 @@ export class RagdollGeometry {
       Q ${cx} ${upperLidY + (openness > 0.5 ? 2 : -2)} ${cx - w - 2} ${upperLidY}
       Z
     `;
-    
+
     // Lower eyelid - rises with squint
     const lowerLidY = cy + h - squint * h * 0.6;
     const lowerLid = `
@@ -452,24 +533,30 @@ export class RagdollGeometry {
       Q ${cx} ${lowerLidY - 2} ${cx - w - 2} ${lowerLidY}
       Z
     `;
-    
+
     return { sclera, upperLid, lowerLid };
   }
 
   /**
    * Get iris and pupil positions
    */
-  public getIrisPosition(isLeft: boolean, eyeState: EyeState): { cx: number; cy: number; irisR: number; pupilR: number } {
+  public getIrisPosition(
+    isLeft: boolean,
+    eyeState: EyeState,
+  ): { cx: number; cy: number; irisR: number; pupilR: number } {
     const d = this.dimensions;
     const sign = isLeft ? 1 : -1;
-    const baseCx = sign * d.eyeSpacing / 2;
+    const baseCx = (sign * d.eyeSpacing) / 2;
     const baseCy = d.eyeY;
-    
+
     // Clamp pupil offset to stay within eye
     const maxOffset = d.eyeWidth / 2 - d.irisRadius;
-    const offsetX = Math.max(-maxOffset, Math.min(maxOffset, eyeState.pupilOffset.x));
+    const offsetX = Math.max(
+      -maxOffset,
+      Math.min(maxOffset, eyeState.pupilOffset.x),
+    );
     const offsetY = Math.max(-5, Math.min(5, eyeState.pupilOffset.y));
-    
+
     return {
       cx: baseCx + offsetX,
       cy: baseCy + offsetY,
@@ -484,20 +571,20 @@ export class RagdollGeometry {
   public getEyebrowPath(isLeft: boolean, eyebrowState: EyebrowState): string {
     const d = this.dimensions;
     const sign = isLeft ? 1 : -1;
-    const cx = sign * d.eyeSpacing / 2;
+    const cx = (sign * d.eyeSpacing) / 2;
     const baseY = d.eyeY - d.eyeHeight / 2 - d.eyebrowY;
     const w = d.eyebrowWidth / 2;
     const t = d.eyebrowThickness;
-    
+
     // Apply state
     const innerY = baseY - eyebrowState.innerY;
     const arcY = baseY - eyebrowState.arcY;
     const outerY = baseY - eyebrowState.outerY;
-    
+
     // Inner point is closer to center, outer is toward temple
     const innerX = cx - sign * w * 0.3;
     const outerX = cx + sign * w;
-    
+
     // Curved eyebrow path
     return `
       M ${innerX} ${innerY}
@@ -511,19 +598,23 @@ export class RagdollGeometry {
   /**
    * Generate SVG path for the mouth/lips
    */
-  public getMouthPath(mouthState: MouthState): { upperLip: string; lowerLip: string; opening: string } {
+  public getMouthPath(mouthState: MouthState): {
+    upperLip: string;
+    lowerLip: string;
+    opening: string;
+  } {
     const d = this.dimensions;
     const cy = d.mouthY;
     const w = (d.mouthWidth / 2) * mouthState.width;
-    
+
     const pull = mouthState.cornerPull;
     const cornerY = cy - pull * 6; // Corners go up for smile, down for frown
-    
+
     // Upper lip with cupid's bow
     const upperTop = cy - d.lipThickness + mouthState.upperLipTop;
     const upperBottom = cy + mouthState.upperLipBottom;
     const bowDepth = mouthState.upperLipCurve * 3;
-    
+
     const upperLip = `
       M ${-w} ${cornerY}
       Q ${-w * 0.5} ${upperTop - 2} ${-w * 0.15} ${upperTop}
@@ -533,11 +624,11 @@ export class RagdollGeometry {
       Q 0 ${upperBottom + 2} ${-w * 0.8} ${upperBottom + pull * 2}
       Z
     `;
-    
+
     // Lower lip - fuller curve
     const lowerTop = cy + mouthState.lowerLipTop;
     const lowerBottom = cy + mouthState.lowerLipBottom;
-    
+
     const lowerLip = `
       M ${-w * 0.8} ${lowerTop - pull * 2}
       Q 0 ${lowerTop - 2} ${w * 0.8} ${lowerTop - pull * 2}
@@ -546,21 +637,23 @@ export class RagdollGeometry {
       Q ${-w * 0.5} ${lowerBottom + 2} ${-w} ${cornerY + d.lipThickness * 0.5}
       Z
     `;
-    
+
     // Mouth opening (dark inside)
     const openingTop = upperBottom;
     const openingBottom = lowerTop;
     const hasOpening = openingBottom > openingTop + 1;
-    
-    const opening = hasOpening ? `
+
+    const opening = hasOpening
+      ? `
       M ${-w * 0.75} ${openingTop + pull * 2}
       Q 0 ${openingTop + 1} ${w * 0.75} ${openingTop + pull * 2}
       Q ${w * 0.6} ${(openingTop + openingBottom) / 2} ${w * 0.7} ${openingBottom - pull * 2}
       Q 0 ${openingBottom - 1} ${-w * 0.7} ${openingBottom - pull * 2}
       Q ${-w * 0.6} ${(openingTop + openingBottom) / 2} ${-w * 0.75} ${openingTop + pull * 2}
       Z
-    ` : '';
-    
+    `
+      : "";
+
     return { upperLip, lowerLip, opening };
   }
 
@@ -572,10 +665,10 @@ export class RagdollGeometry {
     const cy = d.noseY;
     const w = d.noseWidth / 2;
     const h = d.noseHeight;
-    
+
     // Scrunch affects nose width at bridge
     const bridgeW = w * 0.3 * (1 - scrunch * 0.3);
-    
+
     return `
       M ${-bridgeW} ${cy - h * 0.4}
       L ${-bridgeW * 0.8} ${cy + h * 0.2}
@@ -597,7 +690,7 @@ export class RagdollGeometry {
     const y = d.eyeY + 10;
     const w = d.earWidth;
     const h = d.earHeight;
-    
+
     return `
       M ${x} ${y - h * 0.4}
       Q ${x + sign * w * 0.8} ${y - h * 0.3} ${x + sign * w} ${y}
@@ -613,7 +706,7 @@ export class RagdollGeometry {
     const d = this.dimensions;
     const hw = d.headWidth / 2;
     const hh = d.headHeight / 2;
-    
+
     return `
       M ${-hw * 0.85} ${-hh * 0.4}
       Q ${-hw * 0.9} ${-hh * 0.9} ${-hw * 0.5} ${-hh * 1.05}
@@ -636,7 +729,7 @@ export class RagdollGeometry {
   public static interpolateExpression(
     from: ExpressionConfig,
     to: ExpressionConfig,
-    t: number
+    t: number,
   ): ExpressionConfig {
     const lerp = (a: number, b: number): number => a + (b - a) * t;
     const lerpPoint = (a: Point, b: Point): Point => ({

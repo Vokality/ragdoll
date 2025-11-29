@@ -1,7 +1,7 @@
-import { useCallback } from 'react';
-import { RagdollCharacter } from '../../character/components/ragdoll-character';
-import { CharacterController } from '../../character/controllers/character-controller';
-import type { RagdollTheme } from '../../character/themes/types';
+import { useCallback } from "react";
+import { RagdollCharacter } from "../../character/components/ragdoll-character";
+import { CharacterController } from "../../character/controllers/character-controller";
+import type { RagdollTheme } from "../../character/themes/types";
 
 interface SceneProps {
   onControllerReady: (controller: CharacterController) => void;
@@ -13,24 +13,27 @@ export function Scene({ onControllerReady, theme }: SceneProps) {
     (ctrl: CharacterController) => {
       onControllerReady(ctrl);
     },
-    [onControllerReady]
+    [onControllerReady],
   );
 
   return (
     <div
       style={{
-        width: '100vw',
-        height: '100vh',
-        position: 'fixed',
+        width: "100vw",
+        height: "100vh",
+        position: "fixed",
         top: 0,
         left: 0,
-        backgroundColor: '#0b0c12',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        backgroundColor: "#0b0c12",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      <RagdollCharacter onControllerReady={handleControllerReady} theme={theme} />
+      <RagdollCharacter
+        onControllerReady={handleControllerReady}
+        theme={theme}
+      />
     </div>
   );
 }

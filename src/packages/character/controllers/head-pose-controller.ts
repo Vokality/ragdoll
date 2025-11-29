@@ -1,5 +1,5 @@
-import type { HeadPose } from '../types';
-import { RagdollSkeleton } from '../models/ragdoll-skeleton';
+import type { HeadPose } from "../types";
+import { RagdollSkeleton } from "../models/ragdoll-skeleton";
 
 const MAX_YAW = (35 * Math.PI) / 180;
 const MAX_PITCH = (20 * Math.PI) / 180;
@@ -19,8 +19,12 @@ export class HeadPoseController {
   public setTargetPose(pose: Partial<HeadPose>, duration: number = 0.35): void {
     this.startPose = { ...this.currentPose };
     this.targetPose = {
-      yaw: pose.yaw !== undefined ? this.clampYaw(pose.yaw) : this.targetPose.yaw,
-      pitch: pose.pitch !== undefined ? this.clampPitch(pose.pitch) : this.targetPose.pitch,
+      yaw:
+        pose.yaw !== undefined ? this.clampYaw(pose.yaw) : this.targetPose.yaw,
+      pitch:
+        pose.pitch !== undefined
+          ? this.clampPitch(pose.pitch)
+          : this.targetPose.pitch,
     };
     this.transitionDuration = Math.max(0.05, duration);
     this.elapsed = 0;
@@ -32,7 +36,7 @@ export class HeadPoseController {
         yaw: this.targetPose.yaw + (delta.yaw ?? 0),
         pitch: this.targetPose.pitch + (delta.pitch ?? 0),
       },
-      duration
+      duration,
     );
   }
 
@@ -45,7 +49,9 @@ export class HeadPoseController {
       this.elapsed += deltaTime;
     }
     const t =
-      this.transitionDuration === 0 ? 1 : Math.min(1, this.elapsed / this.transitionDuration);
+      this.transitionDuration === 0
+        ? 1
+        : Math.min(1, this.elapsed / this.transitionDuration);
     const eased = this.easeOutQuad(t);
 
     this.currentPose = {
@@ -61,8 +67,8 @@ export class HeadPoseController {
   }
 
   private applyPose(pose: HeadPose): void {
-    this.skeleton.setJointRotation('headPivot', pose.yaw);
-    this.skeleton.setJointRotation('neck', pose.pitch);
+    this.skeleton.setJointRotation("headPivot", pose.yaw);
+    this.skeleton.setJointRotation("neck", pose.pitch);
   }
 
   private clampYaw(value: number): number {
@@ -81,4 +87,3 @@ export class HeadPoseController {
     return 1 - (1 - t) * (1 - t);
   }
 }
-

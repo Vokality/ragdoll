@@ -1,17 +1,17 @@
-import type { FacialAction, FacialMood } from '../types';
-import { RagdollGeometry } from '../models/ragdoll-geometry';
-import type { ExpressionConfig } from '../models/ragdoll-geometry';
+import type { FacialAction, FacialMood } from "../types";
+import { RagdollGeometry } from "../models/ragdoll-geometry";
+import type { ExpressionConfig } from "../models/ragdoll-geometry";
 
 interface ActionState {
-  name: Exclude<FacialAction, 'none'>;
+  name: Exclude<FacialAction, "none">;
   elapsed: number;
   duration: number;
 }
 
 export class ExpressionController {
   private geometry: RagdollGeometry;
-  private currentMood: FacialMood = 'neutral';
-  private previousMood: FacialMood = 'neutral';
+  private currentMood: FacialMood = "neutral";
+  private previousMood: FacialMood = "neutral";
   private targetExpression: ExpressionConfig;
   private currentExpression: ExpressionConfig;
   private transitionProgress = 1;
@@ -20,8 +20,8 @@ export class ExpressionController {
 
   constructor(geometry: RagdollGeometry) {
     this.geometry = geometry;
-    this.currentExpression = geometry.getExpressionForMood('neutral');
-    this.targetExpression = geometry.getExpressionForMood('neutral');
+    this.currentExpression = geometry.getExpressionForMood("neutral");
+    this.targetExpression = geometry.getExpressionForMood("neutral");
     this.geometry.setExpression(this.currentExpression);
   }
 
@@ -35,9 +35,12 @@ export class ExpressionController {
     this.transitionProgress = 0;
   }
 
-  public triggerAction(action: Exclude<FacialAction, 'none'>, duration: number = 0.6): void {
+  public triggerAction(
+    action: Exclude<FacialAction, "none">,
+    duration: number = 0.6,
+  ): void {
     const resolvedDuration =
-      action === 'talk' ? Number.POSITIVE_INFINITY : Math.max(0.2, duration);
+      action === "talk" ? Number.POSITIVE_INFINITY : Math.max(0.2, duration);
     this.actionState = { name: action, elapsed: 0, duration: resolvedDuration };
   }
 
@@ -50,7 +53,7 @@ export class ExpressionController {
     if (this.transitionProgress < 1) {
       this.transitionProgress = Math.min(
         1,
-        this.transitionProgress + deltaTime / this.transitionDuration
+        this.transitionProgress + deltaTime / this.transitionDuration,
       );
       const t = this.easeInOutCubic(this.transitionProgress);
       this.interpolateExpression(t);
@@ -60,7 +63,7 @@ export class ExpressionController {
     if (this.actionState) {
       this.actionState.elapsed += deltaTime;
       if (
-        this.actionState.name !== 'talk' &&
+        this.actionState.name !== "talk" &&
         this.actionState.elapsed >= this.actionState.duration
       ) {
         this.actionState = null;
@@ -79,7 +82,7 @@ export class ExpressionController {
   }
 
   public isTalking(): boolean {
-    return this.actionState?.name === 'talk';
+    return this.actionState?.name === "talk";
   }
 
   public getActionProgress(): number {
@@ -113,7 +116,7 @@ export class ExpressionController {
     const overlay = this.geometry.getActionOverlay(
       this.actionState.name,
       this.actionState.elapsed,
-      this.currentExpression
+      this.currentExpression,
     );
 
     return this.mergeExpressionOverlay(this.currentExpression, overlay);
@@ -124,9 +127,9 @@ export class ExpressionController {
    */
   public applyBlink(blinkAmount: number): ExpressionConfig {
     const expr = this.getExpressionWithAction();
-    
+
     if (blinkAmount <= 0) return expr;
-    
+
     return {
       ...expr,
       leftEye: {
@@ -165,7 +168,7 @@ export class ExpressionController {
 
   private mergeExpressionOverlay(
     base: ExpressionConfig,
-    overlay: Partial<ExpressionConfig>
+    overlay: Partial<ExpressionConfig>,
   ): ExpressionConfig {
     return {
       leftEye: overlay.leftEye ?? base.leftEye,
@@ -179,11 +182,13 @@ export class ExpressionController {
   }
 
   private interpolateExpression(t: number): void {
-    const prevExpression = this.geometry.getExpressionForMood(this.previousMood);
+    const prevExpression = this.geometry.getExpressionForMood(
+      this.previousMood,
+    );
     this.currentExpression = RagdollGeometry.interpolateExpression(
       prevExpression,
       this.targetExpression,
-      t
+      t,
     );
   }
 

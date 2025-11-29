@@ -1,6 +1,6 @@
-import * as THREE from 'three';
-import type { SpringConfig, SpringState } from './spring';
-import { createSpringState, updateSpring } from './spring';
+import * as THREE from "three";
+import type { SpringConfig, SpringState } from "./spring";
+import { createSpringState, updateSpring } from "./spring";
 
 /**
  * Secondary motion adds life to animation through:
@@ -31,25 +31,65 @@ export const SecondaryMotionPresets: Record<string, SecondaryMotionConfig> = {
   neck: { drag: 0.5, overshoot: 0.3, phaseOffset: 0.25, amplitude: 0.65 },
 
   // Arms swing with phase offset from legs
-  leftShoulder: { drag: 0.25, overshoot: 0.2, phaseOffset: Math.PI, amplitude: 0.45 },
-  rightShoulder: { drag: 0.25, overshoot: 0.2, phaseOffset: 0, amplitude: 0.45 },
+  leftShoulder: {
+    drag: 0.25,
+    overshoot: 0.2,
+    phaseOffset: Math.PI,
+    amplitude: 0.45,
+  },
+  rightShoulder: {
+    drag: 0.25,
+    overshoot: 0.2,
+    phaseOffset: 0,
+    amplitude: 0.45,
+  },
 
   // Elbows/wrists have more follow-through
-  leftElbow: { drag: 0.5, overshoot: 0.35, phaseOffset: Math.PI + 0.35, amplitude: 0.4 },
+  leftElbow: {
+    drag: 0.5,
+    overshoot: 0.35,
+    phaseOffset: Math.PI + 0.35,
+    amplitude: 0.4,
+  },
   rightElbow: { drag: 0.5, overshoot: 0.35, phaseOffset: 0.35, amplitude: 0.4 },
-  leftWrist: { drag: 0.65, overshoot: 0.45, phaseOffset: Math.PI + 0.8, amplitude: 0.35 },
-  rightWrist: { drag: 0.65, overshoot: 0.45, phaseOffset: 0.8, amplitude: 0.35 },
+  leftWrist: {
+    drag: 0.65,
+    overshoot: 0.45,
+    phaseOffset: Math.PI + 0.8,
+    amplitude: 0.35,
+  },
+  rightWrist: {
+    drag: 0.65,
+    overshoot: 0.45,
+    phaseOffset: 0.8,
+    amplitude: 0.35,
+  },
 
   // Core is stable with minimal secondary motion
   spine: { drag: 0.15, overshoot: 0.1, phaseOffset: 0, amplitude: 0.25 },
 
   // Legs drive the motion, less secondary effect
   leftHip: { drag: 0.08, overshoot: 0.08, phaseOffset: 0, amplitude: 0.16 },
-  rightHip: { drag: 0.08, overshoot: 0.08, phaseOffset: Math.PI, amplitude: 0.16 },
+  rightHip: {
+    drag: 0.08,
+    overshoot: 0.08,
+    phaseOffset: Math.PI,
+    amplitude: 0.16,
+  },
   leftKnee: { drag: 0.2, overshoot: 0.18, phaseOffset: 0.25, amplitude: 0.24 },
-  rightKnee: { drag: 0.2, overshoot: 0.18, phaseOffset: Math.PI + 0.25, amplitude: 0.24 },
+  rightKnee: {
+    drag: 0.2,
+    overshoot: 0.18,
+    phaseOffset: Math.PI + 0.25,
+    amplitude: 0.24,
+  },
   leftAnkle: { drag: 0.3, overshoot: 0.2, phaseOffset: 0.35, amplitude: 0.18 },
-  rightAnkle: { drag: 0.3, overshoot: 0.2, phaseOffset: Math.PI + 0.35, amplitude: 0.18 },
+  rightAnkle: {
+    drag: 0.3,
+    overshoot: 0.2,
+    phaseOffset: Math.PI + 0.35,
+    amplitude: 0.18,
+  },
 
   // Default
   default: { drag: 0.2, overshoot: 0.15, phaseOffset: 0, amplitude: 0.3 },
@@ -59,7 +99,7 @@ export const SecondaryMotionPresets: Record<string, SecondaryMotionConfig> = {
  * Get secondary motion preset for a joint
  */
 export function getSecondaryMotionPreset(
-  jointName: string
+  jointName: string,
 ): SecondaryMotionConfig {
   return SecondaryMotionPresets[jointName] ?? SecondaryMotionPresets.default;
 }
@@ -95,7 +135,7 @@ export function applySecondaryMotion(
   springConfig: SpringConfig,
   walkCycle: number,
   isMoving: boolean,
-  deltaTime: number
+  deltaTime: number,
 ): THREE.Vector3 {
   // Update accumulated phase with drag
   const targetPhase = walkCycle + config.phaseOffset;
@@ -106,7 +146,7 @@ export function applySecondaryMotion(
   const secondaryOscillation = new THREE.Vector3(
     Math.sin(state.accumulatedPhase * 2) * config.amplitude * 0.18,
     Math.cos(state.accumulatedPhase * 3) * config.amplitude * 0.1,
-    Math.sin(state.accumulatedPhase * 2.5) * config.amplitude * 0.14
+    Math.sin(state.accumulatedPhase * 2.5) * config.amplitude * 0.14,
   );
 
   // Apply drag to the base rotation
@@ -124,7 +164,7 @@ export function applySecondaryMotion(
   // Calculate velocity for overshoot detection
   const currentVelocity = new THREE.Vector3().subVectors(
     state.springState.current,
-    state.springState.target
+    state.springState.target,
   );
 
   // Apply overshoot when decelerating
@@ -147,7 +187,7 @@ export function applySecondaryMotion(
 export function calculateFollowThrough(
   velocity: THREE.Vector3,
   mass: number,
-  deltaTime: number
+  deltaTime: number,
 ): THREE.Vector3 {
   // Follow-through is proportional to velocity and mass
   const followThrough = velocity.clone().multiplyScalar(mass * deltaTime * 2);
@@ -164,7 +204,7 @@ export function calculateFollowThrough(
  */
 export function calculateOverlapOffset(
   walkCycle: number,
-  jointConfig: SecondaryMotionConfig
+  jointConfig: SecondaryMotionConfig,
 ): number {
   // Apply phase offset and drag for overlapping action
   const delayedPhase = walkCycle - jointConfig.phaseOffset * jointConfig.drag;
@@ -177,7 +217,7 @@ export function calculateOverlapOffset(
  */
 export function addBreathingMotion(
   time: number,
-  intensity: number = 0.02
+  intensity: number = 0.02,
 ): THREE.Vector3 {
   // Breathing cycle (slower than walk)
   const breathCycle = time * 0.5;
@@ -185,14 +225,17 @@ export function addBreathingMotion(
   return new THREE.Vector3(
     Math.sin(breathCycle) * intensity * 0.5, // Slight forward lean
     0,
-    Math.sin(breathCycle * 0.7) * intensity * 0.3 // Subtle side sway
+    Math.sin(breathCycle * 0.7) * intensity * 0.3, // Subtle side sway
   );
 }
 
 /**
  * Add idle sway motion when character is standing still
  */
-export function addIdleSway(time: number, intensity: number = 0.03): THREE.Vector3 {
+export function addIdleSway(
+  time: number,
+  intensity: number = 0.03,
+): THREE.Vector3 {
   // Multiple overlapping sine waves for organic idle
   const sway1 = Math.sin(time * 0.3) * intensity;
   const sway2 = Math.sin(time * 0.5 + 1.2) * intensity * 0.5;
@@ -201,7 +244,6 @@ export function addIdleSway(time: number, intensity: number = 0.03): THREE.Vecto
   return new THREE.Vector3(
     sway1 + sway3 * 0.5, // Forward/back
     sway2 * 0.3, // Twist
-    sway1 * 0.7 + sway2 // Side sway
+    sway1 * 0.7 + sway2, // Side sway
   );
 }
-

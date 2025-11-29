@@ -10,7 +10,7 @@ export interface GradientStop {
  * Linear gradient definition
  */
 export interface LinearGradient {
-  type: 'linear';
+  type: "linear";
   x1: string;
   y1: string;
   x2: string;
@@ -22,7 +22,7 @@ export interface LinearGradient {
  * Radial gradient definition
  */
 export interface RadialGradient {
-  type: 'radial';
+  type: "radial";
   cx: string;
   cy: string;
   r: string;
@@ -95,4 +95,3 @@ export interface RagdollTheme {
     faceShadowRight: LinearGradient;
   };
 }
-

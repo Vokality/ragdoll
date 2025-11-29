@@ -1,15 +1,15 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server as SocketIOServer, Socket } from 'socket.io';
-import cors from 'cors';
-import { randomUUID } from 'crypto';
-import { CharacterController } from '../character/controllers/character-controller';
+import express from "express";
+import { createServer } from "http";
+import { Server as SocketIOServer, Socket } from "socket.io";
+import cors from "cors";
+import { randomUUID } from "crypto";
+import { CharacterController } from "../character/controllers/character-controller";
 import type {
   JointCommand,
   JointName,
   FacialStatePayload,
   SpeechBubblePayload,
-} from '../character/types';
+} from "../character/types";
 
 interface Session {
   id: string;
@@ -28,7 +28,7 @@ export class RagdollAPIServer {
   private socketToSession: Map<string, string> = new Map();
   private port: number;
   // Backward compatibility: default session
-  private defaultSessionId: string = 'default';
+  private defaultSessionId: string = "default";
 
   constructor(port: number = 3001) {
     this.port = port;
@@ -36,8 +36,8 @@ export class RagdollAPIServer {
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
       cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
+        origin: "*",
+        methods: ["GET", "POST"],
       },
     });
 
@@ -55,7 +55,7 @@ export class RagdollAPIServer {
       controller: new CharacterController(themeId),
       sockets: new Set(),
       stateIntervals: new Map(),
-      themeId: themeId || 'default',
+      themeId: themeId || "default",
       createdAt: new Date(),
     };
     this.sessions.set(sessionId, session);
@@ -96,19 +96,19 @@ export class RagdollAPIServer {
   }
 
   private setupRoutes(): void {
-    this.app.get('/health', (_req, res) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    this.app.get("/health", (_req, res) => {
+      res.json({ status: "ok", timestamp: new Date().toISOString() });
     });
 
     // Create new session
-    this.app.post('/api/session/create', (_req, res) => {
+    this.app.post("/api/session/create", (_req, res) => {
       const sessionId = randomUUID();
       this.createSession(sessionId);
       res.json({ sessionId, success: true });
     });
 
     // List active sessions
-    this.app.get('/api/sessions', (_req, res) => {
+    this.app.get("/api/sessions", (_req, res) => {
       const sessions = Array.from(this.sessions.values()).map((session) => ({
         id: session.id,
         socketCount: session.sockets.size,
@@ -119,18 +119,20 @@ export class RagdollAPIServer {
     });
 
     // Get session theme
-    this.app.get('/api/session/theme', (req, res) => {
-      const sessionId = (req.query.sessionId as string) || this.defaultSessionId;
+    this.app.get("/api/session/theme", (req, res) => {
+      const sessionId =
+        (req.query.sessionId as string) || this.defaultSessionId;
       const session = this.getSession(sessionId);
       res.json({ themeId: session.themeId });
     });
 
     // Set session theme
-    this.app.post('/api/session/theme', (req, res) => {
-      const sessionId = (req.query.sessionId as string) || this.defaultSessionId;
+    this.app.post("/api/session/theme", (req, res) => {
+      const sessionId =
+        (req.query.sessionId as string) || this.defaultSessionId;
       const { themeId } = req.body;
-      if (!themeId || typeof themeId !== 'string') {
-        return res.status(400).json({ error: 'themeId is required' });
+      if (!themeId || typeof themeId !== "string") {
+        return res.status(400).json({ error: "themeId is required" });
       }
       const session = this.getSession(sessionId);
       session.themeId = themeId;
@@ -138,8 +140,9 @@ export class RagdollAPIServer {
       res.json({ success: true, themeId });
     });
 
-    this.app.post('/api/facial-state', (req, res) => {
-      const sessionId = (req.query.sessionId as string) || this.defaultSessionId;
+    this.app.post("/api/facial-state", (req, res) => {
+      const sessionId =
+        (req.query.sessionId as string) || this.defaultSessionId;
       const session = this.getSession(sessionId);
 
       try {
@@ -151,22 +154,24 @@ export class RagdollAPIServer {
       }
     });
 
-    this.app.post('/api/joint', (req, res) => {
-      const sessionId = (req.query.sessionId as string) || this.defaultSessionId;
+    this.app.post("/api/joint", (req, res) => {
+      const sessionId =
+        (req.query.sessionId as string) || this.defaultSessionId;
       const session = this.getSession(sessionId);
 
       try {
         const command: JointCommand = req.body;
         session.controller.setJointRotation(command);
-        this.io.to(`session:${sessionId}`).emit('joint-broadcast', command);
+        this.io.to(`session:${sessionId}`).emit("joint-broadcast", command);
         res.json({ success: true, joint: command.joint, sessionId });
       } catch (error) {
         res.status(400).json({ error: String(error) });
       }
     });
 
-    this.app.get('/api/state', (req, res) => {
-      const sessionId = (req.query.sessionId as string) || this.defaultSessionId;
+    this.app.get("/api/state", (req, res) => {
+      const sessionId =
+        (req.query.sessionId as string) || this.defaultSessionId;
       const session = this.getSession(sessionId);
 
       try {
@@ -177,7 +182,7 @@ export class RagdollAPIServer {
             Object.entries(state.joints).map(([key, value]) => [
               key,
               { x: value.x ?? 0, y: value.y ?? 0, z: value.z ?? 0 },
-            ])
+            ]),
           ),
           mood: state.mood,
           action: state.action,
@@ -190,25 +195,37 @@ export class RagdollAPIServer {
       }
     });
 
-    this.app.get('/api/moods', (_req, res) => {
-      res.json({ moods: ['neutral', 'smile', 'frown', 'laugh', 'angry', 'sad', 'surprise', 'confusion', 'thinking'] });
+    this.app.get("/api/moods", (_req, res) => {
+      res.json({
+        moods: [
+          "neutral",
+          "smile",
+          "frown",
+          "laugh",
+          "angry",
+          "sad",
+          "surprise",
+          "confusion",
+          "thinking",
+        ],
+      });
     });
 
-    this.app.get('/api/joints', (_req, res) => {
-      const joints: JointName[] = ['headPivot', 'neck'];
+    this.app.get("/api/joints", (_req, res) => {
+      const joints: JointName[] = ["headPivot", "neck"];
       res.json({ joints });
     });
   }
 
   private setupWebSocket(): void {
-    this.io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
+    this.io.on("connection", (socket) => {
+      console.log("Client connected:", socket.id);
 
       // Join session (default or specified)
-      socket.on('join-session', (sessionId: string) => {
+      socket.on("join-session", (sessionId: string) => {
         const targetSessionId = sessionId || this.defaultSessionId;
         const session = this.getSession(targetSessionId);
-        
+
         // Leave previous session if any
         const previousSessionId = this.socketToSession.get(socket.id);
         if (previousSessionId && previousSessionId !== targetSessionId) {
@@ -219,26 +236,38 @@ export class RagdollAPIServer {
         socket.join(`session:${targetSessionId}`);
         session.sockets.add(socket.id);
         this.socketToSession.set(socket.id, targetSessionId);
-        
-        socket.emit('session-joined', { sessionId: targetSessionId });
+
+        socket.emit("session-joined", { sessionId: targetSessionId });
         console.log(`Socket ${socket.id} joined session ${targetSessionId}`);
       });
 
-      socket.on('facial-state', (payload: FacialStatePayload & { sessionId?: string }) => {
-        const sessionId = payload.sessionId || this.socketToSession.get(socket.id) || this.defaultSessionId;
-        const session = this.getSession(sessionId);
-        this.applyFacialPayload(session, payload, true);
-      });
+      socket.on(
+        "facial-state",
+        (payload: FacialStatePayload & { sessionId?: string }) => {
+          const sessionId =
+            payload.sessionId ||
+            this.socketToSession.get(socket.id) ||
+            this.defaultSessionId;
+          const session = this.getSession(sessionId);
+          this.applyFacialPayload(session, payload, true);
+        },
+      );
 
-      socket.on('joint', (command: JointCommand & { sessionId?: string }) => {
-        const sessionId = command.sessionId || this.socketToSession.get(socket.id) || this.defaultSessionId;
+      socket.on("joint", (command: JointCommand & { sessionId?: string }) => {
+        const sessionId =
+          command.sessionId ||
+          this.socketToSession.get(socket.id) ||
+          this.defaultSessionId;
         const session = this.getSession(sessionId);
         session.controller.setJointRotation(command);
-        this.io.to(`session:${sessionId}`).emit('joint-broadcast', command);
+        this.io.to(`session:${sessionId}`).emit("joint-broadcast", command);
       });
 
-      socket.on('subscribe-state', (sessionId?: string) => {
-        const targetSessionId = sessionId || this.socketToSession.get(socket.id) || this.defaultSessionId;
+      socket.on("subscribe-state", (sessionId?: string) => {
+        const targetSessionId =
+          sessionId ||
+          this.socketToSession.get(socket.id) ||
+          this.defaultSessionId;
         const session = this.getSession(targetSessionId);
 
         // Clear existing interval for this socket
@@ -249,13 +278,13 @@ export class RagdollAPIServer {
 
         // Create new interval for this socket
         const interval = setInterval(() => {
-          socket.emit('state-update', session.controller.getState());
+          socket.emit("state-update", session.controller.getState());
         }, 100);
 
         session.stateIntervals.set(socket.id, interval);
       });
 
-      socket.on('unsubscribe-state', () => {
+      socket.on("unsubscribe-state", () => {
         const sessionId = this.socketToSession.get(socket.id);
         if (sessionId) {
           const session = this.sessions.get(sessionId);
@@ -269,8 +298,8 @@ export class RagdollAPIServer {
         }
       });
 
-      socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+      socket.on("disconnect", () => {
+        console.log("Client disconnected:", socket.id);
         const sessionId = this.socketToSession.get(socket.id);
         if (sessionId) {
           this.leaveSession(socket, sessionId);
@@ -282,7 +311,7 @@ export class RagdollAPIServer {
       socket.join(`session:${this.defaultSessionId}`);
       defaultSession.sockets.add(socket.id);
       this.socketToSession.set(socket.id, this.defaultSessionId);
-      socket.emit('session-joined', { sessionId: this.defaultSessionId });
+      socket.emit("session-joined", { sessionId: this.defaultSessionId });
     });
   }
 
@@ -307,7 +336,11 @@ export class RagdollAPIServer {
     }
   }
 
-  private applyFacialPayload(session: Session, payload: FacialStatePayload, broadcast: boolean = true): void {
+  private applyFacialPayload(
+    session: Session,
+    payload: FacialStatePayload,
+    broadcast: boolean = true,
+  ): void {
     const sanitizedPayload: FacialStatePayload = { ...payload };
 
     if (payload.mood) {
@@ -315,7 +348,10 @@ export class RagdollAPIServer {
     }
 
     if (payload.action) {
-      session.controller.triggerAction(payload.action.type, payload.action.duration);
+      session.controller.triggerAction(
+        payload.action.type,
+        payload.action.duration,
+      );
     }
 
     if (payload.clearAction) {
@@ -334,14 +370,16 @@ export class RagdollAPIServer {
     }
 
     if (broadcast) {
-      this.io.to(`session:${session.id}`).emit('facial-state-broadcast', sanitizedPayload);
+      this.io
+        .to(`session:${session.id}`)
+        .emit("facial-state-broadcast", sanitizedPayload);
     }
   }
 
   private normalizeBubble(payload: SpeechBubblePayload): SpeechBubblePayload {
     return {
       text: payload.text ?? null,
-      tone: payload.tone ?? 'default',
+      tone: payload.tone ?? "default",
     };
   }
 
@@ -374,7 +412,7 @@ export class RagdollAPIServer {
 
       this.io.close();
       this.server.close(() => {
-        console.log('API server stopped');
+        console.log("API server stopped");
         resolve();
       });
     });

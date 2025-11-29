@@ -1,5 +1,10 @@
-import type { RagdollTheme } from './types';
-import { defaultTheme, robotTheme, alienTheme, monochromeTheme } from './default-themes';
+import type { RagdollTheme } from "./types";
+import {
+  defaultTheme,
+  robotTheme,
+  alienTheme,
+  monochromeTheme,
+} from "./default-themes";
 
 /**
  * Registry of all available themes
@@ -50,4 +55,3 @@ export function hasTheme(themeId: string): boolean {
 export function registerTheme(theme: RagdollTheme): void {
   themes.set(theme.id, theme);
 }
-

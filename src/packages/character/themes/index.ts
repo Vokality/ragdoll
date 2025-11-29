@@ -1,4 +1,3 @@
-export * from './types';
-export * from './default-themes';
-export * from './theme-registry';
-
+export * from "./types";
+export * from "./default-themes";
+export * from "./theme-registry";

@@ -1,13 +1,13 @@
-import { useEffect, useState, useRef } from 'react';
-import { CharacterController } from '../../character/controllers/character-controller';
-import type { SpeechBubbleState } from '../../character/types';
+import { useEffect, useState, useRef } from "react";
+import { CharacterController } from "../../character/controllers/character-controller";
+import type { SpeechBubbleState } from "../../character/types";
 
-const EMPTY_BUBBLE: SpeechBubbleState = { text: null, tone: 'default' };
+const EMPTY_BUBBLE: SpeechBubbleState = { text: null, tone: "default" };
 
 export function useBubbleState(controller: CharacterController | null) {
   const [bubble, setBubble] = useState<SpeechBubbleState>(EMPTY_BUBBLE);
   const controllerRef = useRef<CharacterController | null>(null);
-  
+
   // Keep ref in sync via effect (not during render)
   useEffect(() => {
     controllerRef.current = controller;

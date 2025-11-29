@@ -72,7 +72,8 @@ export const easeInOutElastic: EasingFunction = (t) => {
       ? 1
       : t < 0.5
         ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2
-        : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
+        : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 +
+          1;
 };
 
 /**
@@ -146,7 +147,7 @@ export function organicSine(phase: number, sharpness: number = 0.5): number {
  */
 export function anticipate(
   t: number,
-  anticipationAmount: number = 0.2
+  anticipationAmount: number = 0.2,
 ): number {
   if (t < anticipationAmount) {
     // Pull back phase
@@ -169,7 +170,6 @@ export function overshoot(t: number, overshootAmount: number = 0.1): number {
   } else {
     // Settle back to target
     const settleT = (t - 0.7) / 0.3;
-    return (1 + overshootAmount) - overshootAmount * easeInOutCubic(settleT);
+    return 1 + overshootAmount - overshootAmount * easeInOutCubic(settleT);
   }
 }
-

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * Spring physics configuration for natural motion
@@ -42,14 +42,14 @@ export function getSpringPreset(jointName: string): SpringConfig {
   // Match joint name to preset
   const lowerName = jointName.toLowerCase();
 
-  if (lowerName.includes('spine')) return SpringPresets.spine;
-  if (lowerName.includes('hip')) return SpringPresets.hip;
-  if (lowerName.includes('shoulder')) return SpringPresets.shoulder;
-  if (lowerName.includes('elbow')) return SpringPresets.elbow;
-  if (lowerName.includes('wrist')) return SpringPresets.wrist;
-  if (lowerName.includes('knee')) return SpringPresets.knee;
-  if (lowerName.includes('ankle')) return SpringPresets.ankle;
-  if (lowerName.includes('neck')) return SpringPresets.neck;
+  if (lowerName.includes("spine")) return SpringPresets.spine;
+  if (lowerName.includes("hip")) return SpringPresets.hip;
+  if (lowerName.includes("shoulder")) return SpringPresets.shoulder;
+  if (lowerName.includes("elbow")) return SpringPresets.elbow;
+  if (lowerName.includes("wrist")) return SpringPresets.wrist;
+  if (lowerName.includes("knee")) return SpringPresets.knee;
+  if (lowerName.includes("ankle")) return SpringPresets.ankle;
+  if (lowerName.includes("neck")) return SpringPresets.neck;
 
   return SpringPresets.default;
 }
@@ -81,7 +81,7 @@ export function createSpringState(initial?: THREE.Vector3): SpringState {
 export function updateSpring(
   state: SpringState,
   config: SpringConfig,
-  deltaTime: number
+  deltaTime: number,
 ): void {
   // Clamp delta time to prevent instability
   const dt = Math.min(deltaTime, 0.05);
@@ -89,7 +89,7 @@ export function updateSpring(
   // Calculate spring force: F = -k * (x - target)
   const displacement = new THREE.Vector3().subVectors(
     state.current,
-    state.target
+    state.target,
   );
 
   // Spring force
@@ -108,10 +108,7 @@ export function updateSpring(
   state.current.add(state.velocity.clone().multiplyScalar(dt));
 
   // Snap to target if very close (prevents micro-oscillations)
-  if (
-    displacement.length() < 0.0001 &&
-    state.velocity.length() < 0.0001
-  ) {
+  if (displacement.length() < 0.0001 && state.velocity.length() < 0.0001) {
     state.current.copy(state.target);
     state.velocity.set(0, 0, 0);
   }
@@ -129,7 +126,9 @@ export interface ScalarSpringState {
 /**
  * Create scalar spring state
  */
-export function createScalarSpringState(initial: number = 0): ScalarSpringState {
+export function createScalarSpringState(
+  initial: number = 0,
+): ScalarSpringState {
   return {
     current: initial,
     velocity: 0,
@@ -143,7 +142,7 @@ export function createScalarSpringState(initial: number = 0): ScalarSpringState 
 export function updateScalarSpring(
   state: ScalarSpringState,
   config: SpringConfig,
-  deltaTime: number
+  deltaTime: number,
 ): void {
   const dt = Math.min(deltaTime, 0.05);
 
@@ -170,7 +169,7 @@ export function criticallyDampedSpring(
   target: number,
   velocity: number,
   smoothTime: number,
-  deltaTime: number
+  deltaTime: number,
 ): { value: number; velocity: number } {
   // Based on Game Programming Gems 4 critically damped spring
   const omega = 2 / smoothTime;
@@ -194,28 +193,28 @@ export function criticallyDampedSpringVec3(
   target: THREE.Vector3,
   velocity: THREE.Vector3,
   smoothTime: number,
-  deltaTime: number
+  deltaTime: number,
 ): { value: THREE.Vector3; velocity: THREE.Vector3 } {
   const resultX = criticallyDampedSpring(
     current.x,
     target.x,
     velocity.x,
     smoothTime,
-    deltaTime
+    deltaTime,
   );
   const resultY = criticallyDampedSpring(
     current.y,
     target.y,
     velocity.y,
     smoothTime,
-    deltaTime
+    deltaTime,
   );
   const resultZ = criticallyDampedSpring(
     current.z,
     target.z,
     velocity.z,
     smoothTime,
-    deltaTime
+    deltaTime,
   );
 
   return {
@@ -223,8 +222,7 @@ export function criticallyDampedSpringVec3(
     velocity: new THREE.Vector3(
       resultX.velocity,
       resultY.velocity,
-      resultZ.velocity
+      resultZ.velocity,
     ),
   };
 }
-

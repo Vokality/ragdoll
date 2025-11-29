@@ -1,4 +1,4 @@
-import type { JointName } from '../types';
+import type { JointName } from "../types";
 
 /**
  * Joint animation state for smooth interpolation
@@ -38,8 +38,8 @@ export class RagdollSkeleton {
    * Initialize spring animation states for all joints
    */
   private initializeAnimationStates(): void {
-    const joints: JointName[] = ['headPivot', 'neck'];
-    
+    const joints: JointName[] = ["headPivot", "neck"];
+
     joints.forEach((name) => {
       const config = this.getSpringConfig(name);
       this.jointAnimationStates.set(name, {
@@ -53,12 +53,16 @@ export class RagdollSkeleton {
     });
   }
 
-  private getSpringConfig(jointName: JointName): { stiffness: number; damping: number; mass: number } {
+  private getSpringConfig(jointName: JointName): {
+    stiffness: number;
+    damping: number;
+    mass: number;
+  } {
     // Simplified spring configs for 2D
-    if (jointName === 'headPivot') {
+    if (jointName === "headPivot") {
       return { stiffness: 0.85, damping: 0.6, mass: 0.9 };
     }
-    if (jointName === 'neck') {
+    if (jointName === "neck") {
       return { stiffness: 0.55, damping: 0.45, mass: 0.5 };
     }
     return { stiffness: 0.65, damping: 0.6, mass: 1.0 };
@@ -76,7 +80,10 @@ export class RagdollSkeleton {
   /**
    * Set joint rotation immediately without interpolation
    */
-  public setJointRotationImmediate(jointName: JointName, rotation: number): void {
+  public setJointRotationImmediate(
+    jointName: JointName,
+    rotation: number,
+  ): void {
     const animState = this.jointAnimationStates.get(jointName);
     if (!animState) return;
 
@@ -99,7 +106,7 @@ export class RagdollSkeleton {
         animState.target,
         animState.velocity,
         smoothTime,
-        dt
+        dt,
       );
 
       animState.current = result.value;
@@ -136,7 +143,7 @@ export class RagdollSkeleton {
     target: number,
     velocity: number,
     smoothTime: number,
-    deltaTime: number
+    deltaTime: number,
   ): { value: number; velocity: number } {
     const omega = 2 / smoothTime;
     const x = omega * deltaTime;
@@ -151,4 +158,3 @@ export class RagdollSkeleton {
     return { value: newValue, velocity: newVelocity };
   }
 }
-

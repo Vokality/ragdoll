@@ -1,12 +1,12 @@
-import { RagdollSkeleton } from '../models/ragdoll-skeleton';
-import { RagdollGeometry } from '../models/ragdoll-geometry';
-import type { ExpressionConfig } from '../models/ragdoll-geometry';
-import { ExpressionController } from './expression-controller';
-import { HeadPoseController } from './head-pose-controller';
-import { IdleController } from './idle-controller';
-import type { IdleState } from './idle-controller';
-import type { RagdollTheme } from '../themes/types';
-import { getTheme, getDefaultTheme } from '../themes';
+import { RagdollSkeleton } from "../models/ragdoll-skeleton";
+import { RagdollGeometry } from "../models/ragdoll-geometry";
+import type { ExpressionConfig } from "../models/ragdoll-geometry";
+import { ExpressionController } from "./expression-controller";
+import { HeadPoseController } from "./head-pose-controller";
+import { IdleController } from "./idle-controller";
+import type { IdleState } from "./idle-controller";
+import type { RagdollTheme } from "../themes/types";
+import { getTheme, getDefaultTheme } from "../themes";
 import type {
   CharacterState,
   FacialCommand,
@@ -17,7 +17,7 @@ import type {
   JointCommand,
   JointName,
   HeadPose,
-} from '../types';
+} from "../types";
 
 export class CharacterController {
   private skeleton: RagdollSkeleton;
@@ -25,7 +25,7 @@ export class CharacterController {
   private expressionController: ExpressionController;
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
-  private speechBubble: SpeechBubbleState = { text: null, tone: 'default' };
+  private speechBubble: SpeechBubbleState = { text: null, tone: "default" };
   private theme: RagdollTheme;
 
   constructor(themeId?: string) {
@@ -39,19 +39,19 @@ export class CharacterController {
 
   public executeCommand(command: FacialCommand): void {
     switch (command.action) {
-      case 'setMood':
+      case "setMood":
         this.setMood(command.params.mood, command.params.duration);
         break;
-      case 'triggerAction':
+      case "triggerAction":
         this.triggerAction(command.params.action, command.params.duration);
         break;
-      case 'clearAction':
+      case "clearAction":
         this.clearAction();
         break;
-      case 'setHeadPose':
+      case "setHeadPose":
         this.setHeadPose(command.params, command.params.duration);
         break;
-      case 'setSpeechBubble':
+      case "setSpeechBubble":
         this.setSpeechBubble(command.params);
         break;
     }
@@ -61,7 +61,10 @@ export class CharacterController {
     this.expressionController.setMood(mood, duration);
   }
 
-  public triggerAction(action: Exclude<FacialAction, 'none'>, duration?: number): void {
+  public triggerAction(
+    action: Exclude<FacialAction, "none">,
+    duration?: number,
+  ): void {
     this.expressionController.triggerAction(action, duration);
   }
 
@@ -80,11 +83,11 @@ export class CharacterController {
   public setSpeechBubble(payload: SpeechBubblePayload): void {
     this.speechBubble = {
       text: payload.text,
-      tone: payload.tone ?? 'default',
+      tone: payload.tone ?? "default",
     };
 
     if (payload.text && !this.expressionController.isTalking()) {
-      this.expressionController.triggerAction('talk');
+      this.expressionController.triggerAction("talk");
     }
 
     if (!payload.text && this.expressionController.isTalking()) {
@@ -111,10 +114,8 @@ export class CharacterController {
   }
 
   public getState(): CharacterState {
-    const joints: Record<JointName, { x: number; y: number; z: number }> = {} as Record<
-      JointName,
-      { x: number; y: number; z: number }
-    >;
+    const joints: Record<JointName, { x: number; y: number; z: number }> =
+      {} as Record<JointName, { x: number; y: number; z: number }>;
     this.skeleton.skeleton.joints.forEach((_joint, name) => {
       const rotation = this.skeleton.getJointRotation(name);
       if (rotation !== null) {

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { CharacterController } from '../../character/controllers/character-controller';
+import { useEffect, useRef, useState } from "react";
+import { io, Socket } from "socket.io-client";
+import { CharacterController } from "../../character/controllers/character-controller";
 import type {
   JointCommand,
   FacialStatePayload,
   SpeechBubblePayload,
-} from '../../character/types';
+} from "../../character/types";
 
 interface UseServerSyncOptions {
   serverUrl?: string;
@@ -19,13 +19,17 @@ interface ServerSyncState {
 }
 
 // Get default API URL from environment
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export function useServerSync(
   controller: CharacterController | null,
-  options: UseServerSyncOptions = {}
+  options: UseServerSyncOptions = {},
 ) {
-  const { serverUrl = DEFAULT_API_URL, autoConnect = true, sessionId } = options;
+  const {
+    serverUrl = DEFAULT_API_URL,
+    autoConnect = true,
+    sessionId,
+  } = options;
   const socketRef = useRef<Socket | null>(null);
   const [state, setState] = useState<ServerSyncState>({
     isConnected: false,
@@ -36,39 +40,39 @@ export function useServerSync(
     if (!autoConnect || !controller) return;
 
     const socket = io(serverUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ["websocket", "polling"],
     });
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      console.log('Connected to ragdoll server');
+    socket.on("connect", () => {
+      console.log("Connected to ragdoll server");
       setState({ isConnected: true, error: null });
-      
+
       // Join session if provided
       if (sessionId) {
-        socket.emit('join-session', sessionId);
+        socket.emit("join-session", sessionId);
       }
     });
 
-    socket.on('session-joined', (data: { sessionId: string }) => {
-      console.log('Joined session:', data.sessionId);
+    socket.on("session-joined", (data: { sessionId: string }) => {
+      console.log("Joined session:", data.sessionId);
     });
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from ragdoll server');
+    socket.on("disconnect", () => {
+      console.log("Disconnected from ragdoll server");
       setState({ isConnected: false, error: null });
     });
 
-    socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
+    socket.on("connect_error", (error) => {
+      console.error("Connection error:", error);
       setState({ isConnected: false, error: error.message });
     });
 
-    socket.on('facial-state-broadcast', (payload: FacialStatePayload) => {
+    socket.on("facial-state-broadcast", (payload: FacialStatePayload) => {
       applyRemoteState(controller, payload);
     });
 
-    socket.on('joint-broadcast', (command: JointCommand) => {
+    socket.on("joint-broadcast", (command: JointCommand) => {
       controller.setJointRotation(command);
     });
 
@@ -93,7 +97,10 @@ export function useServerSync(
   };
 }
 
-function applyRemoteState(controller: CharacterController, payload: FacialStatePayload) {
+function applyRemoteState(
+  controller: CharacterController,
+  payload: FacialStatePayload,
+) {
   if (payload.mood) {
     controller.setMood(payload.mood.value, payload.mood.duration);
   }
@@ -119,6 +126,6 @@ function applyRemoteState(controller: CharacterController, payload: FacialStateP
 function normalizeBubble(payload: SpeechBubblePayload): SpeechBubblePayload {
   return {
     text: payload.text ?? null,
-    tone: payload.tone ?? 'default',
+    tone: payload.tone ?? "default",
   };
 }

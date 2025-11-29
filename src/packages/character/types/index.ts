@@ -1,8 +1,17 @@
-export type JointName = 'headPivot' | 'neck';
+export type JointName = "headPivot" | "neck";
 
-export type FacialMood = 'neutral' | 'smile' | 'frown' | 'laugh' | 'angry' | 'sad' | 'surprise' | 'confusion' | 'thinking';
+export type FacialMood =
+  | "neutral"
+  | "smile"
+  | "frown"
+  | "laugh"
+  | "angry"
+  | "sad"
+  | "surprise"
+  | "confusion"
+  | "thinking";
 
-export type FacialAction = 'none' | 'wink' | 'talk';
+export type FacialAction = "none" | "wink" | "talk";
 
 export interface HeadPose {
   yaw: number;
@@ -42,7 +51,7 @@ export interface FacialAnimationState {
 
 export interface SpeechBubbleState {
   text: string | null;
-  tone: 'default' | 'shout' | 'whisper';
+  tone: "default" | "shout" | "whisper";
 }
 
 export interface CharacterState {
@@ -56,24 +65,24 @@ export interface CharacterState {
 
 export type FacialCommand =
   | {
-      action: 'setMood';
+      action: "setMood";
       params: {
         mood: FacialMood;
         duration?: number;
       };
     }
   | {
-      action: 'triggerAction';
+      action: "triggerAction";
       params: {
-        action: Exclude<FacialAction, 'none'>;
+        action: Exclude<FacialAction, "none">;
         duration?: number;
       };
     }
   | {
-      action: 'clearAction';
+      action: "clearAction";
     }
   | {
-      action: 'setHeadPose';
+      action: "setHeadPose";
       params: {
         yaw?: number;
         pitch?: number;
@@ -81,13 +90,13 @@ export type FacialCommand =
       };
     }
   | {
-      action: 'setSpeechBubble';
+      action: "setSpeechBubble";
       params: SpeechBubbleState;
     };
 
 export interface SpeechBubblePayload {
   text: string | null;
-  tone?: 'default' | 'shout' | 'whisper';
+  tone?: "default" | "shout" | "whisper";
 }
 
 export interface FacialStatePayload {
@@ -96,7 +105,7 @@ export interface FacialStatePayload {
     duration?: number;
   };
   action?: {
-    type: Exclude<FacialAction, 'none'>;
+    type: Exclude<FacialAction, "none">;
     duration?: number;
   };
   clearAction?: boolean;
