@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import { RagdollCharacter, CharacterController } from "@vokality/ragdoll";
+import { useCallback, useState } from "react";
+import { RagdollCharacter, CharacterController, PomodoroTimer } from "@vokality/ragdoll";
 import type { RagdollTheme } from "@vokality/ragdoll";
 
 interface SceneProps {
@@ -8,8 +8,11 @@ interface SceneProps {
 }
 
 export function Scene({ onControllerReady, theme }: SceneProps) {
+  const [controller, setController] = useState<CharacterController | null>(null);
+
   const handleControllerReady = useCallback(
     (ctrl: CharacterController) => {
+      setController(ctrl);
       onControllerReady(ctrl);
     },
     [onControllerReady],
@@ -25,6 +28,7 @@ export function Scene({ onControllerReady, theme }: SceneProps) {
         left: 0,
         backgroundColor: "#0b0c12",
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -33,6 +37,9 @@ export function Scene({ onControllerReady, theme }: SceneProps) {
         onControllerReady={handleControllerReady}
         theme={theme}
       />
+      {controller && (
+        <PomodoroTimer controller={controller.getPomodoroController()} />
+      )}
     </div>
   );
 }

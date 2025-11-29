@@ -5,6 +5,8 @@ import { ExpressionController } from "./expression-controller";
 import { HeadPoseController } from "./head-pose-controller";
 import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
+import { PomodoroController } from "./pomodoro-controller";
+import type { PomodoroStateData, PomodoroDuration } from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
 import type {
@@ -25,8 +27,11 @@ export class CharacterController {
   private expressionController: ExpressionController;
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
+  private pomodoroController: PomodoroController;
   private speechBubble: SpeechBubbleState = { text: null, tone: "default" };
   private theme: RagdollTheme;
+  private lastPomodoroState: PomodoroStateData | null = null;
+  private lastReminderTime: number | null = null;
 
   constructor(themeId?: string) {
     this.skeleton = new RagdollSkeleton();
@@ -35,6 +40,12 @@ export class CharacterController {
     this.expressionController = new ExpressionController(this.geometry);
     this.headPoseController = new HeadPoseController(this.skeleton);
     this.idleController = new IdleController();
+    this.pomodoroController = new PomodoroController();
+    
+    // Set up pomodoro reminders
+    this.pomodoroController.onUpdate((state) => {
+      this.handlePomodoroUpdate(state);
+    });
   }
 
   public executeCommand(command: FacialCommand): void {
@@ -130,6 +141,7 @@ export class CharacterController {
     this.headPoseController.update(deltaTime);
     this.idleController.update(deltaTime);
     this.skeleton.update(deltaTime);
+    // PomodoroController manages its own timing via setInterval
   }
 
   public getState(): CharacterState {
@@ -202,5 +214,109 @@ export class CharacterController {
 
   public getThemeId(): string {
     return this.theme.id;
+  }
+
+  public getPomodoroController(): PomodoroController {
+    return this.pomodoroController;
+  }
+
+  /**
+   * Start pomodoro session
+   */
+  public startPomodoro(
+    sessionDuration?: PomodoroDuration,
+    breakDuration?: PomodoroDuration,
+  ): void {
+    this.pomodoroController.start(sessionDuration, breakDuration);
+  }
+
+  /**
+   * Pause pomodoro session
+   */
+  public pausePomodoro(): void {
+    this.pomodoroController.pause();
+  }
+
+  /**
+   * Reset pomodoro timer
+   */
+  public resetPomodoro(): void {
+    this.pomodoroController.reset();
+  }
+
+  /**
+   * Handle pomodoro state updates and show reminders
+   */
+  private handlePomodoroUpdate(state: PomodoroStateData): void {
+    const now = Date.now();
+
+    // Handle state transitions
+    if (this.lastPomodoroState) {
+      const prevState = this.lastPomodoroState.state;
+      const prevIsBreak = this.lastPomodoroState.isBreak;
+
+      // Session started
+      if (prevState === "idle" && state.state === "running" && !state.isBreak) {
+        const durationLabel = this.getDurationLabel(state.sessionDuration);
+        this.setSpeechBubble({
+          text: `Focus time started! 🍅 (${durationLabel})`,
+          tone: "default",
+        });
+        this.lastReminderTime = now;
+      }
+      // Session completed, break started
+      else if (
+        prevState === "running" &&
+        !prevIsBreak &&
+        state.state === "running" &&
+        state.isBreak
+      ) {
+        const breakLabel = this.getDurationLabel(state.breakDuration);
+        this.setSpeechBubble({
+          text: `Time for a break! ☕ (${breakLabel})`,
+          tone: "default",
+        });
+        this.lastReminderTime = now;
+      }
+      // Break completed
+      else if (
+        prevState === "running" &&
+        prevIsBreak &&
+        state.state === "idle"
+      ) {
+        this.setSpeechBubble({
+          text: "Break's over, back to work! 💪",
+          tone: "default",
+        });
+        this.lastReminderTime = now;
+      }
+    }
+
+    // Show 5-minute warning (only once per session)
+    if (
+      state.state === "running" &&
+      state.remainingTime <= 300 && // 5 minutes
+      state.remainingTime > 299 &&
+      (!this.lastReminderTime || now - this.lastReminderTime > 60000) // Don't spam
+    ) {
+      this.setSpeechBubble({
+        text: "5 minutes left in this session",
+        tone: "whisper",
+      });
+      this.lastReminderTime = now;
+    }
+
+    this.lastPomodoroState = { ...state };
+  }
+
+  /**
+   * Get human-readable duration label
+   */
+  private getDurationLabel(duration: PomodoroDuration): string {
+    if (duration === 15) return "15 min";
+    if (duration === 30) return "30 min";
+    if (duration === 60) return "1 hour";
+    if (duration === 120) return "2 hours";
+    return `${duration} min`;
   }
 }

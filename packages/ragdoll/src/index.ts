@@ -1,11 +1,13 @@
 // Components
 export { RagdollCharacter } from "./components/ragdoll-character";
+export { PomodoroTimer } from "./components/pomodoro-timer";
 
 // Controllers
 export { CharacterController } from "./controllers/character-controller";
 export { ExpressionController } from "./controllers/expression-controller";
 export { HeadPoseController } from "./controllers/head-pose-controller";
 export { IdleController } from "./controllers/idle-controller";
+export { PomodoroController } from "./controllers/pomodoro-controller";
 
 // Models
 export { RagdollGeometry } from "./models/ragdoll-geometry";
@@ -29,6 +31,9 @@ export type {
   JointName,
   HeadPose,
   Vector3Like,
+  PomodoroState,
+  PomodoroDuration,
+  PomodoroStateData,
 } from "./types";
 
 // Animation utilities (only the pure functions that don't depend on three.js)

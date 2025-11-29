@@ -1,4 +1,4 @@
-import type { FacialMood, FacialAction, SpeechBubbleState } from "@vokality/ragdoll";
+import type { FacialMood, FacialAction, SpeechBubbleState, PomodoroDuration } from "@vokality/ragdoll";
 
 /**
  * Messages sent from VS Code extension to webview
@@ -31,6 +31,17 @@ export type ExtensionMessage =
   | {
       type: "setTheme";
       themeId: string;
+    }
+  | {
+      type: "startPomodoro";
+      sessionDuration?: PomodoroDuration;
+      breakDuration?: PomodoroDuration;
+    }
+  | {
+      type: "pausePomodoro";
+    }
+  | {
+      type: "resetPomodoro";
     };
 
 /**

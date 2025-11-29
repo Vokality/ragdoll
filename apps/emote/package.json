@@ -136,21 +136,21 @@
     "virtualWorkspaces": false
   },
   "scripts": {
-    "vscode:prepublish": "npm run verify && npm run build:prod",
-    "build": "npm run build:extension && npm run build:webview",
-    "build:prod": "npm run build:extension:prod && npm run build:webview",
+    "vscode:prepublish": "bun run verify && bun run build:prod",
+    "build": "bun run build:extension && bun run build:webview",
+    "build:prod": "bun run build:extension:prod && bun run build:webview",
     "build:extension": "node esbuild.config.mjs",
     "build:extension:prod": "node esbuild.config.mjs --production",
     "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.config.mjs --watch",
-    "dev": "concurrently -n EXT,WEB -c cyan,yellow \"npm run watch\" \"npm run build:webview\"",
-    "package": "npx vsce package --no-dependencies --out emote.vsix",
+    "dev": "concurrently -n EXT,WEB -c cyan,yellow \"bun run watch\" \"bun run build:webview\"",
+    "package": "bunx --yes @vscode/vsce package --no-dependencies --out emote.vsix",
     "clean": "rm -rf dist",
     "mcp-server": "node dist/mcp-server.js",
     "typecheck:extension": "tsc --noEmit",
     "typecheck:webview": "tsc --noEmit -p webview/tsconfig.json",
-    "typecheck": "npm run typecheck:extension && npm run typecheck:webview",
-    "verify": "npm run typecheck"
+    "typecheck": "bun run typecheck:extension && bun run typecheck:webview",
+    "verify": "bun run typecheck"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -165,7 +165,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
-    "@vokality/ragdoll": "^0.1.4-a1",
+    "@vokality/ragdoll": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   }

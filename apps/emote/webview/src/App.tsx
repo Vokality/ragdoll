@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   RagdollCharacter,
   CharacterController,
+  PomodoroTimer,
   getTheme,
   getDefaultTheme,
 } from "@vokality/ragdoll";
@@ -59,6 +60,10 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
       return "text" in payload || "tone" in payload;
     case "setTheme":
       return typeof payload.themeId === "string";
+    case "startPomodoro":
+    case "pausePomodoro":
+    case "resetPomodoro":
+      return true;
     default:
       return false;
   }
@@ -129,6 +134,15 @@ export function App() {
           ctrl.setTheme(newTheme.id);
           break;
         }
+        case "startPomodoro":
+          ctrl.startPomodoro(message.sessionDuration, message.breakDuration);
+          break;
+        case "pausePomodoro":
+          ctrl.pausePomodoro();
+          break;
+        case "resetPomodoro":
+          ctrl.resetPomodoro();
+          break;
         default:
           console.warn("Unknown message type:", message);
       }
@@ -161,6 +175,9 @@ export function App() {
           theme={theme}
         />
       </div>
+      {controller && (
+        <PomodoroTimer controller={controller.getPomodoroController()} theme={theme} />
+      )}
       <SpeechBubble text={bubbleState.text} tone={bubbleState.tone} />
     </div>
   );
@@ -171,6 +188,7 @@ const styles = {
     width: "100%",
     height: "100%",
     display: "flex",
+    flexDirection: "column" as const,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "var(--vscode-editor-background, #0f172a)",

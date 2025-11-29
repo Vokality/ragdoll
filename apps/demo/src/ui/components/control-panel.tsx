@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { CharacterController } from "@vokality/ragdoll";
-import type { FacialMood } from "@vokality/ragdoll";
+import type { FacialMood, PomodoroDuration, PomodoroStateData } from "@vokality/ragdoll";
 
 interface ControlPanelProps {
   controller: CharacterController | null;
@@ -29,6 +29,9 @@ export function ControlPanel({ controller }: ControlPanelProps) {
     useState<(typeof tones)[number]>("default");
   const [yawDeg, setYawDeg] = useState(0);
   const [pitchDeg, setPitchDeg] = useState(0);
+  const [sessionDuration, setSessionDuration] = useState<PomodoroDuration>(30);
+  const [breakDuration, setBreakDuration] = useState<PomodoroDuration>(5);
+  const [pomodoroState, setPomodoroState] = useState<PomodoroStateData | null>(null);
 
   const headPoseInfo = useMemo(
     () => ({
@@ -99,6 +102,38 @@ export function ControlPanel({ controller }: ControlPanelProps) {
     const radians = (valueDeg * Math.PI) / 180;
     controller.setHeadPose({ [axis]: radians }, 0.3);
   };
+
+  // Subscribe to pomodoro updates
+  useEffect(() => {
+    if (!controller) return;
+
+    const pomodoroController = controller.getPomodoroController();
+    setPomodoroState(pomodoroController.getState());
+
+    const unsubscribe = pomodoroController.onUpdate((state) => {
+      setPomodoroState(state);
+    });
+
+    return unsubscribe;
+  }, [controller]);
+
+  const handleStartPomodoro = () => {
+    if (!controller) return;
+    controller.startPomodoro(sessionDuration, breakDuration);
+  };
+
+  const handlePausePomodoro = () => {
+    if (!controller) return;
+    controller.pausePomodoro();
+  };
+
+  const handleResetPomodoro = () => {
+    if (!controller) return;
+    controller.resetPomodoro();
+  };
+
+  const sessionDurations: PomodoroDuration[] = [15, 30, 60, 120];
+  const breakDurations: PomodoroDuration[] = [5, 10, 15, 30];
 
   return (
     <>
@@ -250,6 +285,72 @@ export function ControlPanel({ controller }: ControlPanelProps) {
                   />
                 </div>
               </label>
+            </div>
+          </section>
+
+          <section style={styles.section}>
+            <h3 style={styles.sectionTitle}>{">"} POMODORO</h3>
+            <div style={styles.sliderContainer}>
+              <label style={styles.sliderLabel}>
+                <span style={styles.sliderLabelText}>SESSION:</span>
+                <div style={styles.buttonGroup}>
+                  {sessionDurations.map((dur) => (
+                    <button
+                      key={dur}
+                      style={{
+                        ...styles.toneButton,
+                        ...(sessionDuration === dur ? styles.toneButtonActive : {}),
+                      }}
+                      onClick={() => setSessionDuration(dur)}
+                      disabled={pomodoroState?.state === "running" || pomodoroState?.state === "paused"}
+                    >
+                      {dur === 60 ? "1h" : dur === 120 ? "2h" : `${dur}m`}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label style={styles.sliderLabel}>
+                <span style={styles.sliderLabelText}>BREAK:</span>
+                <div style={styles.buttonGroup}>
+                  {breakDurations.map((dur) => (
+                    <button
+                      key={dur}
+                      style={{
+                        ...styles.toneButton,
+                        ...(breakDuration === dur ? styles.toneButtonActive : {}),
+                      }}
+                      onClick={() => setBreakDuration(dur)}
+                      disabled={pomodoroState?.state === "running" || pomodoroState?.state === "paused"}
+                    >
+                      {dur}m
+                    </button>
+                  ))}
+                </div>
+              </label>
+            </div>
+            <div style={styles.buttonGroup}>
+              {pomodoroState?.state === "running" ? (
+                <button
+                  style={styles.actionButton}
+                  onClick={handlePausePomodoro}
+                >
+                  PAUSE
+                </button>
+              ) : (
+                <button
+                  style={styles.actionButton}
+                  onClick={handleStartPomodoro}
+                >
+                  START
+                </button>
+              )}
+              <button
+                style={styles.clearButton}
+                onClick={handleResetPomodoro}
+                disabled={pomodoroState?.state === "idle"}
+              >
+                RESET
+              </button>
             </div>
           </section>
 

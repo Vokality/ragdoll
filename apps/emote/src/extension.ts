@@ -4,7 +4,7 @@ import * as path from "path";
 import * as os from "os";
 import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
-import type { FacialMood, BubbleTone } from "./types";
+import type { FacialMood, BubbleTone, PomodoroDuration } from "./types";
 
 const MAX_BUBBLE_CHARACTERS = 240;
 
@@ -87,6 +87,8 @@ type MCPCommand = {
   text?: unknown;
   tone?: unknown;
   themeId?: unknown;
+  sessionDuration?: unknown;
+  breakDuration?: unknown;
 };
 
 type ValidatedCommand =
@@ -97,7 +99,10 @@ type ValidatedCommand =
   | { type: "triggerAction"; action: ActionId; duration?: number }
   | { type: "setHeadPose"; yawDegrees?: number; pitchDegrees?: number; duration?: number }
   | { type: "setSpeechBubble"; text: string | null; tone?: BubbleTone }
-  | { type: "setTheme"; themeId: ThemeId };
+  | { type: "setTheme"; themeId: ThemeId }
+  | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
+  | { type: "pausePomodoro" }
+  | { type: "resetPomodoro" };
 
 type ValidationResult =
   | { ok: true; command: ValidatedCommand }
@@ -229,6 +234,28 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       }
       return { ok: true, command: { type: "setTheme", themeId: raw.themeId } };
     }
+    case "startPomodoro": {
+      const sessionDuration = coerceNumber(raw.sessionDuration);
+      const breakDuration = coerceNumber(raw.breakDuration);
+      const validDurations: PomodoroDuration[] = [5, 15, 30, 60, 120];
+      const validSession = sessionDuration === undefined || validDurations.includes(sessionDuration as PomodoroDuration);
+      const validBreak = breakDuration === undefined || validDurations.includes(breakDuration as PomodoroDuration);
+      if (!validSession || !validBreak) {
+        return { ok: false, reason: "Invalid pomodoro duration. Must be 5, 15, 30, 60, or 120 minutes" };
+      }
+      return {
+        ok: true,
+        command: {
+          type: "startPomodoro",
+          sessionDuration: sessionDuration as PomodoroDuration | undefined,
+          breakDuration: breakDuration as PomodoroDuration | undefined,
+        },
+      };
+    }
+    case "pausePomodoro":
+      return { ok: true, command: { type: "pausePomodoro" } };
+    case "resetPomodoro":
+      return { ok: true, command: { type: "resetPomodoro" } };
     default:
       return { ok: false, reason: `Unknown command type "${raw.type}"` };
   }
@@ -459,6 +486,34 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  // Pomodoro commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.startPomodoro", (sessionDuration?: number, breakDuration?: number) => {
+      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
+      panel.postMessage({ 
+        type: "startPomodoro", 
+        sessionDuration: sessionDuration as PomodoroDuration | undefined,
+        breakDuration: breakDuration as PomodoroDuration | undefined,
+      });
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.pausePomodoro", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "pausePomodoro" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.resetPomodoro", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "resetPomodoro" });
+      }
+    })
+  );
+
   // Watch for configuration changes
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -589,6 +644,15 @@ function handleValidatedCommand(command: ValidatedCommand): void {
       break;
     case "setTheme":
       void vscode.commands.executeCommand("emote.setTheme", command.themeId);
+      break;
+    case "startPomodoro":
+      void vscode.commands.executeCommand("emote.startPomodoro", command.sessionDuration, command.breakDuration);
+      break;
+    case "pausePomodoro":
+      void vscode.commands.executeCommand("emote.pausePomodoro");
+      break;
+    case "resetPomodoro":
+      void vscode.commands.executeCommand("emote.resetPomodoro");
       break;
   }
 }

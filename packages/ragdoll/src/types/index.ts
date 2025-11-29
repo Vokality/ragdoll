@@ -122,3 +122,16 @@ export interface JointCommand {
   angle?: Vector3Like;
   rotation?: { x: number; y: number; z: number };
 }
+
+export type PomodoroState = "idle" | "running" | "paused" | "break";
+
+export type PomodoroDuration = 5 | 15 | 30 | 60 | 120; // minutes
+
+export interface PomodoroStateData {
+  state: PomodoroState;
+  sessionDuration: PomodoroDuration; // minutes
+  breakDuration: PomodoroDuration; // minutes
+  elapsedTime: number; // seconds
+  remainingTime: number; // seconds
+  isBreak: boolean;
+}

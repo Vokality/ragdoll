@@ -41,13 +41,18 @@ type MoodId = (typeof VALID_MOODS)[number];
 type ActionId = (typeof VALID_ACTIONS)[number];
 type ToneId = (typeof VALID_TONES)[number];
 type ThemeId = (typeof VALID_THEMES)[number];
+type PomodoroDuration = 15 | 30 | 60 | 120;
+
 type CommandPayload =
   | { type: "show" | "hide" | "clearAction" }
   | { type: "setMood"; mood: MoodId; duration?: number }
   | { type: "triggerAction"; action: ActionId; duration?: number }
   | { type: "setHeadPose"; yawDegrees?: number; pitchDegrees?: number; duration?: number }
   | { type: "setSpeechBubble"; text: string | null; tone?: ToneId }
-  | { type: "setTheme"; themeId: ThemeId };
+  | { type: "setTheme"; themeId: ThemeId }
+  | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
+  | { type: "pausePomodoro" }
+  | { type: "resetPomodoro" };
 
 function log(level: "info" | "error" | "warn", message: string, details?: Record<string, unknown>): void {
   const suffix = details ? ` ${JSON.stringify(details)}` : "";
@@ -322,6 +327,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {},
       },
     },
+    {
+      name: "startPomodoro",
+      description: "Start a pomodoro timer session",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sessionDuration: {
+            type: "number",
+            enum: [15, 30, 60, 120],
+            description: "Session duration in minutes (15, 30, 60, or 120)",
+          },
+          breakDuration: {
+            type: "number",
+            enum: [5, 10, 15, 30],
+            description: "Break duration in minutes (5, 10, 15, or 30)",
+          },
+        },
+      },
+    },
+    {
+      name: "pausePomodoro",
+      description: "Pause the active pomodoro timer",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "resetPomodoro",
+      description: "Reset the pomodoro timer to idle state",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
   ],
 }));
 
@@ -389,6 +429,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const report = await getHealthReport();
         return successResponse(JSON.stringify(report, null, 2));
       }
+
+      case "startPomodoro": {
+        const sessionDuration = (args as { sessionDuration?: number }).sessionDuration as PomodoroDuration | undefined;
+        const breakDuration = (args as { breakDuration?: number }).breakDuration as PomodoroDuration | undefined;
+        await sendCommand({
+          type: "startPomodoro",
+          sessionDuration,
+          breakDuration,
+        });
+        const sessionLabel = sessionDuration ? `${sessionDuration} min` : "default";
+        const breakLabel = breakDuration ? `${breakDuration} min` : "default";
+        return successResponse(`Pomodoro started: ${sessionLabel} session, ${breakLabel} break`);
+      }
+
+      case "pausePomodoro":
+        await sendCommand({ type: "pausePomodoro" });
+        return successResponse("Pomodoro paused");
+
+      case "resetPomodoro":
+        await sendCommand({ type: "resetPomodoro" });
+        return successResponse("Pomodoro reset");
 
       default:
         throw new Error(`Unknown tool: ${name}`);
