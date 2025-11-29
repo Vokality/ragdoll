@@ -33,8 +33,14 @@ export class TaskController {
 
     this.tasks.push(task);
 
-    // If this is the first in_progress task, make it active
-    if (status === "in_progress" && this.activeTaskId === null) {
+    // If this is an in_progress task, make it active (and reset other in_progress tasks)
+    if (status === "in_progress") {
+      // Set any other in_progress tasks back to todo
+      this.tasks.forEach((t) => {
+        if (t.id !== task.id && t.status === "in_progress") {
+          t.status = "todo";
+        }
+      });
       this.activeTaskId = task.id;
     }
 
@@ -101,6 +107,10 @@ export class TaskController {
     });
 
     task.status = "in_progress";
+    // Clear blockedReason if task was blocked
+    if (task.blockedReason) {
+      delete task.blockedReason;
+    }
     this.activeTaskId = taskId;
     this.notifyCallbacks();
   }

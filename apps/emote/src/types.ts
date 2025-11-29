@@ -111,7 +111,21 @@ export type ExtensionMessage =
     }
   | {
       type: "toggleTasks";
+    }
+  | {
+      type: "listTasks";
     };
+
+/**
+ * Task data structure
+ */
+export interface Task {
+  id: string;
+  text: string;
+  status: TaskStatus;
+  createdAt: number;
+  blockedReason?: string;
+}
 
 /**
  * Messages sent from webview to VS Code extension
@@ -123,6 +137,10 @@ export type WebviewMessage =
   | {
       type: "error";
       message: string;
+    }
+  | {
+      type: "tasksUpdate";
+      tasks: Task[];
     };
 
 

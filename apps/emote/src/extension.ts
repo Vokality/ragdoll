@@ -4,7 +4,7 @@ import * as path from "path";
 import * as os from "os";
 import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
-import type { FacialMood, BubbleTone, PomodoroDuration, TaskStatus } from "./types";
+import type { FacialMood, BubbleTone, PomodoroDuration, TaskStatus, Task } from "./types";
 
 const MAX_BUBBLE_CHARACTERS = 240;
 
@@ -27,6 +27,15 @@ type ActionId = (typeof VALID_ACTIONS)[number];
 
 let outputChannel: vscode.OutputChannel | null = null;
 const shownErrorKeys = new Set<string>();
+let currentTasks: Task[] = [];
+
+export function updateTasks(tasks: Task[]): void {
+  currentTasks = tasks;
+}
+
+export function getTasks(): Task[] {
+  return currentTasks;
+}
 
 // Socket-based IPC paths
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
@@ -117,7 +126,9 @@ type ValidatedCommand =
   | { type: "clearAllTasks" }
   | { type: "expandTasks" }
   | { type: "collapseTasks" }
-  | { type: "toggleTasks" };
+  | { type: "toggleTasks" }
+  | { type: "listTasks" }
+  | { type: "listTasks" };
 
 type ValidationResult =
   | { ok: true; command: ValidatedCommand }
@@ -314,6 +325,8 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       return { ok: true, command: { type: "collapseTasks" } };
     case "toggleTasks":
       return { ok: true, command: { type: "toggleTasks" } };
+    case "listTasks":
+      return { ok: true, command: { type: "listTasks" } };
     default:
       return { ok: false, reason: `Unknown command type "${raw.type}"` };
   }
@@ -652,6 +665,15 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.listTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "listTasks" });
+      }
+      return getTasks();
+    })
+  );
+
   // Watch for configuration changes
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -696,9 +718,16 @@ function startSocketServer(context: vscode.ExtensionContext): void {
           const result = validateMcpCommand(command);
 
           if (result.ok) {
-            handleValidatedCommand(result.command);
-            logMessage("info", "Processed MCP command", { type: result.command.type });
-            socket.write(JSON.stringify({ ok: true, type: result.command.type }) + "\n");
+            // Special handling for listTasks - it returns data
+            if (result.command.type === "listTasks") {
+              const tasks = getTasks();
+              logMessage("info", "Processed MCP command", { type: result.command.type });
+              socket.write(JSON.stringify({ ok: true, type: result.command.type, tasks }) + "\n");
+            } else {
+              handleValidatedCommand(result.command);
+              logMessage("info", "Processed MCP command", { type: result.command.type });
+              socket.write(JSON.stringify({ ok: true, type: result.command.type }) + "\n");
+            }
           } else {
             logMessage("warn", "Rejected MCP command", { reason: result.reason });
             socket.write(JSON.stringify({ ok: false, error: result.reason }) + "\n");

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { ExtensionMessage } from "./types";
+import { updateTasks } from "./extension";
 
 export class RagdollPanel {
   public static currentPanel: RagdollPanel | undefined;
@@ -81,6 +82,9 @@ export class RagdollPanel {
           this.pendingMessages = [];
         } else if (message.type === "error") {
           vscode.window.showErrorMessage(`Ragdoll: ${message.message}`);
+        } else if (message.type === "tasksUpdate") {
+          // Store tasks for MCP server access
+          updateTasks(message.tasks);
         }
       },
       null,

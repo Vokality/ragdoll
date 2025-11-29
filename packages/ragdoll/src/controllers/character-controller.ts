@@ -7,7 +7,7 @@ import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
 import { PomodoroController } from "./pomodoro-controller";
 import { TaskController } from "./task-controller";
-import type { PomodoroStateData, PomodoroDuration, TaskStatus } from "../types";
+import type { PomodoroStateData, PomodoroDuration, TaskStatus, Task } from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
 import type {
@@ -398,6 +398,21 @@ export class CharacterController {
    */
   public toggleTasks(): void {
     this.taskController.toggle();
+  }
+
+  /**
+   * Get all tasks with their IDs
+   */
+  public getTasks(): Task[] {
+    return this.taskController.getState().tasks;
+  }
+
+  /**
+   * Get a task by ID
+   */
+  public getTask(taskId: string): Task | null {
+    const tasks = this.taskController.getState().tasks;
+    return tasks.find((t) => t.id === taskId) ?? null;
   }
 
   /**

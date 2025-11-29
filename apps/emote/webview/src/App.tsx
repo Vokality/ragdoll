@@ -188,6 +188,11 @@ export function App() {
         case "toggleTasks":
           ctrl.toggleTasks();
           break;
+        case "listTasks":
+          // Send current tasks back to extension
+          const tasks = ctrl.getTasks();
+          vscode?.postMessage({ type: "tasksUpdate", tasks });
+          break;
         default:
           console.warn("Unknown message type:", message);
       }
@@ -196,6 +201,24 @@ export function App() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  // Send task updates whenever tasks change
+  useEffect(() => {
+    if (!controller) {
+      return;
+    }
+
+    const taskController = controller.getTaskController();
+    const unsubscribe = taskController.onUpdate((state) => {
+      vscode?.postMessage({ type: "tasksUpdate", tasks: state.tasks });
+    });
+
+    // Send initial tasks
+    const initialState = taskController.getState();
+    vscode?.postMessage({ type: "tasksUpdate", tasks: initialState.tasks });
+
+    return unsubscribe;
+  }, [controller]);
 
   useEffect(() => {
     if (controller) {

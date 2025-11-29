@@ -65,14 +65,15 @@ type CommandPayload =
   | { type: "clearAllTasks" }
   | { type: "expandTasks" }
   | { type: "collapseTasks" }
-  | { type: "toggleTasks" };
+  | { type: "toggleTasks" }
+  | { type: "listTasks" };
 
 function log(level: "info" | "error" | "warn", message: string, details?: Record<string, unknown>): void {
   const suffix = details ? ` ${JSON.stringify(details)}` : "";
   console.error(`${LOG_PREFIX} [${level.toUpperCase()}] ${message}${suffix}`);
 }
 
-type SocketResponse = { ok: boolean; type?: string; error?: string };
+type SocketResponse = { ok: boolean; type?: string; error?: string; tasks?: unknown[] };
 
 function sendCommand(command: CommandPayload): Promise<SocketResponse> {
   return new Promise((resolve, reject) => {
@@ -493,6 +494,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {},
       },
     },
+    {
+      name: "listTasks",
+      description: "List all tasks with their IDs, status, and text",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
   ],
 }));
 
@@ -632,6 +641,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "toggleTasks":
         await sendCommand({ type: "toggleTasks" });
         return successResponse("Task drawer toggled");
+
+      case "listTasks": {
+        const response = await sendCommand({ type: "listTasks" });
+        if (response.ok && "tasks" in response) {
+          return successResponse(JSON.stringify((response as { tasks: unknown[] }).tasks, null, 2));
+        }
+        return successResponse("[]");
+      }
 
       default:
         throw new Error(`Unknown tool: ${name}`);
