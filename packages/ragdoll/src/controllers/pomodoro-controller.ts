@@ -18,17 +18,13 @@ export class PomodoroController {
   private updateCallbacks: TimerCallback[] = [];
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
-    // Start update loop
-    this.startUpdateLoop();
-  }
-
   /**
    * Start update loop that fires every second
    */
   private startUpdateLoop(): void {
+    if (this.intervalId) return;
     this.intervalId = setInterval(() => {
-      this.update(1.0); // Update with 1 second delta
+      this.update();
     }, 1000);
   }
 
@@ -45,7 +41,7 @@ export class PomodoroController {
   /**
    * Update timer state
    */
-  public update(_deltaTime: number): void {
+  public update(): void {
     if (this.state !== "running") {
       return;
     }
@@ -90,6 +86,7 @@ export class PomodoroController {
       this.state = "running";
     }
 
+    this.startUpdateLoop();
     this.notifyCallbacks();
   }
 
@@ -109,6 +106,7 @@ export class PomodoroController {
     }
 
     this.state = "paused";
+    this.stopUpdateLoop();
     this.notifyCallbacks();
   }
 
@@ -121,6 +119,7 @@ export class PomodoroController {
     this.pausedElapsed = 0;
     this.startTime = null;
     this.isBreak = false;
+    this.stopUpdateLoop();
     this.notifyCallbacks();
   }
 
@@ -135,6 +134,7 @@ export class PomodoroController {
       this.elapsedTime = 0;
       this.pausedElapsed = 0;
       this.startTime = null;
+      this.stopUpdateLoop();
     } else {
       // Session completed, start break
       this.isBreak = true;
@@ -142,6 +142,7 @@ export class PomodoroController {
       this.pausedElapsed = 0;
       this.startTime = Date.now() / 1000;
       this.state = "running";
+      this.startUpdateLoop();
     }
 
     this.notifyCallbacks();
@@ -200,4 +201,3 @@ export class PomodoroController {
     this.updateCallbacks = [];
   }
 }
-

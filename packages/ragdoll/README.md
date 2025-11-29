@@ -46,6 +46,7 @@ The main React component that renders the animated character.
 <RagdollCharacter
   onControllerReady={(ctrl) => setController(ctrl)}
   theme={theme}  // Optional: RagdollTheme object
+  destroyOnUnmount  // Optional: defaults to true, set false if you manage controller lifecycle yourself
 />
 ```
 
@@ -72,6 +73,9 @@ controller.setSpeechBubble({ text: null });  // clear
 
 // Theme
 controller.setTheme('robot');
+
+// Cleanup (stops internal timers/listeners)
+controller.destroy();
 ```
 
 ### Themes
@@ -108,5 +112,4 @@ import type {
 ## License
 
 MIT
-
 

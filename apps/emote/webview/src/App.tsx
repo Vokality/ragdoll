@@ -3,6 +3,7 @@ import {
   RagdollCharacter,
   CharacterController,
   PomodoroTimer,
+  TaskDrawer,
   getTheme,
   getDefaultTheme,
 } from "@vokality/ragdoll";
@@ -63,6 +64,20 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
     case "startPomodoro":
     case "pausePomodoro":
     case "resetPomodoro":
+      return true;
+    case "addTask":
+      return typeof payload.text === "string";
+    case "updateTaskStatus":
+      return typeof payload.taskId === "string" && typeof payload.status === "string";
+    case "setActiveTask":
+    case "removeTask":
+      return typeof payload.taskId === "string";
+    case "completeActiveTask":
+    case "clearCompletedTasks":
+    case "clearAllTasks":
+    case "expandTasks":
+    case "collapseTasks":
+    case "toggleTasks":
       return true;
     default:
       return false;
@@ -143,6 +158,36 @@ export function App() {
         case "resetPomodoro":
           ctrl.resetPomodoro();
           break;
+        case "addTask":
+          ctrl.addTask(message.text, message.status);
+          break;
+        case "updateTaskStatus":
+          ctrl.updateTaskStatus(message.taskId, message.status, message.blockedReason);
+          break;
+        case "setActiveTask":
+          ctrl.setActiveTask(message.taskId);
+          break;
+        case "removeTask":
+          ctrl.removeTask(message.taskId);
+          break;
+        case "completeActiveTask":
+          ctrl.completeActiveTask();
+          break;
+        case "clearCompletedTasks":
+          ctrl.clearCompletedTasks();
+          break;
+        case "clearAllTasks":
+          ctrl.clearAllTasks();
+          break;
+        case "expandTasks":
+          ctrl.expandTasks();
+          break;
+        case "collapseTasks":
+          ctrl.collapseTasks();
+          break;
+        case "toggleTasks":
+          ctrl.toggleTasks();
+          break;
         default:
           console.warn("Unknown message type:", message);
       }
@@ -177,6 +222,9 @@ export function App() {
       </div>
       {controller && (
         <PomodoroTimer controller={controller.getPomodoroController()} theme={theme} />
+      )}
+      {controller && (
+        <TaskDrawer controller={controller.getTaskController()} theme={theme} />
       )}
       <SpeechBubble text={bubbleState.text} tone={bubbleState.tone} />
     </div>

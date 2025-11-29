@@ -42,14 +42,18 @@ export class RagdollSkeleton {
 
     joints.forEach((name) => {
       const config = this.getSpringConfig(name);
-      this.jointAnimationStates.set(name, {
+      const animState: JointAnimationState = {
         current: 0,
         target: 0,
         velocity: 0,
         stiffness: config.stiffness * 8,
         damping: config.damping * 4,
         mass: config.mass,
-      });
+      };
+
+      // Keep a shared reference in both maps so state stays in sync
+      this.jointAnimationStates.set(name, animState);
+      this.skeleton.joints.set(name, animState);
     });
   }
 

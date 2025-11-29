@@ -42,6 +42,9 @@ type ActionId = (typeof VALID_ACTIONS)[number];
 type ToneId = (typeof VALID_TONES)[number];
 type ThemeId = (typeof VALID_THEMES)[number];
 type PomodoroDuration = 15 | 30 | 60 | 120;
+type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
+
+const VALID_TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
 
 type CommandPayload =
   | { type: "show" | "hide" | "clearAction" }
@@ -52,7 +55,17 @@ type CommandPayload =
   | { type: "setTheme"; themeId: ThemeId }
   | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
   | { type: "pausePomodoro" }
-  | { type: "resetPomodoro" };
+  | { type: "resetPomodoro" }
+  | { type: "addTask"; text: string; status?: TaskStatus }
+  | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
+  | { type: "setActiveTask"; taskId: string }
+  | { type: "removeTask"; taskId: string }
+  | { type: "completeActiveTask" }
+  | { type: "clearCompletedTasks" }
+  | { type: "clearAllTasks" }
+  | { type: "expandTasks" }
+  | { type: "collapseTasks" }
+  | { type: "toggleTasks" };
 
 function log(level: "info" | "error" | "warn", message: string, details?: Record<string, unknown>): void {
   const suffix = details ? ` ${JSON.stringify(details)}` : "";
@@ -335,8 +348,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           sessionDuration: {
             type: "number",
-            enum: [15, 30, 60, 120],
-            description: "Session duration in minutes (15, 30, 60, or 120)",
+            enum: [5, 15, 30, 60, 120],
+            description: "Session duration in minutes (5,15, 30, 60, or 120)",
           },
           breakDuration: {
             type: "number",
@@ -357,6 +370,124 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "resetPomodoro",
       description: "Reset the pomodoro timer to idle state",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "addTask",
+      description: "Add a new task to the task list",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "The task description",
+          },
+          status: {
+            type: "string",
+            enum: VALID_TASK_STATUSES,
+            description: "Initial status (default: todo)",
+          },
+        },
+        required: ["text"],
+      },
+    },
+    {
+      name: "updateTaskStatus",
+      description: "Update a task's status",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description: "The task ID to update",
+          },
+          status: {
+            type: "string",
+            enum: VALID_TASK_STATUSES,
+            description: "New status",
+          },
+          blockedReason: {
+            type: "string",
+            description: "Reason for blocking (only when status is blocked)",
+          },
+        },
+        required: ["taskId", "status"],
+      },
+    },
+    {
+      name: "setActiveTask",
+      description: "Set a task as the currently active (in_progress) task",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description: "The task ID to make active",
+          },
+        },
+        required: ["taskId"],
+      },
+    },
+    {
+      name: "removeTask",
+      description: "Remove a task from the list",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description: "The task ID to remove",
+          },
+        },
+        required: ["taskId"],
+      },
+    },
+    {
+      name: "completeActiveTask",
+      description: "Mark the active task as done",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "clearCompletedTasks",
+      description: "Remove all completed tasks from the list",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "clearAllTasks",
+      description: "Remove all tasks from the list",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "expandTasks",
+      description: "Expand the task drawer to show all tasks",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "collapseTasks",
+      description: "Collapse the task drawer to show only active task",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "toggleTasks",
+      description: "Toggle the task drawer expanded/collapsed state",
       inputSchema: {
         type: "object",
         properties: {},
@@ -450,6 +581,57 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "resetPomodoro":
         await sendCommand({ type: "resetPomodoro" });
         return successResponse("Pomodoro reset");
+
+      case "addTask": {
+        const text = (args as { text: string }).text;
+        const status = (args as { status?: TaskStatus }).status;
+        await sendCommand({ type: "addTask", text, status });
+        return successResponse(`Task added: "${text}"`);
+      }
+
+      case "updateTaskStatus": {
+        const taskId = (args as { taskId: string }).taskId;
+        const status = (args as { status: TaskStatus }).status;
+        const blockedReason = (args as { blockedReason?: string }).blockedReason;
+        await sendCommand({ type: "updateTaskStatus", taskId, status, blockedReason });
+        return successResponse(`Task ${taskId} status updated to ${status}`);
+      }
+
+      case "setActiveTask": {
+        const taskId = (args as { taskId: string }).taskId;
+        await sendCommand({ type: "setActiveTask", taskId });
+        return successResponse(`Task ${taskId} set as active`);
+      }
+
+      case "removeTask": {
+        const taskId = (args as { taskId: string }).taskId;
+        await sendCommand({ type: "removeTask", taskId });
+        return successResponse(`Task ${taskId} removed`);
+      }
+
+      case "completeActiveTask":
+        await sendCommand({ type: "completeActiveTask" });
+        return successResponse("Active task completed");
+
+      case "clearCompletedTasks":
+        await sendCommand({ type: "clearCompletedTasks" });
+        return successResponse("Completed tasks cleared");
+
+      case "clearAllTasks":
+        await sendCommand({ type: "clearAllTasks" });
+        return successResponse("All tasks cleared");
+
+      case "expandTasks":
+        await sendCommand({ type: "expandTasks" });
+        return successResponse("Task drawer expanded");
+
+      case "collapseTasks":
+        await sendCommand({ type: "collapseTasks" });
+        return successResponse("Task drawer collapsed");
+
+      case "toggleTasks":
+        await sendCommand({ type: "toggleTasks" });
+        return successResponse("Task drawer toggled");
 
       default:
         throw new Error(`Unknown tool: ${name}`);

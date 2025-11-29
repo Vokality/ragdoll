@@ -28,6 +28,11 @@ export type BubbleTone = "default" | "whisper" | "shout";
 export type PomodoroDuration = 5 | 15 | 30 | 60 | 120;
 
 /**
+ * Task status types
+ */
+export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
+
+/**
  * Messages sent from VS Code extension to webview
  */
 export type ExtensionMessage =
@@ -69,6 +74,43 @@ export type ExtensionMessage =
     }
   | {
       type: "resetPomodoro";
+    }
+  | {
+      type: "addTask";
+      text: string;
+      status?: TaskStatus;
+    }
+  | {
+      type: "updateTaskStatus";
+      taskId: string;
+      status: TaskStatus;
+      blockedReason?: string;
+    }
+  | {
+      type: "setActiveTask";
+      taskId: string;
+    }
+  | {
+      type: "removeTask";
+      taskId: string;
+    }
+  | {
+      type: "completeActiveTask";
+    }
+  | {
+      type: "clearCompletedTasks";
+    }
+  | {
+      type: "clearAllTasks";
+    }
+  | {
+      type: "expandTasks";
+    }
+  | {
+      type: "collapseTasks";
+    }
+  | {
+      type: "toggleTasks";
     };
 
 /**

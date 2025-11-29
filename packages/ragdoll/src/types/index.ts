@@ -135,3 +135,20 @@ export interface PomodoroStateData {
   remainingTime: number; // seconds
   isBreak: boolean;
 }
+
+// Task types
+export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
+
+export interface Task {
+  id: string;
+  text: string;
+  status: TaskStatus;
+  createdAt: number;
+  blockedReason?: string;
+}
+
+export interface TaskState {
+  tasks: Task[];
+  activeTaskId: string | null;
+  isExpanded: boolean;
+}

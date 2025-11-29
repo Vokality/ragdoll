@@ -6,7 +6,8 @@ import { HeadPoseController } from "./head-pose-controller";
 import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
 import { PomodoroController } from "./pomodoro-controller";
-import type { PomodoroStateData, PomodoroDuration } from "../types";
+import { TaskController } from "./task-controller";
+import type { PomodoroStateData, PomodoroDuration, TaskStatus } from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
 import type {
@@ -28,10 +29,12 @@ export class CharacterController {
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
   private pomodoroController: PomodoroController;
+  private taskController: TaskController;
   private speechBubble: SpeechBubbleState = { text: null, tone: "default" };
   private theme: RagdollTheme;
   private lastPomodoroState: PomodoroStateData | null = null;
   private lastReminderTime: number | null = null;
+  private pomodoroUnsubscribe?: () => void;
 
   constructor(themeId?: string) {
     this.skeleton = new RagdollSkeleton();
@@ -41,9 +44,10 @@ export class CharacterController {
     this.headPoseController = new HeadPoseController(this.skeleton);
     this.idleController = new IdleController();
     this.pomodoroController = new PomodoroController();
+    this.taskController = new TaskController();
     
     // Set up pomodoro reminders
-    this.pomodoroController.onUpdate((state) => {
+    this.pomodoroUnsubscribe = this.pomodoroController.onUpdate((state) => {
       this.handlePomodoroUpdate(state);
     });
   }
@@ -126,10 +130,11 @@ export class CharacterController {
   }
 
   public setJointRotation(command: JointCommand): void {
-    if (command.angle) {
-      const rotation = command.angle.y ?? command.angle.x ?? 0;
-      this.skeleton.setJointRotation(command.joint, rotation);
-    }
+    const angle = command.angle ?? command.rotation;
+    if (!angle) return;
+
+    const rotation = angle.y ?? angle.x ?? 0;
+    this.skeleton.setJointRotation(command.joint, rotation);
   }
 
   public getJointRotation(joint: JointName): number | null {
@@ -141,7 +146,6 @@ export class CharacterController {
     this.headPoseController.update(deltaTime);
     this.idleController.update(deltaTime);
     this.skeleton.update(deltaTime);
-    // PomodoroController manages its own timing via setInterval
   }
 
   public getState(): CharacterState {
@@ -318,5 +322,93 @@ export class CharacterController {
     if (duration === 60) return "1 hour";
     if (duration === 120) return "2 hours";
     return `${duration} min`;
+  }
+
+  // Task management methods
+
+  public getTaskController(): TaskController {
+    return this.taskController;
+  }
+
+  /**
+   * Add a new task
+   */
+  public addTask(text: string, status: TaskStatus = "todo"): void {
+    this.taskController.addTask(text, status);
+  }
+
+  /**
+   * Update a task's status
+   */
+  public updateTaskStatus(taskId: string, status: TaskStatus, blockedReason?: string): void {
+    this.taskController.updateTaskStatus(taskId, status, blockedReason);
+  }
+
+  /**
+   * Set a task as the active task
+   */
+  public setActiveTask(taskId: string): void {
+    this.taskController.setActiveTask(taskId);
+  }
+
+  /**
+   * Remove a task
+   */
+  public removeTask(taskId: string): void {
+    this.taskController.removeTask(taskId);
+  }
+
+  /**
+   * Complete the active task
+   */
+  public completeActiveTask(): void {
+    this.taskController.completeActiveTask();
+  }
+
+  /**
+   * Clear completed tasks
+   */
+  public clearCompletedTasks(): void {
+    this.taskController.clearCompleted();
+  }
+
+  /**
+   * Clear all tasks
+   */
+  public clearAllTasks(): void {
+    this.taskController.clearAll();
+  }
+
+  /**
+   * Expand task drawer
+   */
+  public expandTasks(): void {
+    this.taskController.expand();
+  }
+
+  /**
+   * Collapse task drawer
+   */
+  public collapseTasks(): void {
+    this.taskController.collapse();
+  }
+
+  /**
+   * Toggle task drawer
+   */
+  public toggleTasks(): void {
+    this.taskController.toggle();
+  }
+
+  /**
+   * Cleanup resources (timers, subscriptions)
+   */
+  public destroy(): void {
+    if (this.pomodoroUnsubscribe) {
+      this.pomodoroUnsubscribe();
+      this.pomodoroUnsubscribe = undefined;
+    }
+    this.pomodoroController.destroy();
+    this.idleController.reset();
   }
 }

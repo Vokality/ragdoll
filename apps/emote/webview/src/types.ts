@@ -1,4 +1,4 @@
-import type { FacialMood, FacialAction, SpeechBubbleState, PomodoroDuration } from "@vokality/ragdoll";
+import type { FacialMood, FacialAction, SpeechBubbleState, PomodoroDuration, TaskStatus } from "@vokality/ragdoll";
 
 /**
  * Messages sent from VS Code extension to webview
@@ -42,6 +42,43 @@ export type ExtensionMessage =
     }
   | {
       type: "resetPomodoro";
+    }
+  | {
+      type: "addTask";
+      text: string;
+      status?: TaskStatus;
+    }
+  | {
+      type: "updateTaskStatus";
+      taskId: string;
+      status: TaskStatus;
+      blockedReason?: string;
+    }
+  | {
+      type: "setActiveTask";
+      taskId: string;
+    }
+  | {
+      type: "removeTask";
+      taskId: string;
+    }
+  | {
+      type: "completeActiveTask";
+    }
+  | {
+      type: "clearCompletedTasks";
+    }
+  | {
+      type: "clearAllTasks";
+    }
+  | {
+      type: "expandTasks";
+    }
+  | {
+      type: "collapseTasks";
+    }
+  | {
+      type: "toggleTasks";
     };
 
 /**

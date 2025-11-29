@@ -7,6 +7,7 @@ import type { GradientDef } from "../themes/types";
 interface RagdollCharacterProps {
   onControllerReady?: (controller: CharacterController) => void;
   theme?: RagdollTheme;
+  destroyOnUnmount?: boolean;
 }
 
 /**
@@ -203,6 +204,7 @@ function computeRenderData(
 export function RagdollCharacter({
   onControllerReady,
   theme,
+  destroyOnUnmount = true,
 }: RagdollCharacterProps) {
   // Create controller once and store in state (not ref) so it's safe to read during render
   const [controller] = useState(() => new CharacterController(theme?.id));
@@ -242,6 +244,16 @@ export function RagdollCharacter({
 
     return () => clearInterval(interval);
   }, [controller, theme]);
+
+  // Cleanup owned controller when unmounting
+  useEffect(
+    () => () => {
+      if (destroyOnUnmount) {
+        controller.destroy();
+      }
+    },
+    [controller, destroyOnUnmount],
+  );
 
   // Extract render data from state
   const {

@@ -4,7 +4,7 @@ import * as path from "path";
 import * as os from "os";
 import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
-import type { FacialMood, BubbleTone, PomodoroDuration } from "./types";
+import type { FacialMood, BubbleTone, PomodoroDuration, TaskStatus } from "./types";
 
 const MAX_BUBBLE_CHARACTERS = 240;
 
@@ -89,7 +89,12 @@ type MCPCommand = {
   themeId?: unknown;
   sessionDuration?: unknown;
   breakDuration?: unknown;
+  taskId?: unknown;
+  status?: unknown;
+  blockedReason?: unknown;
 };
+
+const VALID_TASK_STATUSES: readonly TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
 
 type ValidatedCommand =
   | { type: "show" }
@@ -102,7 +107,17 @@ type ValidatedCommand =
   | { type: "setTheme"; themeId: ThemeId }
   | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
   | { type: "pausePomodoro" }
-  | { type: "resetPomodoro" };
+  | { type: "resetPomodoro" }
+  | { type: "addTask"; text: string; status?: TaskStatus }
+  | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
+  | { type: "setActiveTask"; taskId: string }
+  | { type: "removeTask"; taskId: string }
+  | { type: "completeActiveTask" }
+  | { type: "clearCompletedTasks" }
+  | { type: "clearAllTasks" }
+  | { type: "expandTasks" }
+  | { type: "collapseTasks" }
+  | { type: "toggleTasks" };
 
 type ValidationResult =
   | { ok: true; command: ValidatedCommand }
@@ -256,6 +271,49 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       return { ok: true, command: { type: "pausePomodoro" } };
     case "resetPomodoro":
       return { ok: true, command: { type: "resetPomodoro" } };
+    case "addTask": {
+      if (typeof raw.text !== "string" || raw.text.trim().length === 0) {
+        return { ok: false, reason: "Task requires text" };
+      }
+      const status = typeof raw.status === "string" && VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
+        ? (raw.status as TaskStatus)
+        : undefined;
+      return { ok: true, command: { type: "addTask", text: raw.text.trim(), status } };
+    }
+    case "updateTaskStatus": {
+      if (typeof raw.taskId !== "string") {
+        return { ok: false, reason: "updateTaskStatus requires taskId" };
+      }
+      if (typeof raw.status !== "string" || !VALID_TASK_STATUSES.includes(raw.status as TaskStatus)) {
+        return { ok: false, reason: "updateTaskStatus requires valid status (todo, in_progress, blocked, done)" };
+      }
+      const blockedReason = typeof raw.blockedReason === "string" ? raw.blockedReason : undefined;
+      return { ok: true, command: { type: "updateTaskStatus", taskId: raw.taskId, status: raw.status as TaskStatus, blockedReason } };
+    }
+    case "setActiveTask": {
+      if (typeof raw.taskId !== "string") {
+        return { ok: false, reason: "setActiveTask requires taskId" };
+      }
+      return { ok: true, command: { type: "setActiveTask", taskId: raw.taskId } };
+    }
+    case "removeTask": {
+      if (typeof raw.taskId !== "string") {
+        return { ok: false, reason: "removeTask requires taskId" };
+      }
+      return { ok: true, command: { type: "removeTask", taskId: raw.taskId } };
+    }
+    case "completeActiveTask":
+      return { ok: true, command: { type: "completeActiveTask" } };
+    case "clearCompletedTasks":
+      return { ok: true, command: { type: "clearCompletedTasks" } };
+    case "clearAllTasks":
+      return { ok: true, command: { type: "clearAllTasks" } };
+    case "expandTasks":
+      return { ok: true, command: { type: "expandTasks" } };
+    case "collapseTasks":
+      return { ok: true, command: { type: "collapseTasks" } };
+    case "toggleTasks":
+      return { ok: true, command: { type: "toggleTasks" } };
     default:
       return { ok: false, reason: `Unknown command type "${raw.type}"` };
   }
@@ -514,6 +572,86 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  // Task commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.addTask", (text: string, status?: TaskStatus) => {
+      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
+      panel.postMessage({ type: "addTask", text, status });
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.updateTaskStatus", (taskId: string, status: TaskStatus, blockedReason?: string) => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "updateTaskStatus", taskId, status, blockedReason });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.setActiveTask", (taskId: string) => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "setActiveTask", taskId });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.removeTask", (taskId: string) => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "removeTask", taskId });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.completeActiveTask", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "completeActiveTask" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.clearCompletedTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "clearCompletedTasks" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.clearAllTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "clearAllTasks" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.expandTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "expandTasks" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.collapseTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "collapseTasks" });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.toggleTasks", () => {
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "toggleTasks" });
+      }
+    })
+  );
+
   // Watch for configuration changes
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -653,6 +791,36 @@ function handleValidatedCommand(command: ValidatedCommand): void {
       break;
     case "resetPomodoro":
       void vscode.commands.executeCommand("emote.resetPomodoro");
+      break;
+    case "addTask":
+      void vscode.commands.executeCommand("emote.addTask", command.text, command.status);
+      break;
+    case "updateTaskStatus":
+      void vscode.commands.executeCommand("emote.updateTaskStatus", command.taskId, command.status, command.blockedReason);
+      break;
+    case "setActiveTask":
+      void vscode.commands.executeCommand("emote.setActiveTask", command.taskId);
+      break;
+    case "removeTask":
+      void vscode.commands.executeCommand("emote.removeTask", command.taskId);
+      break;
+    case "completeActiveTask":
+      void vscode.commands.executeCommand("emote.completeActiveTask");
+      break;
+    case "clearCompletedTasks":
+      void vscode.commands.executeCommand("emote.clearCompletedTasks");
+      break;
+    case "clearAllTasks":
+      void vscode.commands.executeCommand("emote.clearAllTasks");
+      break;
+    case "expandTasks":
+      void vscode.commands.executeCommand("emote.expandTasks");
+      break;
+    case "collapseTasks":
+      void vscode.commands.executeCommand("emote.collapseTasks");
+      break;
+    case "toggleTasks":
+      void vscode.commands.executeCommand("emote.toggleTasks");
       break;
   }
 }
