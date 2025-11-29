@@ -1,8 +1,8 @@
 /**
  * Emote MCP server - Give AI the ability to express itself
  * 
- * This server communicates with the VS Code extension via file-based IPC.
- * No HTTP server required - just file writes!
+ * This server communicates with the VS Code extension via Unix socket (or named pipe on Windows).
+ * Commands are sent directly to the extension for immediate processing.
  * 
  * Usage: Add to your MCP config:
  * {
@@ -19,13 +19,17 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import * as fs from "fs";
+import * as net from "net";
 import * as path from "path";
 import * as os from "os";
 
-// File-based IPC - must match the extension
+// Socket-based IPC - must match the extension
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
-const COMMAND_FILE = path.join(IPC_DIR, "command.json");
+const SOCKET_PATH = os.platform() === "win32"
+  ? "\\\\.\\pipe\\ragdoll-emote"
+  : path.join(IPC_DIR, "emote.sock");
+
+const SOCKET_TIMEOUT_MS = 3000;
 
 const LOG_PREFIX = "[Emote MCP]";
 const VALID_MOODS = ["neutral", "smile", "frown", "laugh", "angry", "sad", "surprise", "confusion", "thinking"] as const;
@@ -50,20 +54,76 @@ function log(level: "info" | "error" | "warn", message: string, details?: Record
   console.error(`${LOG_PREFIX} [${level.toUpperCase()}] ${message}${suffix}`);
 }
 
-function ensureIpcReady(): void {
-  if (!fs.existsSync(IPC_DIR)) {
-    fs.mkdirSync(IPC_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(COMMAND_FILE)) {
-    fs.writeFileSync(COMMAND_FILE, "");
-  }
-  fs.accessSync(COMMAND_FILE, fs.constants.R_OK | fs.constants.W_OK);
-}
+type SocketResponse = { ok: boolean; type?: string; error?: string };
 
-function sendCommand(command: CommandPayload): void {
-  ensureIpcReady();
-  fs.writeFileSync(COMMAND_FILE, JSON.stringify(command));
-  log("info", "Command dispatched", { type: command.type });
+function sendCommand(command: CommandPayload): Promise<SocketResponse> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let responseBuffer = "";
+    let resolved = false;
+
+    const cleanup = () => {
+      socket.removeAllListeners();
+      socket.destroy();
+    };
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        reject(new Error("Connection timeout - is the Emote extension running?"));
+      }
+    }, SOCKET_TIMEOUT_MS);
+
+    socket.on("connect", () => {
+      socket.write(JSON.stringify(command) + "\n");
+    });
+
+    socket.on("data", (data) => {
+      responseBuffer += data.toString();
+      const newlineIndex = responseBuffer.indexOf("\n");
+      if (newlineIndex !== -1) {
+        const message = responseBuffer.slice(0, newlineIndex).trim();
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          try {
+            const response = JSON.parse(message) as SocketResponse;
+            log("info", "Command dispatched", { type: command.type, response });
+            cleanup();
+            resolve(response);
+          } catch {
+            cleanup();
+            resolve({ ok: true, type: command.type });
+          }
+        }
+      }
+    });
+
+    socket.on("error", (error: NodeJS.ErrnoException) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        cleanup();
+        if (error.code === "ECONNREFUSED" || error.code === "ENOENT") {
+          reject(new Error("Emote extension not running - open VS Code with the Emote extension"));
+        } else {
+          reject(error);
+        }
+      }
+    });
+
+    socket.on("close", () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        cleanup();
+        resolve({ ok: true, type: command.type });
+      }
+    });
+
+    socket.connect(SOCKET_PATH);
+  });
 }
 
 function successResponse(text: string) {
@@ -75,24 +135,50 @@ function errorResponse(error: unknown) {
   return { content: [{ type: "text", text: `Error: ${message}` }] };
 }
 
-function getHealthReport() {
-  try {
-    ensureIpcReady();
-    const stats = fs.statSync(COMMAND_FILE);
-    return {
-      status: "ok",
-      ipcDir: IPC_DIR,
-      commandFile: COMMAND_FILE,
-      updatedAt: stats.mtime.toISOString(),
-    };
-  } catch (error) {
-    return {
-      status: "error",
-      ipcDir: IPC_DIR,
-      commandFile: COMMAND_FILE,
-      message: error instanceof Error ? error.message : String(error),
-    };
-  }
+async function getHealthReport(): Promise<{
+  status: string;
+  socketPath: string;
+  connected?: boolean;
+  message?: string;
+}> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      resolve({
+        status: "error",
+        socketPath: SOCKET_PATH,
+        connected: false,
+        message: "Connection timeout",
+      });
+    }, 1000);
+
+    socket.on("connect", () => {
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve({
+        status: "ok",
+        socketPath: SOCKET_PATH,
+        connected: true,
+      });
+    });
+
+    socket.on("error", (error: NodeJS.ErrnoException) => {
+      clearTimeout(timeout);
+      socket.destroy();
+      const message = error.code === "ECONNREFUSED" || error.code === "ENOENT"
+        ? "Extension not running"
+        : error.message;
+      resolve({
+        status: "error",
+        socketPath: SOCKET_PATH,
+        connected: false,
+        message,
+      });
+    });
+
+    socket.connect(SOCKET_PATH);
+  });
 }
 
 const server = new Server(
@@ -245,7 +331,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "setMood":
-        sendCommand({
+        await sendCommand({
           type: "setMood",
           mood: (args as { mood: MoodId }).mood,
           duration: (args as { duration?: number }).duration,
@@ -253,7 +339,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return successResponse(`Mood set to ${(args as { mood: MoodId }).mood}`);
 
       case "triggerAction":
-        sendCommand({
+        await sendCommand({
           type: "triggerAction",
           action: (args as { action: ActionId }).action,
           duration: (args as { duration?: number }).duration,
@@ -261,11 +347,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return successResponse(`Action triggered: ${(args as { action: ActionId }).action}`);
 
       case "clearAction":
-        sendCommand({ type: "clearAction" });
+        await sendCommand({ type: "clearAction" });
         return successResponse("Action cleared");
 
       case "setHeadPose":
-        sendCommand({
+        await sendCommand({
           type: "setHeadPose",
           yawDegrees: (args as { yawDegrees?: number }).yawDegrees,
           pitchDegrees: (args as { pitchDegrees?: number }).pitchDegrees,
@@ -274,7 +360,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return successResponse("Head pose updated");
 
       case "setSpeechBubble":
-        sendCommand({
+        await sendCommand({
           type: "setSpeechBubble",
           text: (args as { text?: string | null }).text ?? null,
           tone: (args as { tone?: ToneId }).tone,
@@ -285,22 +371,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
       case "show":
-        sendCommand({ type: "show" });
+        await sendCommand({ type: "show" });
         return successResponse("Emote panel shown");
 
       case "hide":
-        sendCommand({ type: "hide" });
+        await sendCommand({ type: "hide" });
         return successResponse("Emote panel hidden");
 
       case "setTheme":
-        sendCommand({
+        await sendCommand({
           type: "setTheme",
           themeId: (args as { themeId: ThemeId }).themeId,
         });
         return successResponse(`Theme changed to: ${(args as { themeId: ThemeId }).themeId}`);
 
-      case "health":
-        return successResponse(JSON.stringify(getHealthReport(), null, 2));
+      case "health": {
+        const report = await getHealthReport();
+        return successResponse(JSON.stringify(report, null, 2));
+      }
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -314,7 +402,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Start the server
 const transport = new StdioServerTransport();
 server.connect(transport).then(() => {
-  log("info", "Emote MCP Server running", { commandFile: COMMAND_FILE });
+  log("info", "Emote MCP Server running", { socketPath: SOCKET_PATH });
 }).catch((error) => {
   log("error", "Failed to start Emote MCP Server", { error: String(error) });
 });

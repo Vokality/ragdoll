@@ -2,13 +2,10 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
 import type { FacialMood, BubbleTone } from "./types";
 
-const MAX_COMMAND_FILE_BYTES = 2048;
-const MIN_POLL_INTERVAL_MS = 100;
-const MAX_POLL_INTERVAL_MS = 1500;
-const POLL_BACKOFF_STEP_MS = 150;
 const MAX_BUBBLE_CHARACTERS = 240;
 
 const VALID_MOODS: readonly FacialMood[] = [
@@ -31,9 +28,11 @@ type ActionId = (typeof VALID_ACTIONS)[number];
 let outputChannel: vscode.OutputChannel | null = null;
 const shownErrorKeys = new Set<string>();
 
-// File-based IPC path
+// Socket-based IPC paths
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
-const COMMAND_FILE = path.join(IPC_DIR, "command.json");
+const SOCKET_PATH = os.platform() === "win32"
+  ? "\\\\.\\pipe\\ragdoll-emote"
+  : path.join(IPC_DIR, "emote.sock");
 
 // Stable MCP server location (doesn't change with extension version)
 const EMOTE_DIR = path.join(os.homedir(), ".emote");
@@ -104,22 +103,24 @@ type ValidationResult =
   | { ok: true; command: ValidatedCommand }
   | { ok: false; reason: string };
 
-function ensureCommandArtifacts(): void {
-  if (!fs.existsSync(IPC_DIR)) {
+function ensureIpcDirectory(): void {
+  if (os.platform() !== "win32" && !fs.existsSync(IPC_DIR)) {
     fs.mkdirSync(IPC_DIR, { recursive: true });
   }
+}
 
-  if (!fs.existsSync(COMMAND_FILE)) {
-    fs.writeFileSync(COMMAND_FILE, "");
+function cleanupStaleSocket(): void {
+  // Windows named pipes don't leave stale files
+  if (os.platform() === "win32") {
     return;
   }
-
-  const stats = fs.statSync(COMMAND_FILE);
-  if (stats.size > MAX_COMMAND_FILE_BYTES) {
-    fs.writeFileSync(COMMAND_FILE, "");
-    logMessage("warn", "Command file exceeded safe size and was reset", {
-      size: stats.size,
-    });
+  try {
+    if (fs.existsSync(SOCKET_PATH)) {
+      fs.unlinkSync(SOCKET_PATH);
+      logMessage("info", "Removed stale socket file");
+    }
+  } catch {
+    // Ignore - will fail on listen if still in use
   }
 }
 
@@ -348,7 +349,6 @@ export function activate(context: vscode.ExtensionContext): void {
   initOutputChannel(context);
   logMessage("info", "Emote extension activating...");
 
-  ensureCommandArtifacts();
   installMcpServer(context.extensionPath);
   void showSetupNotification(context);
 
@@ -472,81 +472,89 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  // Start file watcher for MCP commands
-  startFileWatcher(context);
+  // Start socket server for MCP commands
+  startSocketServer(context);
 
   logMessage("info", "Emote extension activated");
-  logMessage("info", "Listening for MCP commands", { commandFile: COMMAND_FILE });
 }
 
-function startFileWatcher(context: vscode.ExtensionContext): void {
-  ensureCommandArtifacts();
+function startSocketServer(context: vscode.ExtensionContext): void {
+  ensureIpcDirectory();
+  cleanupStaleSocket();
 
-  let pollDelay = MIN_POLL_INTERVAL_MS;
-  let disposed = false;
-  let pendingTimer: NodeJS.Timeout | undefined;
-  let lastSyntaxError: string | null = null;
+  const server = net.createServer((socket) => {
+    let buffer = "";
 
-  const scheduleNextPoll = () => {
-    if (disposed) {
-      return;
-    }
-    pendingTimer = setTimeout(poll, pollDelay);
-  };
+    socket.on("data", (data) => {
+      buffer += data.toString();
 
-  const poll = () => {
-    if (disposed) {
-      return;
-    }
+      // Process complete messages (newline-delimited JSON)
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+        const message = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
 
-    try {
-      const content = fs.readFileSync(COMMAND_FILE, "utf-8").trim();
-      if (!content) {
-        pollDelay = Math.min(MAX_POLL_INTERVAL_MS, pollDelay + POLL_BACKOFF_STEP_MS);
-        return;
-      }
-
-      pollDelay = MIN_POLL_INTERVAL_MS;
-      const command = JSON.parse(content) as MCPCommand;
-      const result = validateMcpCommand(command);
-
-      if (result.ok) {
-        handleValidatedCommand(result.command);
-        logMessage("info", "Processed MCP command", { type: result.command.type });
-      } else {
-        vscode.window.showErrorMessage(`Emote MCP command ignored: ${result.reason}`);
-        logMessage("warn", "Rejected MCP command", { reason: result.reason });
-      }
-
-      fs.writeFileSync(COMMAND_FILE, "");
-      lastSyntaxError = null;
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        if (error.message !== lastSyntaxError) {
-          logMessage("warn", "Command JSON parse failed", { message: error.message });
-          lastSyntaxError = error.message;
+        if (!message) {
+          continue;
         }
-      } else {
-        logMessage("error", "Failed to read MCP command file", { error: String(error) });
-        notifyErrorOnce(
-          "command-file-read",
-          "Emote could not read MCP commands. See the Emote output channel for details."
-        );
-      }
-      pollDelay = Math.min(MAX_POLL_INTERVAL_MS, pollDelay + POLL_BACKOFF_STEP_MS);
-    } finally {
-      scheduleNextPoll();
-    }
-  };
 
-  poll();
+        try {
+          const command = JSON.parse(message) as MCPCommand;
+          const result = validateMcpCommand(command);
+
+          if (result.ok) {
+            handleValidatedCommand(result.command);
+            logMessage("info", "Processed MCP command", { type: result.command.type });
+            socket.write(JSON.stringify({ ok: true, type: result.command.type }) + "\n");
+          } else {
+            logMessage("warn", "Rejected MCP command", { reason: result.reason });
+            socket.write(JSON.stringify({ ok: false, error: result.reason }) + "\n");
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logMessage("warn", "Failed to parse MCP command", { error: errorMessage });
+          socket.write(JSON.stringify({ ok: false, error: "Invalid JSON" }) + "\n");
+        }
+      }
+    });
+
+    socket.on("error", (error) => {
+      logMessage("warn", "Socket client error", { error: error.message });
+    });
+  });
+
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      logMessage("warn", "Socket already in use - another VS Code window may be active", {
+        path: SOCKET_PATH,
+      });
+    } else {
+      logMessage("error", "Socket server error", { error: error.message });
+      notifyErrorOnce(
+        "socket-server-error",
+        "Emote could not start the command server. Check the Emote output channel for details."
+      );
+    }
+  });
+
+  server.listen(SOCKET_PATH, () => {
+    logMessage("info", "Socket server listening", { path: SOCKET_PATH });
+  });
 
   context.subscriptions.push({
     dispose: () => {
-      disposed = true;
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
+      server.close();
+      // Clean up socket file on Unix
+      if (os.platform() !== "win32") {
+        try {
+          if (fs.existsSync(SOCKET_PATH)) {
+            fs.unlinkSync(SOCKET_PATH);
+          }
+        } catch {
+          // Ignore cleanup errors
+        }
       }
+      logMessage("info", "Socket server stopped");
     },
   });
 }
