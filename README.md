@@ -16,6 +16,37 @@ A controllable animated character with facial expressions, head poses, and speec
   - WebSocket (real-time)
   - MCP (Model Context Protocol)
 
+## Example
+
+![Ragdoll Character in Action](assets/usage.jpg)
+
+The character demonstrating facial expressions, speech bubbles, and head movements.
+
+## Themes
+
+Ragdoll comes with four built-in themes, each with unique color palettes and visual styles:
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin: 20px 0;">
+  <div style="text-align: center;">
+    <img src="assets/default.jpg" alt="Default Theme" style="max-width: 200px; border-radius: 8px;" />
+    <p><strong>Default</strong><br/>Warm, human-like appearance</p>
+  </div>
+  <div style="text-align: center;">
+    <img src="assets/robot.jpg" alt="Robot Theme" style="max-width: 200px; border-radius: 8px;" />
+    <p><strong>Robot</strong><br/>Metallic, futuristic robot</p>
+  </div>
+  <div style="text-align: center;">
+    <img src="assets/alien.jpg" alt="Alien Theme" style="max-width: 200px; border-radius: 8px;" />
+    <p><strong>Alien</strong><br/>Green, otherworldly alien</p>
+  </div>
+  <div style="text-align: center;">
+    <img src="assets/monochrome.jpg" alt="Monochrome Theme" style="max-width: 200px; border-radius: 8px;" />
+    <p><strong>Monochrome</strong><br/>Classic black and white</p>
+  </div>
+</div>
+
+Change themes via the UI control panel, REST API, WebSocket, or MCP tools.
+
 ## Quick Start
 
 ### 1. Install Dependencies
