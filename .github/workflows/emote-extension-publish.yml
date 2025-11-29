@@ -38,7 +38,7 @@ jobs:
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
-          extensionFile: dist/emote.vsix
+          extensionFile: apps/emote/dist/emote.vsix
           registryUrl: https://open-vsx.org
           skipDuplicate: true
 
