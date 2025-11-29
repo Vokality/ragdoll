@@ -39,8 +39,7 @@ export class ExpressionController {
     action: Exclude<FacialAction, "none">,
     duration: number = 0.6,
   ): void {
-    const resolvedDuration =
-      action === "talk" ? Number.POSITIVE_INFINITY : Math.max(0.2, duration);
+    const resolvedDuration = Math.max(0.2, duration);
     this.actionState = { name: action, elapsed: 0, duration: resolvedDuration };
   }
 
@@ -62,10 +61,7 @@ export class ExpressionController {
     // Update action state
     if (this.actionState) {
       this.actionState.elapsed += deltaTime;
-      if (
-        this.actionState.name !== "talk" &&
-        this.actionState.elapsed >= this.actionState.duration
-      ) {
+      if (this.actionState.elapsed >= this.actionState.duration) {
         this.actionState = null;
       }
     }
@@ -88,10 +84,6 @@ export class ExpressionController {
   public getActionProgress(): number {
     if (!this.actionState) {
       return 0;
-    }
-
-    if (!Number.isFinite(this.actionState.duration)) {
-      return 0.5;
     }
 
     return Math.min(1, this.actionState.elapsed / this.actionState.duration);

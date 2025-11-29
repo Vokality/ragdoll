@@ -86,13 +86,32 @@ export class CharacterController {
       tone: payload.tone ?? "default",
     };
 
-    if (payload.text && !this.expressionController.isTalking()) {
-      this.expressionController.triggerAction("talk");
+    if (payload.text) {
+      const duration = this.calculateTalkDuration(payload.text);
+      if (!this.expressionController.isTalking()) {
+        this.expressionController.triggerAction("talk", duration);
+      } else {
+        // Update duration if already talking (restart with new duration)
+        this.expressionController.triggerAction("talk", duration);
+      }
+    } else {
+      if (this.expressionController.isTalking()) {
+        this.expressionController.clearAction();
+      }
     }
+  }
 
-    if (!payload.text && this.expressionController.isTalking()) {
-      this.expressionController.clearAction();
-    }
+  /**
+   * Calculate talk duration based on text length using average reading speed.
+   * Uses ~3.5 words/second (200-250 words/minute) with a minimum duration.
+   */
+  private calculateTalkDuration(text: string): number {
+    const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
+    const wordCount = words.length;
+    // Average reading speed: ~3.5 words/second = ~0.29 seconds/word
+    // Add 0.2s buffer for natural feel
+    const duration = Math.max(0.5, wordCount / 3.5 + 0.2);
+    return duration;
   }
 
   public setJointRotation(command: JointCommand): void {
