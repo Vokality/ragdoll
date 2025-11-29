@@ -118,6 +118,10 @@ export function App() {
             text: message.text,
             tone: message.tone ?? "default",
           });
+          ctrl.setSpeechBubble({
+            text: message.text,
+            tone: message.tone ?? "default",
+          });
           break;
         case "setTheme": {
           const newTheme = getThemeSafe(message.themeId);

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] - 2025-11-29
+
+### Fixed
+- Speech bubble now triggers mouth animation with duration calculated from text length (3.5 words/second)
+
 ## [0.2.0] - 2025-11-29
 
 ### Added

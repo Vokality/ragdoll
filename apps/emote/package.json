@@ -2,7 +2,7 @@
   "name": "emote",
   "displayName": "Emote",
   "description": "Give AI the ability to express itself. An animated character controlled via MCP that lets AI assistants show emotions, reactions, and communicate visually.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "vokality",
   "preview": true,
   "qna": false,
