@@ -11,17 +11,21 @@ interface RagdollCharacterProps {
 
 /**
  * Render SVG gradients from theme
+ * Note: We include theme.id in gradient IDs to force re-render when theme changes
  */
 function renderGradients(theme: RagdollTheme): React.JSX.Element {
+  const prefix = theme.id;
+  
   const renderGradient = (
     id: string,
     gradient: GradientDef,
   ): React.JSX.Element => {
+    const fullId = `${prefix}-${id}`;
     if (gradient.type === "linear") {
       return (
         <linearGradient
-          key={id}
-          id={id}
+          key={fullId}
+          id={fullId}
           x1={gradient.x1}
           y1={gradient.y1}
           x2={gradient.x2}
@@ -35,8 +39,8 @@ function renderGradients(theme: RagdollTheme): React.JSX.Element {
     } else {
       return (
         <radialGradient
-          key={id}
-          id={id}
+          key={fullId}
+          id={fullId}
           cx={gradient.cx}
           cy={gradient.cy}
           r={gradient.r}
@@ -259,6 +263,9 @@ export function RagdollCharacter({
     currentTheme,
   } = renderData;
 
+  // Helper to generate gradient URL with theme prefix
+  const g = (name: string) => `url(#${currentTheme.id}-${name})`;
+
   return (
     <svg
       width="320"
@@ -278,7 +285,7 @@ export function RagdollCharacter({
         transform={`translate(${ht.yaw * 5}, 0) scale(${ht.leftEarScale}, 1)`}
         opacity={ht.leftEarOpacity}
       >
-        <path d={leftEarPath} fill="url(#skinGradient)" />
+        <path d={leftEarPath} fill={g("skinGradient")} />
       </g>
 
       {/* Right Ear (behind face) */}
@@ -286,13 +293,13 @@ export function RagdollCharacter({
         transform={`translate(${-ht.yaw * 5}, 0) scale(${ht.rightEarScale}, 1)`}
         opacity={ht.rightEarOpacity}
       >
-        <path d={rightEarPath} fill="url(#skinGradient)" />
+        <path d={rightEarPath} fill={g("skinGradient")} />
       </g>
 
       {/* Face shape - stays relatively stationary */}
       <path
         d={facePath}
-        fill="url(#skinRadial)"
+        fill={g("skinRadial")}
         stroke={currentTheme.colors.stroke}
         strokeWidth={0.5}
       />
@@ -308,8 +315,8 @@ export function RagdollCharacter({
           ry={dims.headHeight / 2 - 15}
           fill={
             ht.shadowSide === "left"
-              ? "url(#faceShadowLeft)"
-              : "url(#faceShadowRight)"
+              ? g("faceShadowLeft")
+              : g("faceShadowRight")
           }
           opacity={ht.shadowIntensity}
         />
@@ -322,7 +329,7 @@ export function RagdollCharacter({
           cy={dims.eyeY + 25}
           rx={18}
           ry={12}
-          fill="url(#blushGradient)"
+          fill={g("blushGradient")}
           opacity={0.5 + expression.cheekPuff * 0.5}
         />
         <ellipse
@@ -330,7 +337,7 @@ export function RagdollCharacter({
           cy={dims.eyeY + 25}
           rx={18}
           ry={12}
-          fill="url(#blushGradient)"
+          fill={g("blushGradient")}
           opacity={0.5 + expression.cheekPuff * 0.5}
         />
       </g>
@@ -345,7 +352,7 @@ export function RagdollCharacter({
           cx={leftIris.cx}
           cy={leftIris.cy}
           r={leftIris.irisR}
-          fill="url(#irisGradient)"
+          fill={g("irisGradient")}
         />
 
         {/* Pupil */}
@@ -371,10 +378,10 @@ export function RagdollCharacter({
         />
 
         {/* Upper eyelid */}
-        <path d={leftEyePaths.upperLid} fill="url(#lidGradient)" />
+        <path d={leftEyePaths.upperLid} fill={g("lidGradient")} />
 
         {/* Lower eyelid */}
-        <path d={leftEyePaths.lowerLid} fill="url(#lidGradient)" />
+        <path d={leftEyePaths.lowerLid} fill={g("lidGradient")} />
 
         {/* Eyelid crease */}
         <path
@@ -397,7 +404,7 @@ export function RagdollCharacter({
           cx={rightIris.cx}
           cy={rightIris.cy}
           r={rightIris.irisR}
-          fill="url(#irisGradient)"
+          fill={g("irisGradient")}
         />
 
         {/* Pupil */}
@@ -423,10 +430,10 @@ export function RagdollCharacter({
         />
 
         {/* Upper eyelid */}
-        <path d={rightEyePaths.upperLid} fill="url(#lidGradient)" />
+        <path d={rightEyePaths.upperLid} fill={g("lidGradient")} />
 
         {/* Lower eyelid */}
-        <path d={rightEyePaths.lowerLid} fill="url(#lidGradient)" />
+        <path d={rightEyePaths.lowerLid} fill={g("lidGradient")} />
 
         {/* Eyelid crease */}
         <path
@@ -491,10 +498,10 @@ export function RagdollCharacter({
         )}
 
         {/* Upper lip */}
-        <path d={mouthPaths.upperLip} fill="url(#upperLipGradient)" />
+        <path d={mouthPaths.upperLip} fill={g("upperLipGradient")} />
 
         {/* Lower lip */}
-        <path d={mouthPaths.lowerLip} fill="url(#lowerLipGradient)" />
+        <path d={mouthPaths.lowerLip} fill={g("lowerLipGradient")} />
 
         {/* Lip highlight */}
         <ellipse
@@ -508,7 +515,7 @@ export function RagdollCharacter({
 
       {/* Hair (on top) - slight shift */}
       <g transform={`translate(${ht.hairShiftX}, 0)`}>
-        <path d={hairPath} fill="url(#hairGradient)" />
+        <path d={hairPath} fill={g("hairGradient")} />
 
         {/* Hair highlight */}
         <ellipse
