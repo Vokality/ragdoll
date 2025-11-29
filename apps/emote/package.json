@@ -122,7 +122,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
-    "@vokality/ragdoll": "workspace:*",
+    "@vokality/ragdoll": "^0.1.4-a1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   }
