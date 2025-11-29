@@ -24,6 +24,66 @@ function setThemeSetting(themeId: string): void {
   config.update("theme", themeId, vscode.ConfigurationTarget.Global);
 }
 
+/**
+ * Generate MCP configuration JSON for the user's config file
+ */
+function getMcpConfig(extensionPath: string): string {
+  const mcpServerPath = path.join(extensionPath, "dist", "mcp-server.js");
+  const config = {
+    emote: {
+      command: "node",
+      args: [mcpServerPath],
+    },
+  };
+  return JSON.stringify(config, null, 2);
+}
+
+/**
+ * Copy MCP config to clipboard and show notification
+ */
+async function copyMcpConfig(extensionPath: string): Promise<void> {
+  const config = getMcpConfig(extensionPath);
+  await vscode.env.clipboard.writeText(config);
+  
+  const configPath = os.platform() === "darwin" 
+    ? "~/.cursor/mcp.json" 
+    : os.platform() === "win32"
+      ? "%USERPROFILE%\\.cursor\\mcp.json"
+      : "~/.cursor/mcp.json";
+  
+  vscode.window.showInformationMessage(
+    `Emote MCP config copied! Add it to mcpServers in ${configPath}`,
+    "Open Config Location"
+  ).then(selection => {
+    if (selection === "Open Config Location") {
+      const actualPath = path.join(os.homedir(), ".cursor", "mcp.json");
+      vscode.commands.executeCommand("vscode.open", vscode.Uri.file(actualPath));
+    }
+  });
+}
+
+/**
+ * Show first-time setup notification
+ */
+async function showSetupNotification(context: vscode.ExtensionContext): Promise<void> {
+  const hasShownSetup = context.globalState.get<boolean>("mcpSetupShown");
+  
+  if (!hasShownSetup) {
+    const selection = await vscode.window.showInformationMessage(
+      "Emote: To enable AI control, add the MCP server to your config",
+      "Copy Config",
+      "Later"
+    );
+    
+    if (selection === "Copy Config") {
+      await copyMcpConfig(context.extensionPath);
+    }
+    
+    // Mark as shown (don't show again)
+    await context.globalState.update("mcpSetupShown", true);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   console.log("Emote extension activating...");
 
@@ -31,6 +91,9 @@ export function activate(context: vscode.ExtensionContext): void {
   if (!fs.existsSync(IPC_DIR)) {
     fs.mkdirSync(IPC_DIR, { recursive: true });
   }
+
+  // Show first-time setup notification
+  showSetupNotification(context);
 
   // Register commands
   context.subscriptions.push(
@@ -51,6 +114,13 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.toggle", () => {
       RagdollPanel.toggle(context.extensionUri);
+    })
+  );
+
+  // MCP setup command
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.copyMcpConfig", () => {
+      copyMcpConfig(context.extensionPath);
     })
   );
 

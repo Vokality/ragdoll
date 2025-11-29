@@ -67,6 +67,10 @@
       {
         "command": "emote.setTheme",
         "title": "Emote: Set Theme"
+      },
+      {
+        "command": "emote.copyMcpConfig",
+        "title": "Emote: Copy MCP Configuration"
       }
     ],
     "configuration": {
@@ -101,7 +105,7 @@
     "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.config.mjs --watch",
     "dev": "concurrently -n EXT,WEB -c cyan,yellow \"npm run watch\" \"npm run build:webview\"",
-    "package": "vsce package",
+    "package": "vsce package --allow-missing-repository --skip-license --no-dependencies",
     "clean": "rm -rf dist",
     "mcp-server": "node dist/mcp-server.js"
   },
