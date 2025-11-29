@@ -1,13 +1,15 @@
-# Ragdoll - 3D Animated Character Controller
+# Ragdoll - Animated Character Controller
 
-A fully controllable 3D ragdoll character with skeletal animation, facial expressions, and comprehensive API/MCP control.
+A controllable animated character with facial expressions, head poses, and speech bubbles. Control via REST API, WebSocket, or MCP (Model Context Protocol).
 
 ## Features
 
-- **Expressive Head**: Stylized floating head with articulated neck and pivot
-- **Facial Moods**: Neutral, smile, frown, laugh, angry, and sad moods with smooth transitions
+- **Expressive Head**: Stylized SVG head with articulated neck and pivot
+- **Facial Moods**: 9 moods with smooth transitions (neutral, smile, frown, laugh, angry, sad, surprise, confusion, thinking)
 - **Actions & Speech**: Wink, talk, and live speech bubbles that sync with mouth motion
 - **Head Pose Control**: Yaw and pitch with guard rails so the face never leaves view
+- **Idle Animations**: Natural blinking, breathing, eye saccades, and subtle head movements
+- **Theming**: Multiple built-in themes with customizable colors and gradients
 - **Multiple Control Methods**:
   - Interactive Face Control Panel
   - RESTful API
@@ -20,15 +22,30 @@ A fully controllable 3D ragdoll character with skeletal animation, facial expres
 
 ```bash
 npm install
+# or
+bun install
 ```
 
 ### 2. Run the Application
+
+**Option A: Frontend only (for local development)**
 
 ```bash
 npm run dev
 ```
 
+**Option B: Frontend + API server (for full functionality)**
+
+```bash
+# Terminal 1: Start the API server
+npm run server
+
+# Terminal 2: Start the frontend
+npm run dev
+```
+
 This starts:
+
 - Web interface at `http://localhost:5173`
 - API server at `http://localhost:3001`
 
@@ -36,6 +53,12 @@ This starts:
 
 ```bash
 npm run mcp-server
+```
+
+### 4. (Optional) Docker
+
+```bash
+docker compose up
 ```
 
 ## Architecture
@@ -48,6 +71,7 @@ src/packages/
 │   ├── models/        # Skeleton & geometry
 │   ├── controllers/   # Animation controllers
 │   ├── components/    # React components
+│   ├── themes/        # Theme definitions
 │   └── types/         # TypeScript types
 ├── api/               # API domain
 │   ├── server.ts      # Express + WebSocket server
@@ -55,16 +79,19 @@ src/packages/
 ├── mcp/               # MCP integration
 │   └── ragdoll-mcp-server.ts
 └── ui/                # UI domain
-    └── components/    # React UI components
+    ├── components/    # React UI components
+    └── hooks/         # Custom React hooks
 ```
 
 ### Character System
 
 The character is built with:
+
 - **RagdollSkeleton**: Lightweight root → headPivot → neck chain
-- **RagdollGeometry**: Cartoon head, hair, and facial features
+- **RagdollGeometry**: SVG-based cartoon head, hair, and facial features
 - **HeadPoseController**: Smooth, clamped yaw/pitch interpolation
 - **ExpressionController**: Mood blending plus overlay actions (wink/talk)
+- **IdleController**: Natural micro-movements (blink, breathe, saccades)
 - **CharacterController**: Coordinates facial state, head pose, and speech bubbles
 
 ## Control Methods
@@ -72,10 +99,12 @@ The character is built with:
 ### 1. UI Control Panel
 
 The built-in control panel (right side of screen) provides:
-- Mood picker (neutral, smile, frown, laugh, angry, sad)
+
+- Mood picker (all 9 moods)
 - Wink and talk triggers (with clear button)
 - Speech bubble editor with tone (default/whisper/shout)
 - Head pose sliders for yaw/pitch
+- Theme selector
 - Live connection status
 
 ### 2. REST API
@@ -170,30 +199,30 @@ curl http://localhost:3001/api/state
 Connect to: `ws://localhost:3001`
 
 ```javascript
-import { io } from 'socket.io-client';
+import { io } from "socket.io-client";
 
-const socket = io('http://localhost:3001');
+const socket = io("http://localhost:3001");
 
 // Subscribe to state updates (10 FPS)
-socket.emit('subscribe-state');
+socket.emit("subscribe-state");
 
-socket.on('state-update', (state) => {
-  console.log('Current state:', state);
+socket.on("state-update", (state) => {
+  console.log("Current state:", state);
 });
 
 // Broadcast facial updates in real-time
-socket.emit('facial-state', {
-  mood: { value: 'smile' },
-  headPose: { yaw: 0.15 }
+socket.emit("facial-state", {
+  mood: { value: "smile" },
+  headPose: { yaw: 0.15 },
 });
 
 // Listen for changes triggered by others
-socket.on('facial-state-broadcast', (payload) => {
-  console.log('Remote payload:', payload);
+socket.on("facial-state-broadcast", (payload) => {
+  console.log("Remote payload:", payload);
 });
 
 // Unsubscribe when done
-socket.emit('unsubscribe-state');
+socket.emit("unsubscribe-state");
 ```
 
 ### 4. MCP (Model Context Protocol)
@@ -210,13 +239,13 @@ The MCP server exposes the ragdoll as MCP tools that can be used by AI assistant
 
 #### MCP Configuration
 
-Add to your MCP client configuration (e.g., Claude Desktop):
+Add to your MCP client configuration (e.g., Claude Desktop or Cursor):
 
 ```json
 {
   "mcpServers": {
     "ragdoll": {
-      "command": "npm",
+      "command": "bun",
       "args": ["run", "mcp-server"],
       "cwd": "/path/to/ragdoll"
     }
@@ -254,6 +283,9 @@ The head-only rig exposes two joints:
 - `laugh`
 - `angry`
 - `sad`
+- `surprise`
+- `confusion`
+- `thinking`
 
 ## Animation System
 
@@ -268,24 +300,33 @@ The head-only rig exposes two joints:
 - Actions (wink/talk) layer on top of the base mood for additive motion.
 - Talking drives procedural mouth squash/stretch synchronized with speech bubbles.
 
+### Idle Animations
+
+- **Blinking**: Natural random blinks with smooth eyelid motion
+- **Breathing**: Subtle chest expansion cycle
+- **Saccades**: Quick eye micro-movements for lifelike gaze
+- **Head Micro-movements**: Organic noise-based subtle head drift
+
 ## Development
 
 ### Project Structure
 
 Following domain-driven design principles:
+
 - Each package represents a domain (character, api, mcp, ui)
 - Clear separation of concerns
 - Type-safe interfaces between domains
 
 ### Tech Stack
 
-- **React 19** with TypeScript
-- **Three.js** for 3D rendering
-- **@react-three/fiber** - React renderer for Three.js
-- **@react-three/drei** - Helper components
-- **Express** - REST API
-- **Socket.io** - WebSocket
-- **MCP SDK** - Model Context Protocol
+- **React 19** with TypeScript and React Compiler
+- **SVG** for 2D character rendering
+- **Framer Motion** for animations
+- **Express 5** for REST API
+- **Socket.io** for WebSocket
+- **MCP SDK** for Model Context Protocol
+- **Vite 7** for build tooling
+- **Bun** for server-side scripts
 
 ### Building
 
@@ -299,8 +340,14 @@ npm run build
 # Preview production build
 npm run preview
 
+# Type check
+npm run type-check
+
 # Lint
 npm run lint
+
+# Format
+npm run format
 ```
 
 ## API Examples
@@ -326,17 +373,19 @@ print(f"Bubble: {state['bubble']}")
 ### JavaScript/Node.js
 
 ```javascript
-await fetch('http://localhost:3001/api/facial-state', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+await fetch("http://localhost:3001/api/facial-state", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    mood: { value: 'smile', duration: 0.3 },
+    mood: { value: "smile", duration: 0.3 },
     headPose: { yaw: 0.25, duration: 0.4 },
-    bubble: { text: 'JS was here', tone: 'whisper' },
+    bubble: { text: "JS was here", tone: "whisper" },
   }),
 });
 
-const state = await fetch('http://localhost:3001/api/state').then((r) => r.json());
+const state = await fetch("http://localhost:3001/api/state").then((r) =>
+  r.json(),
+);
 console.log(state.headPose, state.bubble);
 ```
 
@@ -345,6 +394,7 @@ console.log(state.headPose, state.bubble);
 ### API server not starting
 
 Make sure port 3001 is available:
+
 ```bash
 lsof -i :3001
 ```
@@ -352,13 +402,12 @@ lsof -i :3001
 ### Character not visible
 
 1. Check browser console for errors
-2. Ensure Three.js dependencies loaded correctly
-3. Try refreshing the page
+2. Try refreshing the page
 
 ### MCP server not connecting
 
 1. Verify MCP configuration path is correct
-2. Check that npm run mcp-server works standalone
+2. Check that `npm run mcp-server` works standalone
 3. Restart your MCP client
 
 ## License
