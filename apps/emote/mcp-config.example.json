@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "emote": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/.emote/mcp-server.js"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
+

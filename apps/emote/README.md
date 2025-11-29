@@ -1,83 +1,112 @@
+![Emote hero](media/banner-dark.png)
+
 # Emote
 
-Give AI the ability to express itself. An animated character controlled via MCP (Model Context Protocol) that lets AI assistants show emotions, reactions, and communicate visually.
+Emote lets AI assistants step out of the chat window and into a lively character that lives beside your code. Every expression, wink, and speech bubble is driven over the Model Context Protocol (MCP), so assistants can react in real time without extra servers.
 
-## Features
+## Highlights
 
-- **Animated Character**: A expressive character that lives in VS Code
-- **MCP Integration**: AI assistants can control expressions, moods, and speech via MCP tools
-- **Multiple Themes**: Default, Robot, Alien, and Monochrome appearances
-- **No Server Required**: Fully standalone, works via file-based IPC
+- **Expressive companion** – Smooth facial animation, idle motion, and speech bubbles that feel alive.
+- **MCP-native control** – Every expression change is a tool call away. Works with Cursor, Claude, and any MCP-compatible client.
+- **Themeable** – Ship-ready looks: Default, Robot, Alien, and Monochrome. Themes sync between VS Code settings and MCP commands.
+- **Self-contained** – Builds to a single VSIX. No background daemons, no network sockets, only file-based IPC.
 
 ## Installation
 
-### From Source
+### Marketplace (preferred)
 
-1. Navigate to the `vscode-extension` directory
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Build the extension:
-   ```bash
-   npm run build
-   ```
-4. Package and install:
-   ```bash
-   npx @vscode/vsce package --allow-missing-repository
-   code --install-extension emote-0.1.0.vsix
-   ```
+1. Open VS Code and launch the Extensions view (`⇧⌘X` / `Ctrl+Shift+X`).
+2. Search for **Emote** by `vokality`.
+3. Select **Install** and let VS Code restart the extension host if prompted.
+
+### VSIX (offline)
+
+1. Download the latest `emote-*.vsix` from the Releases tab.
+2. Run `code --install-extension emote-<version>.vsix`.
+3. Reload VS Code.
+
+### From source (contributors)
+
+```bash
+cd apps/emote
+bun install
+bun run verify
+bun run build
+npx vsce package --no-dependencies
+code --install-extension emote-*.vsix
+```
+
+> Bun installs workspaces quickly, while production builds still rely on `vsce` for Marketplace compatibility.
 
 ## MCP Setup
 
-Add to your MCP configuration (`~/.cursor/mcp.json` for Cursor):
+1. Run the `Emote: Copy MCP Configuration` command inside VS Code to copy a pre-filled block.
+2. Paste it into your MCP config (e.g., `~/.cursor/mcp.json`):
 
 ```json
 {
   "mcpServers": {
     "emote": {
       "command": "node",
-      "args": ["/path/to/vscode-extension/dist/mcp-server.js"]
+      "args": ["/Users/you/.emote/mcp-server.js"]
     }
   }
 }
 ```
 
-## Usage
+3. Restart your MCP client so it begins calling the server.
 
-### Commands
+The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activation, so you always run the version that matches the extension.
 
-- **Emote: Show Character** (`emote.show`) - Opens the character panel
-- **Emote: Hide Character** (`emote.hide`) - Closes the character panel
-- **Emote: Toggle Character** (`emote.toggle`) - Toggles the character panel
+## Commands & Tools
+
+### Command Palette
+
+| Command | Purpose |
+| --- | --- |
+| `Emote: Show Character` | Reveal the companion beside your editor. |
+| `Emote: Hide Character` | Close the panel. |
+| `Emote: Toggle Character` | Handy single shortcut for show/hide. |
+| `Emote: Set Mood` | Force a facial expression such as `smile` or `thinking`. |
+| `Emote: Trigger Action` | Play a wink or talk animation. |
+| `Emote: Clear Action` | Stop the active action. |
+| `Emote: Set Head Pose` | Tilt the head using yaw/pitch degrees. |
+| `Emote: Set Speech Bubble` | Show retro terminal text with tones (default/whisper/shout). |
+| `Emote: Set Theme` | Swap between Default, Robot, Alien, or Monochrome. |
+| `Emote: Copy MCP Configuration` | Copy the JSON block shown above. |
 
 ### MCP Tools
 
-AI assistants can use these tools to express themselves:
+| Tool | Input |
+| --- | --- |
+| `setMood` | `{ "mood": "smile", "duration": 0.5 }` |
+| `triggerAction` | `{ "action": "wink", "duration": 1 }` |
+| `clearAction` | `{}` |
+| `setHeadPose` | `{ "yawDegrees": 15, "pitchDegrees": -5 }` |
+| `setSpeechBubble` | `{ "text": "Deployment passed", "tone": "shout" }` |
+| `setTheme` | `{ "themeId": "robot" }` |
+| `show` / `hide` | `{}` |
 
-| Tool | Description |
-|------|-------------|
-| `setMood` | Set facial expression (neutral, smile, frown, laugh, angry, sad, surprise, confusion, thinking) |
-| `triggerAction` | Trigger an action (wink, talk) |
-| `clearAction` | Stop the current action |
-| `setHeadPose` | Rotate head (yaw: -35 to 35°, pitch: -20 to 20°) |
-| `setSpeechBubble` | Show/hide speech bubble with optional tone (default, whisper, shout) |
-| `setTheme` | Change character theme (default, robot, alien, monochrome) |
-| `show` | Show the character panel |
-| `hide` | Hide the character panel |
+## Telemetry & Privacy
 
-### Settings
+- Emote sends **no** telemetry and makes **no** network requests.
+- MCP communication happens through a tiny JSON file inside your system temp directory (`/tmp/ragdoll-vscode/command.json`).
+- The only files written outside VS Code’s sandbox are `~/.emote/mcp-server.js` (the helper server) and optional screenshots you capture yourself.
 
-- **Emote: Theme** - Choose the character's appearance (Settings → search "emote")
+## Troubleshooting
 
-## Architecture
+| Symptom | Fix |
+| --- | --- |
+| Panel never appears | Run `Emote: Show Character`, then check the VS Code output channel **Emote** for errors. |
+| MCP commands do nothing | Ensure your MCP config points to the latest `~/.emote/mcp-server.js`, then restart the MCP client. |
+| Speech bubble text sticks | Use `clearAction` and `setSpeechBubble` with `text: null` to reset. |
+| High CPU usage | Reduce polling in the MCP server by leaving the character hidden when not needed (the extension auto-throttles when idle). |
 
-The extension is fully standalone with no HTTP servers:
+## Screenshots
 
-```
-AI Assistant → MCP Tools → File write → Extension polls → Webview
-```
+![Default theme](media/screenshot-default.png)
+![Theme gallery](media/screenshot-themes.png)
 
 ## License
 
-MIT
+MIT © Vokality

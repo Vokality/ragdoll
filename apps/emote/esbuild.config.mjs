@@ -2,6 +2,9 @@ import * as esbuild from "esbuild";
 
 const production = process.argv.includes("--production");
 const watch = process.argv.includes("--watch");
+const define = {
+  "process.env.NODE_ENV": JSON.stringify(production ? "production" : "development"),
+};
 
 // Extension build options
 const extensionOptions = {
@@ -14,6 +17,9 @@ const extensionOptions = {
   sourcemap: !production,
   minify: production,
   target: "node18",
+  define,
+  logLevel: "info",
+  legalComments: "none",
 };
 
 // MCP server build options (standalone, no vscode dependency)
@@ -26,18 +32,24 @@ const mcpServerOptions = {
   sourcemap: !production,
   minify: production,
   target: "node18",
+  define,
+  logLevel: "info",
+  legalComments: "none",
 };
 
 async function main() {
   if (watch) {
-    const ctx = await esbuild.context(extensionOptions);
-    await ctx.watch();
+    const [extensionCtx, serverCtx] = await Promise.all([
+      esbuild.context(extensionOptions),
+      esbuild.context(mcpServerOptions),
+    ]);
+    await Promise.all([extensionCtx.watch(), serverCtx.watch()]);
     console.log("Watching for changes...");
-  } else {
-    await esbuild.build(extensionOptions);
-    await esbuild.build(mcpServerOptions);
-    console.log("Build complete");
+    return;
   }
+
+  await Promise.all([esbuild.build(extensionOptions), esbuild.build(mcpServerOptions)]);
+  console.log("Build complete");
 }
 
 main().catch((e) => {

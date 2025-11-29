@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   RagdollCharacter,
   CharacterController,
@@ -7,6 +7,7 @@ import {
 } from "@vokality/ragdoll";
 import type { RagdollTheme, SpeechBubbleState } from "@vokality/ragdoll";
 import { SpeechBubble } from "./components/speech-bubble";
+import { StatusOverlay } from "./components/status-overlay";
 import type { ExtensionMessage, VSCodeAPI } from "./types";
 
 // Get VS Code API (only available in webview context)
@@ -18,26 +19,78 @@ try {
   console.log("Running outside VS Code context");
 }
 
+type PersistedState = {
+  themeId: string;
+  bubble: SpeechBubbleState;
+};
+
+const FALLBACK_BUBBLE: SpeechBubbleState = { text: null, tone: "default" };
+
+function getThemeSafe(themeId?: string): RagdollTheme {
+  try {
+    if (themeId) {
+      const resolved = getTheme(themeId);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  } catch {
+    // Ignore and fall back.
+  }
+  return getDefaultTheme();
+}
+
+function isExtensionMessage(value: unknown): value is ExtensionMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const payload = value as Record<string, unknown>;
+  switch (payload.type) {
+    case "setMood":
+      return typeof payload.mood === "string";
+    case "triggerAction":
+      return typeof payload.action === "string";
+    case "clearAction":
+      return true;
+    case "setHeadPose":
+      return true;
+    case "setSpeechBubble":
+      return "text" in payload || "tone" in payload;
+    case "setTheme":
+      return typeof payload.themeId === "string";
+    default:
+      return false;
+  }
+}
+
 export function App() {
+  const persistedState = useMemo(
+    () => (vscode?.getState() as PersistedState | undefined) ?? undefined,
+    []
+  );
   const [controller, setController] = useState<CharacterController | null>(null);
-  const [theme, setTheme] = useState<RagdollTheme>(() => getDefaultTheme());
-  const [bubbleState, setBubbleState] = useState<SpeechBubbleState>({
-    text: null,
-    tone: "default",
-  });
-  
+  const [theme, setTheme] = useState<RagdollTheme>(() => getThemeSafe(persistedState?.themeId));
+  const [bubbleState, setBubbleState] = useState<SpeechBubbleState>(
+    () => persistedState?.bubble ?? FALLBACK_BUBBLE
+  );
+  const [hasReceivedMessage, setHasReceivedMessage] = useState<boolean>(Boolean(persistedState));
+
   const controllerRef = useRef<CharacterController | null>(null);
 
   const handleControllerReady = useCallback((ctrl: CharacterController) => {
     setController(ctrl);
     controllerRef.current = ctrl;
-    // Notify extension that webview is ready
     vscode?.postMessage({ type: "ready" });
   }, []);
 
-  // Handle messages from VS Code extension
   useEffect(() => {
-    const handleMessage = (event: MessageEvent<ExtensionMessage>) => {
+    const handleMessage = (event: MessageEvent<unknown>) => {
+      if (!isExtensionMessage(event.data)) {
+        console.warn("Ignoring message with unknown shape", event.data);
+        return;
+      }
+
       const message = event.data;
       const ctrl = controllerRef.current;
 
@@ -46,37 +99,32 @@ export function App() {
         return;
       }
 
+      setHasReceivedMessage(true);
       switch (message.type) {
         case "setMood":
           ctrl.setMood(message.mood, message.duration);
           break;
-
         case "triggerAction":
           ctrl.triggerAction(message.action, message.duration);
           break;
-
         case "clearAction":
           ctrl.clearAction();
           break;
-
         case "setHeadPose":
           ctrl.setHeadPose({ yaw: message.yaw, pitch: message.pitch }, message.duration);
           break;
-
         case "setSpeechBubble":
           setBubbleState({
             text: message.text,
             tone: message.tone ?? "default",
           });
           break;
-
         case "setTheme": {
-          const newTheme = getTheme(message.themeId);
+          const newTheme = getThemeSafe(message.themeId);
           setTheme(newTheme);
-          ctrl.setTheme(message.themeId);
+          ctrl.setTheme(newTheme.id);
           break;
         }
-
         default:
           console.warn("Unknown message type:", message);
       }
@@ -86,15 +134,22 @@ export function App() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
-  // Update theme on controller when it changes
   useEffect(() => {
-    if (controller && theme) {
+    if (controller) {
       controller.setTheme(theme.id);
     }
   }, [controller, theme]);
 
+  useEffect(() => {
+    vscode?.setState({ themeId: theme.id, bubble: bubbleState });
+  }, [theme, bubbleState]);
+
+  const showOverlay = !hasReceivedMessage;
+  const overlayVariant = controller ? "waiting" : "initial";
+
   return (
     <div style={styles.container}>
+      {showOverlay && <StatusOverlay variant={overlayVariant} />}
       <div style={styles.characterContainer}>
         <RagdollCharacter
           key={theme.id}
@@ -114,7 +169,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
+    backgroundColor: "var(--vscode-editor-background, #0f172a)",
     position: "relative" as const,
   },
   characterContainer: {

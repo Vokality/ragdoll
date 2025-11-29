@@ -2,18 +2,47 @@
   "name": "emote",
   "displayName": "Emote",
   "description": "Give AI the ability to express itself. An animated character controlled via MCP that lets AI assistants show emotions, reactions, and communicate visually.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "vokality",
+  "preview": true,
+  "qna": false,
   "license": "MIT",
   "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "description": "MCP Ready",
+      "url": "https://img.shields.io/badge/MCP-ready-4ec9b0",
+      "href": "https://modelcontextprotocol.io"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/vokality/ragdoll"
   },
+  "homepage": "https://github.com/vokality/ragdoll/tree/main/apps/emote",
+  "bugs": {
+    "url": "https://github.com/vokality/ragdoll/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "media/**/*",
+    "icon.png",
+    "icon.svg",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "publish.md",
+    "mcp-config.example.json"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Visualization",
     "Other"
   ],
   "keywords": [
@@ -34,43 +63,63 @@
     "commands": [
       {
         "command": "emote.show",
-        "title": "Emote: Show Character"
+        "title": "Emote: Show Character",
+        "shortTitle": "Show Character",
+        "category": "Emote"
       },
       {
         "command": "emote.hide",
-        "title": "Emote: Hide Character"
+        "title": "Emote: Hide Character",
+        "shortTitle": "Hide Character",
+        "category": "Emote"
       },
       {
         "command": "emote.toggle",
-        "title": "Emote: Toggle Character"
+        "title": "Emote: Toggle Character",
+        "shortTitle": "Toggle Character",
+        "category": "Emote"
       },
       {
         "command": "emote.setMood",
-        "title": "Emote: Set Mood"
+        "title": "Emote: Set Mood",
+        "shortTitle": "Set Mood",
+        "category": "Emote"
       },
       {
         "command": "emote.triggerAction",
-        "title": "Emote: Trigger Action"
+        "title": "Emote: Trigger Action",
+        "shortTitle": "Trigger Action",
+        "category": "Emote"
       },
       {
         "command": "emote.clearAction",
-        "title": "Emote: Clear Action"
+        "title": "Emote: Clear Action",
+        "shortTitle": "Clear Action",
+        "category": "Emote"
       },
       {
         "command": "emote.setHeadPose",
-        "title": "Emote: Set Head Pose"
+        "title": "Emote: Set Head Pose",
+        "shortTitle": "Head Pose",
+        "category": "Emote"
       },
       {
         "command": "emote.setSpeechBubble",
-        "title": "Emote: Set Speech Bubble"
+        "title": "Emote: Set Speech Bubble",
+        "shortTitle": "Speech Bubble",
+        "category": "Emote"
       },
       {
         "command": "emote.setTheme",
-        "title": "Emote: Set Theme"
+        "title": "Emote: Set Theme",
+        "shortTitle": "Set Theme",
+        "category": "Emote"
       },
       {
         "command": "emote.copyMcpConfig",
-        "title": "Emote: Copy MCP Configuration"
+        "title": "Emote: Copy MCP Configuration",
+        "shortTitle": "Copy MCP Config",
+        "category": "Emote"
       }
     ],
     "configuration": {
@@ -91,13 +140,21 @@
             "Green, otherworldly alien",
             "Classic black and white"
           ],
-          "description": "Character theme"
+          "description": "Character theme",
+          "markdownDescription": "Select the default Emote appearance. You can still override it via the `Emote: Set Theme` command or MCP tools."
         }
       }
     }
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Emote needs to read/write ~/.emote for MCP tooling."
+    },
+    "virtualWorkspaces": false
+  },
   "scripts": {
-    "vscode:prepublish": "npm run build:prod",
+    "vscode:prepublish": "npm run verify && npm run build:prod",
     "build": "npm run build:extension && npm run build:webview",
     "build:prod": "npm run build:extension:prod && npm run build:webview",
     "build:extension": "node esbuild.config.mjs",
@@ -105,9 +162,13 @@
     "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.config.mjs --watch",
     "dev": "concurrently -n EXT,WEB -c cyan,yellow \"npm run watch\" \"npm run build:webview\"",
-    "package": "vsce package --allow-missing-repository --skip-license --no-dependencies",
+    "package": "vsce package --no-dependencies --out dist/emote.vsix",
     "clean": "rm -rf dist",
-    "mcp-server": "node dist/mcp-server.js"
+    "mcp-server": "node dist/mcp-server.js",
+    "typecheck:extension": "tsc --noEmit",
+    "typecheck:webview": "tsc --noEmit -p webview/tsconfig.json",
+    "typecheck": "npm run typecheck:extension && npm run typecheck:webview",
+    "verify": "npm run typecheck"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

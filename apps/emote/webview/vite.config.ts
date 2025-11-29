@@ -10,8 +10,12 @@ export default defineConfig({
   root: __dirname,
   build: {
     outDir: path.resolve(__dirname, "../dist/webview"),
-    emptyDirFirst: true,
+    emptyOutDir: true,
+    sourcemap: false,
+    minify: "esbuild",
+    cssCodeSplit: false,
     rollupOptions: {
+      treeshake: true,
       input: path.resolve(__dirname, "index.html"),
       output: {
         entryFileNames: "assets/index.js",
@@ -19,5 +23,11 @@ export default defineConfig({
         assetFileNames: "assets/index.[ext]",
       },
     },
+  },
+  optimizeDeps: {
+    include: ["@vokality/ragdoll"],
+  },
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
   },
 });

@@ -27,24 +27,78 @@ import * as os from "os";
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
 const COMMAND_FILE = path.join(IPC_DIR, "command.json");
 
-interface MCPCommand {
-  type: string;
-  [key: string]: unknown;
+const LOG_PREFIX = "[Emote MCP]";
+const VALID_MOODS = ["neutral", "smile", "frown", "laugh", "angry", "sad", "surprise", "confusion", "thinking"] as const;
+const VALID_ACTIONS = ["wink", "talk"] as const;
+const VALID_TONES = ["default", "whisper", "shout"] as const;
+const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
+
+type MoodId = (typeof VALID_MOODS)[number];
+type ActionId = (typeof VALID_ACTIONS)[number];
+type ToneId = (typeof VALID_TONES)[number];
+type ThemeId = (typeof VALID_THEMES)[number];
+type CommandPayload =
+  | { type: "show" | "hide" | "clearAction" }
+  | { type: "setMood"; mood: MoodId; duration?: number }
+  | { type: "triggerAction"; action: ActionId; duration?: number }
+  | { type: "setHeadPose"; yawDegrees?: number; pitchDegrees?: number; duration?: number }
+  | { type: "setSpeechBubble"; text: string | null; tone?: ToneId }
+  | { type: "setTheme"; themeId: ThemeId };
+
+function log(level: "info" | "error" | "warn", message: string, details?: Record<string, unknown>): void {
+  const suffix = details ? ` ${JSON.stringify(details)}` : "";
+  console.error(`${LOG_PREFIX} [${level.toUpperCase()}] ${message}${suffix}`);
 }
 
-function sendCommand(command: MCPCommand): void {
-  // Ensure directory exists
+function ensureIpcReady(): void {
   if (!fs.existsSync(IPC_DIR)) {
     fs.mkdirSync(IPC_DIR, { recursive: true });
   }
-  // Write command to file (extension watches this)
+  if (!fs.existsSync(COMMAND_FILE)) {
+    fs.writeFileSync(COMMAND_FILE, "");
+  }
+  fs.accessSync(COMMAND_FILE, fs.constants.R_OK | fs.constants.W_OK);
+}
+
+function sendCommand(command: CommandPayload): void {
+  ensureIpcReady();
   fs.writeFileSync(COMMAND_FILE, JSON.stringify(command));
+  log("info", "Command dispatched", { type: command.type });
+}
+
+function successResponse(text: string) {
+  return { content: [{ type: "text", text }] };
+}
+
+function errorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return { content: [{ type: "text", text: `Error: ${message}` }] };
+}
+
+function getHealthReport() {
+  try {
+    ensureIpcReady();
+    const stats = fs.statSync(COMMAND_FILE);
+    return {
+      status: "ok",
+      ipcDir: IPC_DIR,
+      commandFile: COMMAND_FILE,
+      updatedAt: stats.mtime.toISOString(),
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      ipcDir: IPC_DIR,
+      commandFile: COMMAND_FILE,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 const server = new Server(
   {
     name: "emote",
-    version: "1.0.0",
+    version: "0.2.0",
   },
   {
     capabilities: {
@@ -63,7 +117,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           mood: {
             type: "string",
-            enum: ["neutral", "smile", "frown", "laugh", "angry", "sad", "surprise", "confusion", "thinking"],
+            enum: [...VALID_MOODS],
           },
           duration: {
             type: "number",
@@ -82,7 +136,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           action: {
             type: "string",
-            enum: ["wink", "talk"],
+            enum: [...VALID_ACTIONS],
           },
           duration: {
             type: "number",
@@ -134,10 +188,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           text: {
             type: "string",
             description: "Bubble contents. Leave empty/null to clear.",
+            maxLength: 240,
           },
           tone: {
             type: "string",
-            enum: ["default", "whisper", "shout"],
+            enum: [...VALID_TONES],
           },
         },
       },
@@ -166,11 +221,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           themeId: {
             type: "string",
-            enum: ["default", "robot", "alien", "monochrome"],
+            enum: [...VALID_THEMES],
             description: "Theme identifier: default (warm human), robot (metallic), alien (green), monochrome (grayscale)",
           },
         },
         required: ["themeId"],
+      },
+    },
+    {
+      name: "health",
+      description: "Report MCP server readiness and IPC file status",
+      inputSchema: {
+        type: "object",
+        properties: {},
       },
     },
   ],
@@ -184,22 +247,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "setMood":
         sendCommand({
           type: "setMood",
-          mood: (args as { mood: string }).mood,
+          mood: (args as { mood: MoodId }).mood,
           duration: (args as { duration?: number }).duration,
         });
-        return { content: [{ type: "text", text: `Mood set to ${(args as { mood: string }).mood}` }] };
+        return successResponse(`Mood set to ${(args as { mood: MoodId }).mood}`);
 
       case "triggerAction":
         sendCommand({
           type: "triggerAction",
-          action: (args as { action: string }).action,
+          action: (args as { action: ActionId }).action,
           duration: (args as { duration?: number }).duration,
         });
-        return { content: [{ type: "text", text: `Action triggered: ${(args as { action: string }).action}` }] };
+        return successResponse(`Action triggered: ${(args as { action: ActionId }).action}`);
 
       case "clearAction":
         sendCommand({ type: "clearAction" });
-        return { content: [{ type: "text", text: "Action cleared" }] };
+        return successResponse("Action cleared");
 
       case "setHeadPose":
         sendCommand({
@@ -208,55 +271,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           pitchDegrees: (args as { pitchDegrees?: number }).pitchDegrees,
           duration: (args as { duration?: number }).duration,
         });
-        return { content: [{ type: "text", text: "Head pose updated" }] };
+        return successResponse("Head pose updated");
 
       case "setSpeechBubble":
         sendCommand({
           type: "setSpeechBubble",
-          text: (args as { text?: string }).text,
-          tone: (args as { tone?: string }).tone,
+          text: (args as { text?: string | null }).text ?? null,
+          tone: (args as { tone?: ToneId }).tone,
         });
         {
           const text = (args as { text?: string }).text;
-          return {
-            content: [{
-              type: "text",
-              text: text ? `Speech bubble: "${text}"` : "Speech bubble cleared",
-            }],
-          };
+          return successResponse(text ? `Speech bubble: "${text}"` : "Speech bubble cleared");
         }
 
       case "show":
         sendCommand({ type: "show" });
-        return { content: [{ type: "text", text: "Emote panel shown" }] };
+        return successResponse("Emote panel shown");
 
       case "hide":
         sendCommand({ type: "hide" });
-        return { content: [{ type: "text", text: "Emote panel hidden" }] };
+        return successResponse("Emote panel hidden");
 
       case "setTheme":
         sendCommand({
           type: "setTheme",
-          themeId: (args as { themeId: string }).themeId,
+          themeId: (args as { themeId: ThemeId }).themeId,
         });
-        return { content: [{ type: "text", text: `Theme changed to: ${(args as { themeId: string }).themeId}` }] };
+        return successResponse(`Theme changed to: ${(args as { themeId: ThemeId }).themeId}`);
+
+      case "health":
+        return successResponse(JSON.stringify(getHealthReport(), null, 2));
 
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    return {
-      content: [{
-        type: "text",
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-      }],
-    };
+    log("error", "Tool call failed", { tool: name, error: String(error) });
+    return errorResponse(error);
   }
 });
 
 // Start the server
 const transport = new StdioServerTransport();
 server.connect(transport).then(() => {
-  console.error("Emote MCP Server running (file-based IPC)");
-  console.error(`Command file: ${COMMAND_FILE}`);
+  log("info", "Emote MCP Server running", { commandFile: COMMAND_FILE });
+}).catch((error) => {
+  log("error", "Failed to start Emote MCP Server", { error: String(error) });
 });

@@ -1,0 +1,46 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gridBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#gridBg)"/>
+  <text x="120" y="140" fill="#f8fafc" font-size="42" font-weight="700" font-family="Inter, 'Segoe UI', sans-serif">Theme gallery</text>
+  <text x="120" y="184" fill="#cbd5f5" font-size="22" font-family="Inter, 'Segoe UI', sans-serif">Swap vibes instantly or let your assistant choose.</text>
+  <g transform="translate(120 220)">
+    <rect width="500" height="200" rx="20" fill="#111827" stroke="#38bdf8" stroke-width="1.5"/>
+    <text x="32" y="42" fill="#bae6fd" font-size="24" font-weight="600" font-family="Inter, 'Segoe UI', sans-serif">Default</text>
+    <text x="32" y="74" fill="#cbd5f5" font-size="18" font-family="Inter, 'Segoe UI', sans-serif">Warm, human-like palette</text>
+    <circle cx="360" cy="110" r="56" fill="#fde68a"/>
+    <circle cx="340" cy="100" r="10" fill="#0f172a"/>
+    <circle cx="380" cy="100" r="10" fill="#0f172a"/>
+    <path d="M330 140 Q360 160 390 140" stroke="#0f172a" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(660 220)">
+    <rect width="500" height="200" rx="20" fill="#0f172a" stroke="#f472b6" stroke-width="1.5"/>
+    <text x="32" y="42" fill="#fbcfe8" font-size="24" font-weight="600" font-family="Inter, 'Segoe UI', sans-serif">Robot</text>
+    <text x="32" y="74" fill="#f5d0fe" font-size="18" font-family="Inter, 'Segoe UI', sans-serif">Chrome plating + neon visor</text>
+    <circle cx="360" cy="110" r="56" fill="#0ea5e9"/>
+    <rect x="324" y="90" width="72" height="28" rx="14" fill="#f472b6"/>
+  </g>
+  <g transform="translate(120 460)">
+    <rect width="500" height="200" rx="20" fill="#052e16" stroke="#4ade80" stroke-width="1.5"/>
+    <text x="32" y="42" fill="#bbf7d0" font-size="24" font-weight="600" font-family="Inter, 'Segoe UI', sans-serif">Alien</text>
+    <text x="32" y="74" fill="#dcfce7" font-size="18" font-family="Inter, 'Segoe UI', sans-serif">Bright green glow with curious grin</text>
+    <circle cx="360" cy="110" r="56" fill="#4ade80"/>
+    <circle cx="340" cy="100" r="10" fill="#052e16"/>
+    <circle cx="380" cy="100" r="10" fill="#052e16"/>
+    <path d="M330 140 Q360 150 390 140" stroke="#052e16" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(660 460)">
+    <rect width="500" height="200" rx="20" fill="#0b0b0b" stroke="#cbd5f5" stroke-width="1.5"/>
+    <text x="32" y="42" fill="#e2e8f0" font-size="24" font-weight="600" font-family="Inter, 'Segoe UI', sans-serif">Monochrome</text>
+    <text x="32" y="74" fill="#cbd5f5" font-size="18" font-family="Inter, 'Segoe UI', sans-serif">Film noir shading with strong outlines</text>
+    <circle cx="360" cy="110" r="56" fill="#f8fafc"/>
+    <circle cx="340" cy="100" r="10" fill="#0f172a"/>
+    <circle cx="380" cy="100" r="10" fill="#0f172a"/>
+    <path d="M330 140 Q360 120 390 140" stroke="#0f172a" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
+
