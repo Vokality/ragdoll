@@ -35,7 +35,7 @@ jobs:
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
-          packagePath: .
+          packagePath: apps/emote
           registryUrl: https://open-vsx.org
           skipDuplicate: true
 
