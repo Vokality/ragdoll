@@ -162,7 +162,7 @@
     "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.config.mjs --watch",
     "dev": "concurrently -n EXT,WEB -c cyan,yellow \"npm run watch\" \"npm run build:webview\"",
-    "package": "npx vsce package --no-dependencies --out dist/emote.vsix",
+    "package": "npx vsce package --no-dependencies --out emote.vsix",
     "clean": "rm -rf dist",
     "mcp-server": "node dist/mcp-server.js",
     "typecheck:extension": "tsc --noEmit",
