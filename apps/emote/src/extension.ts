@@ -9,6 +9,10 @@ import type { FacialMood, BubbleTone } from "./types";
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
 const COMMAND_FILE = path.join(IPC_DIR, "command.json");
 
+// Stable MCP server location (doesn't change with extension version)
+const EMOTE_DIR = path.join(os.homedir(), ".emote");
+const STABLE_MCP_SERVER = path.join(EMOTE_DIR, "mcp-server.js");
+
 // Available themes
 const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
 type ThemeId = typeof VALID_THEMES[number];
@@ -25,14 +29,36 @@ function setThemeSetting(themeId: string): void {
 }
 
 /**
- * Generate MCP configuration JSON for the user's config file
+ * Install/update MCP server to stable location
+ * This runs on every activation to ensure the server is up to date
  */
-function getMcpConfig(extensionPath: string): string {
-  const mcpServerPath = path.join(extensionPath, "dist", "mcp-server.js");
+function installMcpServer(extensionPath: string): void {
+  try {
+    // Ensure ~/.emote directory exists
+    if (!fs.existsSync(EMOTE_DIR)) {
+      fs.mkdirSync(EMOTE_DIR, { recursive: true });
+    }
+
+    // Copy mcp-server.js to stable location
+    const sourcePath = path.join(extensionPath, "dist", "mcp-server.js");
+    if (fs.existsSync(sourcePath)) {
+      fs.copyFileSync(sourcePath, STABLE_MCP_SERVER);
+      console.log(`[Emote] MCP server installed to ${STABLE_MCP_SERVER}`);
+    }
+  } catch (error) {
+    console.error("[Emote] Failed to install MCP server:", error);
+  }
+}
+
+/**
+ * Generate MCP configuration JSON for the user's config file
+ * Uses the stable path that doesn't change with extension updates
+ */
+function getMcpConfig(): string {
   const config = {
     emote: {
       command: "node",
-      args: [mcpServerPath],
+      args: [STABLE_MCP_SERVER],
     },
   };
   return JSON.stringify(config, null, 2);
@@ -41,8 +67,8 @@ function getMcpConfig(extensionPath: string): string {
 /**
  * Copy MCP config to clipboard and show notification
  */
-async function copyMcpConfig(extensionPath: string): Promise<void> {
-  const config = getMcpConfig(extensionPath);
+async function copyMcpConfig(): Promise<void> {
+  const config = getMcpConfig();
   await vscode.env.clipboard.writeText(config);
   
   const configPath = os.platform() === "darwin" 
@@ -76,7 +102,7 @@ async function showSetupNotification(context: vscode.ExtensionContext): Promise<
     );
     
     if (selection === "Copy Config") {
-      await copyMcpConfig(context.extensionPath);
+      await copyMcpConfig();
     }
     
     // Mark as shown (don't show again)
@@ -91,6 +117,9 @@ export function activate(context: vscode.ExtensionContext): void {
   if (!fs.existsSync(IPC_DIR)) {
     fs.mkdirSync(IPC_DIR, { recursive: true });
   }
+
+  // Install/update MCP server to stable location
+  installMcpServer(context.extensionPath);
 
   // Show first-time setup notification
   showSetupNotification(context);
@@ -120,7 +149,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // MCP setup command
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.copyMcpConfig", () => {
-      copyMcpConfig(context.extensionPath);
+      copyMcpConfig();
     })
   );
 
