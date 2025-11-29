@@ -14,6 +14,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -34,6 +37,18 @@ jobs:
         run: |
           bun -e "const pkg = await Bun.file('package.json').json(); pkg.version = '${{ steps.version.outputs.VERSION }}'; await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           cat package.json
+
+      - name: Commit version update
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          # Stash the version change, checkout main, then apply it
+          git stash
+          git checkout main || git checkout master || git checkout -b main
+          git stash pop || true
+          git add packages/ragdoll/package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}" || exit 0
+          git push origin main || git push origin master
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
