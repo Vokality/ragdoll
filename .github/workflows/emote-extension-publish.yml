@@ -31,11 +31,14 @@ jobs:
       - name: Build production artifacts
         run: bun run build:prod
 
+      - name: Package extension
+        run: bun run package
+
       - name: Publish to Open VSX
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
-          packagePath: apps/emote
+          extensionFile: dist/emote.vsix
           registryUrl: https://open-vsx.org
           skipDuplicate: true
 
