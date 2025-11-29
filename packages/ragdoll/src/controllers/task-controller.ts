@@ -22,8 +22,20 @@ export class TaskController {
 
   /**
    * Add a new task
+   * If adding with in_progress status and a task with the same text exists (not done),
+   * it will be activated instead of creating a duplicate
    */
   public addTask(text: string, status: TaskStatus = "todo"): Task {
+    // If adding as in_progress, check for existing task with same text
+    if (status === "in_progress") {
+      const existing = this.findTaskByText(text);
+      if (existing && existing.status !== "done") {
+        // Activate existing task instead of creating duplicate
+        this.setActiveTask(existing.id);
+        return existing;
+      }
+    }
+
     const task: Task = {
       id: generateTaskId(),
       text,
@@ -228,6 +240,14 @@ export class TaskController {
     });
 
     return counts;
+  }
+
+  /**
+   * Find a task by text (case-insensitive, returns first match)
+   */
+  public findTaskByText(text: string): Task | null {
+    const searchText = text.toLowerCase().trim();
+    return this.tasks.find((t) => t.text.toLowerCase().trim() === searchText) ?? null;
   }
 
   /**

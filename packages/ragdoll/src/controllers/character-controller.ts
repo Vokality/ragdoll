@@ -416,6 +416,33 @@ export class CharacterController {
   }
 
   /**
+   * Find a task by text and set it as active
+   */
+  public findAndSetActiveTask(text: string): boolean {
+    const task = this.taskController.findTaskByText(text);
+    if (task && task.status !== "done") {
+      this.taskController.setActiveTask(task.id);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Find or create a task and set it as active
+   * Returns true if task was found and activated, false if created new
+   */
+  public findOrCreateAndStartTask(text: string): boolean {
+    const existing = this.taskController.findTaskByText(text);
+    if (existing && existing.status !== "done") {
+      this.taskController.setActiveTask(existing.id);
+      return true; // Found existing task
+    }
+    // Create new task with in_progress status
+    this.taskController.addTask(text, "in_progress");
+    return false; // Created new task
+  }
+
+  /**
    * Cleanup resources (timers, subscriptions)
    */
   public destroy(): void {

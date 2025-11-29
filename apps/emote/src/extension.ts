@@ -667,9 +667,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.listTasks", () => {
+      // Request tasks from webview first
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "listTasks" });
       }
+      // Return current stored tasks (will be updated by webview)
       return getTasks();
     })
   );
@@ -720,6 +722,11 @@ function startSocketServer(context: vscode.ExtensionContext): void {
           if (result.ok) {
             // Special handling for listTasks - it returns data
             if (result.command.type === "listTasks") {
+              // Request fresh tasks from webview
+              if (RagdollPanel.currentPanel) {
+                RagdollPanel.currentPanel.postMessage({ type: "listTasks" });
+              }
+              // Return current stored tasks (webview will update them)
               const tasks = getTasks();
               logMessage("info", "Processed MCP command", { type: result.command.type });
               socket.write(JSON.stringify({ ok: true, type: result.command.type, tasks }) + "\n");
