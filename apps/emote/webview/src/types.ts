@@ -82,6 +82,9 @@ export type ExtensionMessage =
     }
   | {
       type: "listTasks";
+    }
+  | {
+      type: "getPomodoroState";
     };
 
 /**
@@ -109,6 +112,17 @@ export type WebviewMessage =
   | {
       type: "tasksUpdate";
       tasks: Task[];
+    }
+  | {
+      type: "pomodoroStateUpdate";
+      state: {
+        state: string;
+        remainingTime: number;
+        isBreak: boolean;
+        sessionDuration: number;
+        breakDuration: number;
+        elapsedTime: number;
+      };
     };
 
 /**

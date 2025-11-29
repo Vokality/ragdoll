@@ -76,6 +76,9 @@ export type ExtensionMessage =
       type: "resetPomodoro";
     }
   | {
+      type: "getPomodoroState";
+    }
+  | {
       type: "addTask";
       text: string;
       status?: TaskStatus;
@@ -141,6 +144,17 @@ export type WebviewMessage =
   | {
       type: "tasksUpdate";
       tasks: Task[];
+    }
+  | {
+      type: "pomodoroStateUpdate";
+      state: {
+        state: string;
+        remainingTime: number;
+        isBreak: boolean;
+        sessionDuration: number;
+        breakDuration: number;
+        elapsedTime: number;
+      };
     };
 
 

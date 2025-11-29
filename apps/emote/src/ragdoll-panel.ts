@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { ExtensionMessage } from "./types";
-import { updateTasks } from "./extension";
+import { updateTasks, updatePomodoroState } from "./extension";
 
 export class RagdollPanel {
   public static currentPanel: RagdollPanel | undefined;
@@ -85,6 +85,13 @@ export class RagdollPanel {
         } else if (message.type === "tasksUpdate") {
           // Store tasks for MCP server access
           updateTasks(message.tasks);
+        } else if (message.type === "pomodoroStateUpdate") {
+          // Store pomodoro state for MCP server access
+          updatePomodoroState({
+            state: message.state.state,
+            remainingTime: message.state.remainingTime,
+            isBreak: message.state.isBreak,
+          });
         }
       },
       null,

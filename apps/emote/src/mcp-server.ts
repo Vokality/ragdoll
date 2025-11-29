@@ -56,6 +56,7 @@ type CommandPayload =
   | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
   | { type: "pausePomodoro" }
   | { type: "resetPomodoro" }
+  | { type: "getPomodoroState" }
   | { type: "addTask"; text: string; status?: TaskStatus }
   | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
   | { type: "setActiveTask"; taskId: string }
@@ -377,6 +378,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "getPomodoroState",
+      description: "Get the current pomodoro timer state including remaining time",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
       name: "addTask",
       description: "Add a new task to the task list",
       inputSchema: {
@@ -590,6 +599,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "resetPomodoro":
         await sendCommand({ type: "resetPomodoro" });
         return successResponse("Pomodoro reset");
+
+      case "getPomodoroState": {
+        const response = await sendCommand({ type: "getPomodoroState" });
+        if (response.ok && "state" in response) {
+          const state = (response as { state: unknown }).state;
+          return successResponse(JSON.stringify(state, null, 2));
+        }
+        return successResponse('{"state":"idle","remainingTime":0,"isBreak":false}');
+      }
 
       case "addTask": {
         const text = (args as { text: string }).text;

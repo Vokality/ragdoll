@@ -188,11 +188,28 @@ export function App() {
         case "toggleTasks":
           ctrl.toggleTasks();
           break;
-        case "listTasks":
+        case "listTasks": {
           // Send current tasks back to extension
           const tasks = ctrl.getTasks();
           vscode?.postMessage({ type: "tasksUpdate", tasks });
           break;
+        }
+        case "getPomodoroState": {
+          // Send current pomodoro state back to extension
+          const pomodoroState = ctrl.getPomodoroState();
+          vscode?.postMessage({
+            type: "pomodoroStateUpdate",
+            state: {
+              state: pomodoroState.state,
+              remainingTime: pomodoroState.remainingTime,
+              isBreak: pomodoroState.isBreak,
+              sessionDuration: pomodoroState.sessionDuration,
+              breakDuration: pomodoroState.breakDuration,
+              elapsedTime: pomodoroState.elapsedTime,
+            },
+          });
+          break;
+        }
         default:
           console.warn("Unknown message type:", message);
       }
@@ -216,6 +233,44 @@ export function App() {
     // Send initial tasks
     const initialState = taskController.getState();
     vscode?.postMessage({ type: "tasksUpdate", tasks: initialState.tasks });
+
+    return unsubscribe;
+  }, [controller]);
+
+  // Send pomodoro state updates whenever it changes
+  useEffect(() => {
+    if (!controller) {
+      return;
+    }
+
+    const pomodoroController = controller.getPomodoroController();
+    const unsubscribe = pomodoroController.onUpdate((state) => {
+      vscode?.postMessage({
+        type: "pomodoroStateUpdate",
+        state: {
+          state: state.state,
+          remainingTime: state.remainingTime,
+          isBreak: state.isBreak,
+          sessionDuration: state.sessionDuration,
+          breakDuration: state.breakDuration,
+          elapsedTime: state.elapsedTime,
+        },
+      });
+    });
+
+    // Send initial state
+    const initialState = pomodoroController.getState();
+    vscode?.postMessage({
+      type: "pomodoroStateUpdate",
+      state: {
+        state: initialState.state,
+        remainingTime: initialState.remainingTime,
+        isBreak: initialState.isBreak,
+        sessionDuration: initialState.sessionDuration,
+        breakDuration: initialState.breakDuration,
+        elapsedTime: initialState.elapsedTime,
+      },
+    });
 
     return unsubscribe;
   }, [controller]);

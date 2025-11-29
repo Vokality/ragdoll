@@ -28,6 +28,7 @@ type ActionId = (typeof VALID_ACTIONS)[number];
 let outputChannel: vscode.OutputChannel | null = null;
 const shownErrorKeys = new Set<string>();
 let currentTasks: Task[] = [];
+let currentPomodoroState: { state: string; remainingTime: number; isBreak: boolean } | null = null;
 
 export function updateTasks(tasks: Task[]): void {
   currentTasks = tasks;
@@ -35,6 +36,14 @@ export function updateTasks(tasks: Task[]): void {
 
 export function getTasks(): Task[] {
   return currentTasks;
+}
+
+export function updatePomodoroState(state: { state: string; remainingTime: number; isBreak: boolean }): void {
+  currentPomodoroState = state;
+}
+
+export function getPomodoroState(): { state: string; remainingTime: number; isBreak: boolean } | null {
+  return currentPomodoroState;
 }
 
 // Socket-based IPC paths
@@ -117,6 +126,7 @@ type ValidatedCommand =
   | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
   | { type: "pausePomodoro" }
   | { type: "resetPomodoro" }
+  | { type: "getPomodoroState" }
   | { type: "addTask"; text: string; status?: TaskStatus }
   | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
   | { type: "setActiveTask"; taskId: string }
@@ -282,6 +292,8 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       return { ok: true, command: { type: "pausePomodoro" } };
     case "resetPomodoro":
       return { ok: true, command: { type: "resetPomodoro" } };
+    case "getPomodoroState":
+      return { ok: true, command: { type: "getPomodoroState" } };
     case "addTask": {
       if (typeof raw.text !== "string" || raw.text.trim().length === 0) {
         return { ok: false, reason: "Task requires text" };
@@ -585,6 +597,16 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emote.getPomodoroState", () => {
+      // This will be handled by webview response
+      if (RagdollPanel.currentPanel) {
+        RagdollPanel.currentPanel.postMessage({ type: "getPomodoroState" });
+      }
+      return null;
+    })
+  );
+
   // Task commands
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.addTask", (text: string, status?: TaskStatus) => {
@@ -720,7 +742,7 @@ function startSocketServer(context: vscode.ExtensionContext): void {
           const result = validateMcpCommand(command);
 
           if (result.ok) {
-            // Special handling for listTasks - it returns data
+            // Special handling for commands that return data
             if (result.command.type === "listTasks") {
               // Request fresh tasks from webview
               if (RagdollPanel.currentPanel) {
@@ -730,6 +752,15 @@ function startSocketServer(context: vscode.ExtensionContext): void {
               const tasks = getTasks();
               logMessage("info", "Processed MCP command", { type: result.command.type });
               socket.write(JSON.stringify({ ok: true, type: result.command.type, tasks }) + "\n");
+            } else if (result.command.type === "getPomodoroState") {
+              // Request fresh pomodoro state from webview
+              if (RagdollPanel.currentPanel) {
+                RagdollPanel.currentPanel.postMessage({ type: "getPomodoroState" });
+              }
+              // Return current stored state (webview will update it)
+              const state = getPomodoroState();
+              logMessage("info", "Processed MCP command", { type: result.command.type });
+              socket.write(JSON.stringify({ ok: true, type: result.command.type, state }) + "\n");
             } else {
               handleValidatedCommand(result.command);
               logMessage("info", "Processed MCP command", { type: result.command.type });

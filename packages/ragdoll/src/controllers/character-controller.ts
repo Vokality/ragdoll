@@ -225,6 +225,13 @@ export class CharacterController {
   }
 
   /**
+   * Get current pomodoro state
+   */
+  public getPomodoroState(): PomodoroStateData {
+    return this.pomodoroController.getState();
+  }
+
+  /**
    * Start pomodoro session
    */
   public startPomodoro(
