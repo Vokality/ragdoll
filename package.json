@@ -1,7 +1,8 @@
 {
-  "name": "ragdoll",
+  "name": "ragdoll-monorepo",
   "version": "0.1.0",
-  "description": "A controllable animated character with facial expressions, head poses, and speech bubbles. Control via REST API, WebSocket, or MCP (Model Context Protocol).",
+  "private": true,
+  "description": "Ragdoll monorepo - animated character framework and apps",
   "type": "module",
   "license": "MIT",
   "author": "Vokality",
@@ -9,63 +10,28 @@
     "type": "git",
     "url": "git+https://github.com/vokality/ragdoll.git"
   },
-  "bugs": {
-    "url": "https://github.com/vokality/ragdoll/issues"
-  },
-  "homepage": "https://github.com/vokality/ragdoll#readme",
-  "keywords": [
-    "ragdoll",
-    "character",
-    "animation",
-    "facial-expressions",
-    "mcp",
-    "model-context-protocol",
-    "react",
-    "svg",
-    "avatar",
-    "ai-assistant"
+  "workspaces": [
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "dev": "vite",
-    "dev:server": "bun run server/index.ts",
-    "build": "tsc -b && vite build",
-    "type-check": "tsc --noEmit",
+    "build": "bun run build:ragdoll && bun run build:demo && bun run build:emote",
+    "build:ragdoll": "cd packages/ragdoll && bun run build",
+    "build:demo": "cd apps/demo && bun run build",
+    "build:emote": "cd apps/emote && bun run build",
+    "dev": "cd apps/demo && bun run dev",
+    "dev:emote": "cd apps/emote && bun run dev",
     "lint": "eslint .",
     "format": "bunx prettier --write .",
-    "preview": "vite preview",
-    "server": "bun run server/index.ts",
-    "mcp-server": "bun run src/packages/mcp/ragdoll-mcp-server.ts",
-    "docker:dev": "concurrently -n API,FRONTEND -c cyan,yellow \"bun run server\" \"bun run dev -- --host 0.0.0.0\""
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.23.0",
-    "@types/matter-js": "^0.20.2",
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "framer-motion": "^12.23.24",
-    "matter-js": "^0.20.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "clean": "rm -rf packages/*/dist apps/*/dist"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.5",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "concurrently": "^9.1.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "tsx": "^4.20.6",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "typescript-eslint": "^8.48.0"
   }
 }
