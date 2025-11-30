@@ -35,7 +35,7 @@ export class RagdollPanel {
         localResourceRoots: [
           vscode.Uri.joinPath(extensionUri, "dist", "webview"),
         ],
-      }
+      },
     );
 
     // Set the tab icon
@@ -95,7 +95,7 @@ export class RagdollPanel {
         }
       },
       null,
-      this.disposables
+      this.disposables,
     );
   }
 
@@ -130,12 +130,12 @@ export class RagdollPanel {
     const webviewPath = vscode.Uri.joinPath(
       this.extensionUri,
       "dist",
-      "webview"
+      "webview",
     );
 
     // Get URIs for the webview assets
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(webviewPath, "assets", "index.js")
+      vscode.Uri.joinPath(webviewPath, "assets", "index.js"),
     );
 
     // Use a nonce for script security
@@ -183,4 +183,3 @@ function getNonce(): string {
   }
   return text;
 }
-

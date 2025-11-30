@@ -13,140 +13,119 @@ const toneLabels: Record<NonNullable<SpeechBubbleProps["tone"]>, string> = {
   shout: "ALERT",
 };
 
-export function SpeechBubble({ text, tone = "default", theme }: SpeechBubbleProps) {
+export function SpeechBubble({
+  text,
+  tone = "default",
+  theme,
+}: SpeechBubbleProps) {
   if (!text) return null;
 
-  const accent =
-    tone === "shout"
-      ? theme?.colors.lips.lower ?? "#e07882"
-      : theme?.colors.eyes.iris ?? "#5a9bc4";
+  // Theme-aware colors
+  const textColor = theme?.colors.hair.light ?? "#f1f5f9";
   const muted = theme?.colors.skin.dark ?? "#94a3b8";
-  const surface = theme?.colors.shadow.transparent ?? "rgba(15, 23, 42, 0.4)";
-  const border = `${accent}55`;
-  const glow = `${accent}30`;
+  const accent = theme?.colors.eyes.iris ?? "#5a9bc4";
+  const alertColor = theme?.colors.lips.lower ?? "#e07882";
+  const border = theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)";
+  const background = theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.15)";
 
-  const toneStyles: Record<NonNullable<SpeechBubbleProps["tone"]>, CSSProperties> = {
-    default: {
-      color: accent,
-      borderColor: border,
-      boxShadow: `0 12px 30px rgba(0,0,0,0.35), 0 0 24px ${glow}`,
-      background: `linear-gradient(140deg, ${surface} 0%, ${accent}10 100%)`,
-    },
-    whisper: {
-      color: muted,
-      borderColor: `${muted}55`,
-      boxShadow: `0 12px 30px rgba(0,0,0,0.35), 0 0 16px ${muted}30`,
-      background: `linear-gradient(140deg, ${surface} 0%, ${muted}10 100%)`,
-      opacity: 0.9,
-    },
-    shout: {
-      color: accent,
-      borderColor: border,
-      boxShadow: `0 12px 30px rgba(0,0,0,0.45), 0 0 28px ${glow}`,
-      background: `linear-gradient(140deg, ${surface} 0%, ${accent}12 100%)`,
-      animation: "pulse-glow-amber 1.2s ease-in-out infinite",
-    },
-  };
+  const modeColor =
+    tone === "shout" ? alertColor : tone === "whisper" ? muted : accent;
+  const isShout = tone === "shout";
+  const isWhisper = tone === "whisper";
 
   return (
-    <div
-      style={{
-        ...styles.container,
-        ...toneStyles[tone],
-      }}
-    >
-      <div style={styles.accentBar} />
-      <div style={styles.headerRow}>
-        <div
-          style={{
-            ...styles.badge,
-            color: toneStyles[tone].color,
-            borderColor: toneStyles[tone].borderColor,
-            backgroundColor: `${toneStyles[tone].color}0f`,
-          }}
-        >
-          <span style={styles.badgeDot} />
-          {toneLabels[tone]}
+    <>
+      <style>{`
+        @keyframes slideIn {
+          from { opacity: 0; transform: translate(-50%, -10px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 20px 0 ${modeColor}15; }
+          50% { box-shadow: 0 0 28px 2px ${modeColor}25; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
+      <div
+        style={{
+          ...styles.container,
+          borderColor: border,
+          backgroundColor: background,
+          opacity: isWhisper ? 0.85 : 1,
+          animation: isShout
+            ? "slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), glow 2s ease-in-out infinite"
+            : "slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
+      >
+        <div style={styles.header}>
+          <div
+            style={{
+              ...styles.badge,
+              color: modeColor,
+              borderColor: `${modeColor}40`,
+              backgroundColor: `${modeColor}0f`,
+            }}
+          >
+            <span style={{ ...styles.badgeDot, backgroundColor: modeColor }} />
+            {toneLabels[tone]}
+          </div>
         </div>
-        <span style={{ color: muted, letterSpacing: "0.6px" }}>LIVE LINK</span>
-      </div>
-      <div style={styles.contentRow}>
-        <span style={{ ...styles.chevron, color: toneStyles[tone].color }}>
-          {">"}
-        </span>
-        <span style={{ ...styles.content, color: toneStyles[tone].color }}>
+        <div style={{ ...styles.content, color: textColor }}>
           {text}
           <span style={styles.cursor}>_</span>
-        </span>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-const styles = {
+const styles: Record<string, CSSProperties> = {
   container: {
-    position: "fixed" as const,
+    position: "fixed",
     top: "32px",
     left: "50%",
     transform: "translateX(-50%)",
     maxWidth: "540px",
-    minWidth: "260px",
-    padding: "14px 18px 16px",
-    fontFamily: "var(--retro-font, 'VT323', monospace)",
-    fontSize: "20px",
-    letterSpacing: "0.4px",
+    minWidth: "280px",
+    padding: "16px 18px",
     border: "1px solid",
-    borderRadius: "12px",
+    borderRadius: "14px",
     zIndex: 999,
-    pointerEvents: "none" as const,
-    animation: "fade-in 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-    backdropFilter: "blur(10px)",
+    pointerEvents: "none",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
   },
-  accentBar: {
-    position: "absolute" as const,
-    inset: "0 0 auto 0",
-    height: "4px",
-    borderTopLeftRadius: "12px",
-    borderTopRightRadius: "12px",
-    background:
-      "linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 100%)",
-    opacity: 0.8,
-  },
-  headerRow: {
+  header: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "8px",
+    justifyContent: "flex-start",
+    marginBottom: "10px",
   },
   badge: {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    padding: "4px 8px",
-    fontSize: "12px",
-    letterSpacing: "1px",
+    padding: "4px 10px",
+    fontSize: "10px",
+    fontWeight: 700,
+    letterSpacing: "0.8px",
     borderRadius: "999px",
     border: "1px solid",
-    textTransform: "uppercase" as const,
+    textTransform: "uppercase",
   },
   badgeDot: {
     width: "6px",
     height: "6px",
     borderRadius: "50%",
-    backgroundColor: "currentColor",
-  },
-  contentRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-  },
-  chevron: {
-    fontSize: "22px",
-    transform: "translateY(-2px)",
   },
   content: {
-    lineHeight: 1.35,
-    display: "inline-flex",
+    fontSize: "15px",
+    fontWeight: 600,
+    lineHeight: 1.5,
+    display: "flex",
     alignItems: "center",
     gap: "4px",
   },
@@ -154,4 +133,4 @@ const styles = {
     animation: "blink 1s infinite",
     marginLeft: "2px",
   },
-} satisfies Record<string, CSSProperties>;
+};

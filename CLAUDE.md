@@ -37,19 +37,23 @@ ragdoll/
 ## Development Commands
 
 ### Root
+
 - `bun install` - Install all dependencies
 - `bun run build` - Build all packages and apps
 
 ### Package: @vokality/ragdoll
+
 - `cd packages/ragdoll && bun run build` - Build the core package
 - `cd packages/ragdoll && bun run dev` - Watch mode
 
 ### App: Demo
+
 - `cd apps/demo && bun run dev` - Start dev server
 - `cd apps/demo && bun run build` - Build for production
 - `cd apps/demo && bun run server` - Start API server
 
 ### App: Emote (VS Code Extension)
+
 - `cd apps/emote && bun run build` - Build extension
 - `cd apps/emote && bunx @vscode/vsce package` - Package .vsix
 

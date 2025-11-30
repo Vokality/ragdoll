@@ -15,7 +15,7 @@ export type FacialMood =
 /**
  * Facial action types
  */
-export type FacialAction = "none" | "wink" | "talk";
+export type FacialAction = "none" | "wink" | "talk" | "shake";
 
 /**
  * Speech bubble tone
@@ -156,10 +156,3 @@ export type WebviewMessage =
         elapsedTime: number;
       };
     };
-
-
-
-
-
-
-

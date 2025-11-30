@@ -1,9 +1,9 @@
 /**
  * Emote MCP server - Give AI the ability to express itself
- * 
+ *
  * This server communicates with the VS Code extension via Unix socket (or named pipe on Windows).
  * Commands are sent directly to the extension for immediate processing.
- * 
+ *
  * Usage: Add to your MCP config:
  * {
  *   "emote": {
@@ -25,15 +25,26 @@ import * as os from "os";
 
 // Socket-based IPC - must match the extension
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
-const SOCKET_PATH = os.platform() === "win32"
-  ? "\\\\.\\pipe\\ragdoll-emote"
-  : path.join(IPC_DIR, "emote.sock");
+const SOCKET_PATH =
+  os.platform() === "win32"
+    ? "\\\\.\\pipe\\ragdoll-emote"
+    : path.join(IPC_DIR, "emote.sock");
 
 const SOCKET_TIMEOUT_MS = 3000;
 
 const LOG_PREFIX = "[Emote MCP]";
-const VALID_MOODS = ["neutral", "smile", "frown", "laugh", "angry", "sad", "surprise", "confusion", "thinking"] as const;
-const VALID_ACTIONS = ["wink", "talk"] as const;
+const VALID_MOODS = [
+  "neutral",
+  "smile",
+  "frown",
+  "laugh",
+  "angry",
+  "sad",
+  "surprise",
+  "confusion",
+  "thinking",
+] as const;
+const VALID_ACTIONS = ["wink", "talk", "shake"] as const;
 const VALID_TONES = ["default", "whisper", "shout"] as const;
 const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
 
@@ -44,21 +55,40 @@ type ThemeId = (typeof VALID_THEMES)[number];
 type PomodoroDuration = 15 | 30 | 60 | 120;
 type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
 
-const VALID_TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
+const VALID_TASK_STATUSES: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+];
 
 type CommandPayload =
   | { type: "show" | "hide" | "clearAction" }
   | { type: "setMood"; mood: MoodId; duration?: number }
   | { type: "triggerAction"; action: ActionId; duration?: number }
-  | { type: "setHeadPose"; yawDegrees?: number; pitchDegrees?: number; duration?: number }
+  | {
+      type: "setHeadPose";
+      yawDegrees?: number;
+      pitchDegrees?: number;
+      duration?: number;
+    }
   | { type: "setSpeechBubble"; text: string | null; tone?: ToneId }
   | { type: "setTheme"; themeId: ThemeId }
-  | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
+  | {
+      type: "startPomodoro";
+      sessionDuration?: PomodoroDuration;
+      breakDuration?: PomodoroDuration;
+    }
   | { type: "pausePomodoro" }
   | { type: "resetPomodoro" }
   | { type: "getPomodoroState" }
   | { type: "addTask"; text: string; status?: TaskStatus }
-  | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
+  | {
+      type: "updateTaskStatus";
+      taskId: string;
+      status: TaskStatus;
+      blockedReason?: string;
+    }
   | { type: "setActiveTask"; taskId: string }
   | { type: "removeTask"; taskId: string }
   | { type: "completeActiveTask" }
@@ -69,12 +99,21 @@ type CommandPayload =
   | { type: "toggleTasks" }
   | { type: "listTasks" };
 
-function log(level: "info" | "error" | "warn", message: string, details?: Record<string, unknown>): void {
+function log(
+  level: "info" | "error" | "warn",
+  message: string,
+  details?: Record<string, unknown>,
+): void {
   const suffix = details ? ` ${JSON.stringify(details)}` : "";
   console.error(`${LOG_PREFIX} [${level.toUpperCase()}] ${message}${suffix}`);
 }
 
-type SocketResponse = { ok: boolean; type?: string; error?: string; tasks?: unknown[] };
+type SocketResponse = {
+  ok: boolean;
+  type?: string;
+  error?: string;
+  tasks?: unknown[];
+};
 
 function sendCommand(command: CommandPayload): Promise<SocketResponse> {
   return new Promise((resolve, reject) => {
@@ -91,7 +130,9 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
       if (!resolved) {
         resolved = true;
         cleanup();
-        reject(new Error("Connection timeout - is the Emote extension running?"));
+        reject(
+          new Error("Connection timeout - is the Emote extension running?"),
+        );
       }
     }, SOCKET_TIMEOUT_MS);
 
@@ -126,7 +167,11 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
         clearTimeout(timeout);
         cleanup();
         if (error.code === "ECONNREFUSED" || error.code === "ENOENT") {
-          reject(new Error("Emote extension not running - open VS Code with the Emote extension"));
+          reject(
+            new Error(
+              "Emote extension not running - open VS Code with the Emote extension",
+            ),
+          );
         } else {
           reject(error);
         }
@@ -186,9 +231,10 @@ async function getHealthReport(): Promise<{
     socket.on("error", (error: NodeJS.ErrnoException) => {
       clearTimeout(timeout);
       socket.destroy();
-      const message = error.code === "ECONNREFUSED" || error.code === "ENOENT"
-        ? "Extension not running"
-        : error.message;
+      const message =
+        error.code === "ECONNREFUSED" || error.code === "ENOENT"
+          ? "Extension not running"
+          : error.message;
       resolve({
         status: "error",
         socketPath: SOCKET_PATH,
@@ -210,7 +256,7 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -236,7 +282,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "triggerAction",
-      description: "Trigger a facial action like wink or talk",
+      description:
+        "Trigger a facial action like wink, talk, or shake (shake head left-right)",
       inputSchema: {
         type: "object",
         properties: {
@@ -328,7 +375,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           themeId: {
             type: "string",
             enum: [...VALID_THEMES],
-            description: "Theme identifier: default (warm human), robot (metallic), alien (green), monochrome (grayscale)",
+            description:
+              "Theme identifier: default (warm human), robot (metallic), alien (green), monochrome (grayscale)",
           },
         },
         required: ["themeId"],
@@ -379,7 +427,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "getPomodoroState",
-      description: "Get the current pomodoro timer state including remaining time",
+      description:
+        "Get the current pomodoro timer state including remaining time",
       inputSchema: {
         type: "object",
         properties: {},
@@ -525,7 +574,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           mood: (args as { mood: MoodId }).mood,
           duration: (args as { duration?: number }).duration,
         });
-        return successResponse(`Mood set to ${(args as { mood: MoodId }).mood}`);
+        return successResponse(
+          `Mood set to ${(args as { mood: MoodId }).mood}`,
+        );
 
       case "triggerAction":
         await sendCommand({
@@ -533,7 +584,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           action: (args as { action: ActionId }).action,
           duration: (args as { duration?: number }).duration,
         });
-        return successResponse(`Action triggered: ${(args as { action: ActionId }).action}`);
+        return successResponse(
+          `Action triggered: ${(args as { action: ActionId }).action}`,
+        );
 
       case "clearAction":
         await sendCommand({ type: "clearAction" });
@@ -556,7 +609,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         {
           const text = (args as { text?: string }).text;
-          return successResponse(text ? `Speech bubble: "${text}"` : "Speech bubble cleared");
+          return successResponse(
+            text ? `Speech bubble: "${text}"` : "Speech bubble cleared",
+          );
         }
 
       case "show":
@@ -572,7 +627,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           type: "setTheme",
           themeId: (args as { themeId: ThemeId }).themeId,
         });
-        return successResponse(`Theme changed to: ${(args as { themeId: ThemeId }).themeId}`);
+        return successResponse(
+          `Theme changed to: ${(args as { themeId: ThemeId }).themeId}`,
+        );
 
       case "health": {
         const report = await getHealthReport();
@@ -580,16 +637,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "startPomodoro": {
-        const sessionDuration = (args as { sessionDuration?: number }).sessionDuration as PomodoroDuration | undefined;
-        const breakDuration = (args as { breakDuration?: number }).breakDuration as PomodoroDuration | undefined;
+        const sessionDuration = (args as { sessionDuration?: number })
+          .sessionDuration as PomodoroDuration | undefined;
+        const breakDuration = (args as { breakDuration?: number })
+          .breakDuration as PomodoroDuration | undefined;
         await sendCommand({
           type: "startPomodoro",
           sessionDuration,
           breakDuration,
         });
-        const sessionLabel = sessionDuration ? `${sessionDuration} min` : "default";
+        const sessionLabel = sessionDuration
+          ? `${sessionDuration} min`
+          : "default";
         const breakLabel = breakDuration ? `${breakDuration} min` : "default";
-        return successResponse(`Pomodoro started: ${sessionLabel} session, ${breakLabel} break`);
+        return successResponse(
+          `Pomodoro started: ${sessionLabel} session, ${breakLabel} break`,
+        );
       }
 
       case "pausePomodoro":
@@ -606,7 +669,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const state = (response as { state: unknown }).state;
           return successResponse(JSON.stringify(state, null, 2));
         }
-        return successResponse('{"state":"idle","remainingTime":0,"isBreak":false}');
+        return successResponse(
+          '{"state":"idle","remainingTime":0,"isBreak":false}',
+        );
       }
 
       case "addTask": {
@@ -619,8 +684,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "updateTaskStatus": {
         const taskId = (args as { taskId: string }).taskId;
         const status = (args as { status: TaskStatus }).status;
-        const blockedReason = (args as { blockedReason?: string }).blockedReason;
-        await sendCommand({ type: "updateTaskStatus", taskId, status, blockedReason });
+        const blockedReason = (args as { blockedReason?: string })
+          .blockedReason;
+        await sendCommand({
+          type: "updateTaskStatus",
+          taskId,
+          status,
+          blockedReason,
+        });
         return successResponse(`Task ${taskId} status updated to ${status}`);
       }
 
@@ -663,7 +734,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "listTasks": {
         const response = await sendCommand({ type: "listTasks" });
         if (response.ok && "tasks" in response) {
-          return successResponse(JSON.stringify((response as { tasks: unknown[] }).tasks, null, 2));
+          return successResponse(
+            JSON.stringify((response as { tasks: unknown[] }).tasks, null, 2),
+          );
         }
         return successResponse("[]");
       }
@@ -679,8 +752,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 const transport = new StdioServerTransport();
-server.connect(transport).then(() => {
-  log("info", "Emote MCP Server running", { socketPath: SOCKET_PATH });
-}).catch((error) => {
-  log("error", "Failed to start Emote MCP Server", { error: String(error) });
-});
+server
+  .connect(transport)
+  .then(() => {
+    log("info", "Emote MCP Server running", { socketPath: SOCKET_PATH });
+  })
+  .catch((error) => {
+    log("error", "Failed to start Emote MCP Server", { error: String(error) });
+  });

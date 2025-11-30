@@ -7,7 +7,12 @@ import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
 import { PomodoroController } from "./pomodoro-controller";
 import { TaskController } from "./task-controller";
-import type { PomodoroStateData, PomodoroDuration, TaskStatus, Task } from "../types";
+import type {
+  PomodoroStateData,
+  PomodoroDuration,
+  TaskStatus,
+  Task,
+} from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
 import type {
@@ -35,6 +40,7 @@ export class CharacterController {
   private lastPomodoroState: PomodoroStateData | null = null;
   private lastReminderTime: number | null = null;
   private pomodoroUnsubscribe?: () => void;
+  private shakeState: { elapsed: number; duration: number } | null = null;
 
   constructor(themeId?: string) {
     this.skeleton = new RagdollSkeleton();
@@ -45,7 +51,7 @@ export class CharacterController {
     this.idleController = new IdleController();
     this.pomodoroController = new PomodoroController();
     this.taskController = new TaskController();
-    
+
     // Set up pomodoro reminders
     this.pomodoroUnsubscribe = this.pomodoroController.onUpdate((state) => {
       this.handlePomodoroUpdate(state);
@@ -80,11 +86,22 @@ export class CharacterController {
     action: Exclude<FacialAction, "none">,
     duration?: number,
   ): void {
-    this.expressionController.triggerAction(action, duration);
+    if (action === "shake") {
+      // Shake affects head pose, not expression
+      const shakeDuration = duration ?? 0.6;
+      this.shakeState = { elapsed: 0, duration: shakeDuration };
+    } else {
+      this.expressionController.triggerAction(action, duration);
+    }
   }
 
   public clearAction(): void {
     this.expressionController.clearAction();
+    this.shakeState = null;
+    // Return head to center when clearing shake
+    if (this.headPoseController.getPose().yaw !== 0) {
+      this.headPoseController.lookForward(0.2);
+    }
   }
 
   public setHeadPose(pose: Partial<HeadPose>, duration?: number): void {
@@ -121,7 +138,10 @@ export class CharacterController {
    * Uses ~3.5 words/second (200-250 words/minute) with a minimum duration.
    */
   private calculateTalkDuration(text: string): number {
-    const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
+    const words = text
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word.length > 0);
     const wordCount = words.length;
     // Average reading speed: ~3.5 words/second = ~0.29 seconds/word
     // Add 0.2s buffer for natural feel
@@ -142,6 +162,32 @@ export class CharacterController {
   }
 
   public update(deltaTime: number): void {
+    // Update shake animation
+    if (this.shakeState) {
+      this.shakeState.elapsed += deltaTime;
+
+      if (this.shakeState.elapsed >= this.shakeState.duration) {
+        // Shake complete, return to center
+        this.shakeState = null;
+        this.headPoseController.lookForward(0.2);
+      } else {
+        // Oscillate head left-right during shake
+        const progress = this.shakeState.elapsed / this.shakeState.duration;
+        // Use a sine wave for smooth oscillation
+        const frequency = 3; // Number of shakes per duration
+        const amplitude = 0.6; // How far to shake (60% of max yaw in radians)
+        const MAX_YAW_RAD = (35 * Math.PI) / 180;
+        const yaw =
+          Math.sin(progress * frequency * Math.PI * 2) *
+          amplitude *
+          MAX_YAW_RAD;
+        // Apply easing to slow down at the end
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const finalYaw = yaw * easeOut;
+        this.headPoseController.setTargetPose({ yaw: finalYaw }, 0.25); // Slower transition (increased from 0.05)
+      }
+    }
+
     this.expressionController.update(deltaTime);
     this.headPoseController.update(deltaTime);
     this.idleController.update(deltaTime);
@@ -162,11 +208,17 @@ export class CharacterController {
       headPose: this.headPoseController.getPose(),
       joints: joints as Record<JointName, { x: number; y: number; z: number }>,
       mood: this.expressionController.getCurrentMood(),
-      action: this.expressionController.getActiveAction(),
+      action: this.shakeState
+        ? "shake"
+        : this.expressionController.getActiveAction(),
       bubble: this.getSpeechBubble(),
       animation: {
-        action: this.expressionController.getActiveAction(),
-        actionProgress: this.expressionController.getActionProgress(),
+        action: this.shakeState
+          ? "shake"
+          : this.expressionController.getActiveAction(),
+        actionProgress: this.shakeState
+          ? Math.min(1, this.shakeState.elapsed / this.shakeState.duration)
+          : this.expressionController.getActionProgress(),
         isTalking: this.expressionController.isTalking(),
       },
     };
@@ -347,7 +399,11 @@ export class CharacterController {
   /**
    * Update a task's status
    */
-  public updateTaskStatus(taskId: string, status: TaskStatus, blockedReason?: string): void {
+  public updateTaskStatus(
+    taskId: string,
+    status: TaskStatus,
+    blockedReason?: string,
+  ): void {
     this.taskController.updateTaskStatus(taskId, status, blockedReason);
   }
 

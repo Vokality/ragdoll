@@ -39,19 +39,20 @@ export function PomodoroTimer({ controller, theme }: PomodoroTimerProps) {
     return null;
   }
 
-  const totalDuration = (state.isBreak ? state.breakDuration : state.sessionDuration) * 60;
+  const totalDuration =
+    (state.isBreak ? state.breakDuration : state.sessionDuration) * 60;
   const progress = totalDuration > 0 ? state.elapsedTime / totalDuration : 0;
   const progressPercent = Math.min(100, progress * 100);
 
   const modeLabel = state.isBreak ? "BREAK" : "FOCUS";
-  
+
   // Use theme colors: iris for focus, lips for break (complementary accent)
   const focusColor = theme?.colors.eyes.iris ?? "#f59e0b";
   const breakColor = theme?.colors.lips.lower ?? "#4ade80";
   const textColor = theme?.colors.hair.light ?? "#f1f5f9";
   const mutedColor = theme?.colors.skin.dark ?? "#94a3b8";
   const trackColor = theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)";
-  
+
   const modeColor = state.isBreak ? breakColor : focusColor;
 
   return (
@@ -129,4 +130,3 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: "-4px",
   },
 };
-

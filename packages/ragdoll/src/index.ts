@@ -16,9 +16,24 @@ export { RagdollGeometry } from "./models/ragdoll-geometry";
 export { RagdollSkeleton } from "./models/ragdoll-skeleton";
 
 // Themes
-export { getTheme, getDefaultTheme, getAllThemes, registerTheme } from "./themes";
-export { defaultTheme, robotTheme, alienTheme, monochromeTheme } from "./themes/default-themes";
-export type { RagdollTheme, ThemeColors, GradientDef, GradientStop } from "./themes/types";
+export {
+  getTheme,
+  getDefaultTheme,
+  getAllThemes,
+  registerTheme,
+} from "./themes";
+export {
+  defaultTheme,
+  robotTheme,
+  alienTheme,
+  monochromeTheme,
+} from "./themes/default-themes";
+export type {
+  RagdollTheme,
+  ThemeColors,
+  GradientDef,
+  GradientStop,
+} from "./themes/types";
 
 // Types
 export type {

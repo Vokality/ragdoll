@@ -16,7 +16,7 @@ interface RagdollCharacterProps {
  */
 function renderGradients(theme: RagdollTheme): React.JSX.Element {
   const prefix = theme.id;
-  
+
   const renderGradient = (
     id: string,
     gradient: GradientDef,
@@ -317,252 +317,259 @@ export function RagdollCharacter({
       {renderGradients(currentTheme)}
 
       <g transform={rootTransform}>
-      {/* Left Ear (behind face) - visibility changes with yaw */}
-      <g
-        transform={`translate(${ht.yaw * 5}, 0) scale(${ht.leftEarScale}, 1)`}
-        opacity={ht.leftEarOpacity}
-      >
-        <path d={leftEarPath} fill={g("skinGradient")} />
-      </g>
+        {/* Left Ear (behind face) - visibility changes with yaw */}
+        <g
+          transform={`translate(${ht.yaw * 5}, 0) scale(${ht.leftEarScale}, 1)`}
+          opacity={ht.leftEarOpacity}
+        >
+          <path d={leftEarPath} fill={g("skinGradient")} />
+        </g>
 
-      {/* Right Ear (behind face) */}
-      <g
-        transform={`translate(${-ht.yaw * 5}, 0) scale(${ht.rightEarScale}, 1)`}
-        opacity={ht.rightEarOpacity}
-      >
-        <path d={rightEarPath} fill={g("skinGradient")} />
-      </g>
+        {/* Right Ear (behind face) */}
+        <g
+          transform={`translate(${-ht.yaw * 5}, 0) scale(${ht.rightEarScale}, 1)`}
+          opacity={ht.rightEarOpacity}
+        >
+          <path d={rightEarPath} fill={g("skinGradient")} />
+        </g>
 
-      {/* Face shape - stays relatively stationary */}
-      <path
-        d={facePath}
-        fill={g("skinRadial")}
-        stroke={currentTheme.colors.stroke}
-        strokeWidth={0.5}
-      />
-
-      {/* Dynamic face shadow based on rotation */}
-      {ht.shadowIntensity > 0.02 && (
-        <ellipse
-          cx={
-            ht.shadowSide === "left" ? -dims.headWidth / 3 : dims.headWidth / 3
-          }
-          cy={0}
-          rx={30}
-          ry={dims.headHeight / 2 - 15}
-          fill={
-            ht.shadowSide === "left"
-              ? g("faceShadowLeft")
-              : g("faceShadowRight")
-          }
-          opacity={ht.shadowIntensity}
-        />
-      )}
-
-      {/* Cheek blush - shifts with face */}
-      <g transform={`translate(${ht.featureShiftX}, ${ht.featureShiftY})`}>
-        <ellipse
-          cx={-dims.headWidth / 4}
-          cy={dims.eyeY + 25}
-          rx={18}
-          ry={12}
-          fill={g("blushGradient")}
-          opacity={0.5 + expression.cheekPuff * 0.5}
-        />
-        <ellipse
-          cx={dims.headWidth / 4}
-          cy={dims.eyeY + 25}
-          rx={18}
-          ry={12}
-          fill={g("blushGradient")}
-          opacity={0.5 + expression.cheekPuff * 0.5}
-        />
-      </g>
-
-      {/* Left eye - shifts based on head rotation */}
-      <g transform={`translate(${ht.leftEyeShiftX}, ${ht.eyeShiftY})`}>
-        {/* Sclera (white) */}
-        <path d={leftEyePaths.sclera} fill={currentTheme.colors.eyes.white} />
-
-        {/* Iris */}
-        <circle
-          cx={leftIris.cx}
-          cy={leftIris.cy}
-          r={leftIris.irisR}
-          fill={g("irisGradient")}
-        />
-
-        {/* Pupil */}
-        <circle
-          cx={leftIris.cx}
-          cy={leftIris.cy}
-          r={leftIris.pupilR}
-          fill={currentTheme.colors.eyes.pupil}
-        />
-
-        {/* Eye highlight */}
-        <circle
-          cx={leftIris.cx - 2}
-          cy={leftIris.cy - 2}
-          r={leftIris.pupilR * 0.6}
-          fill="rgba(255,255,255,0.8)"
-        />
-        <circle
-          cx={leftIris.cx + 3}
-          cy={leftIris.cy + 1}
-          r={leftIris.pupilR * 0.3}
-          fill="rgba(255,255,255,0.4)"
-        />
-
-        {/* Upper eyelid */}
-        <path d={leftEyePaths.upperLid} fill={g("lidGradient")} />
-
-        {/* Lower eyelid */}
-        <path d={leftEyePaths.lowerLid} fill={g("lidGradient")} />
-
-        {/* Eyelid crease */}
+        {/* Face shape - stays relatively stationary */}
         <path
-          d={`M ${dims.eyeSpacing / 2 - dims.eyeWidth / 2 - 2} ${dims.eyeY - dims.eyeHeight / 2 - 6}
+          d={facePath}
+          fill={g("skinRadial")}
+          stroke={currentTheme.colors.stroke}
+          strokeWidth={0.5}
+        />
+
+        {/* Dynamic face shadow based on rotation */}
+        {ht.shadowIntensity > 0.02 && (
+          <ellipse
+            cx={
+              ht.shadowSide === "left"
+                ? -dims.headWidth / 3
+                : dims.headWidth / 3
+            }
+            cy={0}
+            rx={30}
+            ry={dims.headHeight / 2 - 15}
+            fill={
+              ht.shadowSide === "left"
+                ? g("faceShadowLeft")
+                : g("faceShadowRight")
+            }
+            opacity={ht.shadowIntensity}
+          />
+        )}
+
+        {/* Cheek blush - shifts with face */}
+        <g transform={`translate(${ht.featureShiftX}, ${ht.featureShiftY})`}>
+          <ellipse
+            cx={-dims.headWidth / 4}
+            cy={dims.eyeY + 25}
+            rx={18}
+            ry={12}
+            fill={g("blushGradient")}
+            opacity={0.5 + expression.cheekPuff * 0.5}
+          />
+          <ellipse
+            cx={dims.headWidth / 4}
+            cy={dims.eyeY + 25}
+            rx={18}
+            ry={12}
+            fill={g("blushGradient")}
+            opacity={0.5 + expression.cheekPuff * 0.5}
+          />
+        </g>
+
+        {/* Left eye - shifts based on head rotation */}
+        <g transform={`translate(${ht.leftEyeShiftX}, ${ht.eyeShiftY})`}>
+          {/* Sclera (white) */}
+          <path d={leftEyePaths.sclera} fill={currentTheme.colors.eyes.white} />
+
+          {/* Iris */}
+          <circle
+            cx={leftIris.cx}
+            cy={leftIris.cy}
+            r={leftIris.irisR}
+            fill={g("irisGradient")}
+          />
+
+          {/* Pupil */}
+          <circle
+            cx={leftIris.cx}
+            cy={leftIris.cy}
+            r={leftIris.pupilR}
+            fill={currentTheme.colors.eyes.pupil}
+          />
+
+          {/* Eye highlight */}
+          <circle
+            cx={leftIris.cx - 2}
+            cy={leftIris.cy - 2}
+            r={leftIris.pupilR * 0.6}
+            fill="rgba(255,255,255,0.8)"
+          />
+          <circle
+            cx={leftIris.cx + 3}
+            cy={leftIris.cy + 1}
+            r={leftIris.pupilR * 0.3}
+            fill="rgba(255,255,255,0.4)"
+          />
+
+          {/* Upper eyelid */}
+          <path d={leftEyePaths.upperLid} fill={g("lidGradient")} />
+
+          {/* Lower eyelid */}
+          <path d={leftEyePaths.lowerLid} fill={g("lidGradient")} />
+
+          {/* Eyelid crease */}
+          <path
+            d={`M ${dims.eyeSpacing / 2 - dims.eyeWidth / 2 - 2} ${dims.eyeY - dims.eyeHeight / 2 - 6}
               Q ${dims.eyeSpacing / 2} ${dims.eyeY - dims.eyeHeight / 2 - 8}
               ${dims.eyeSpacing / 2 + dims.eyeWidth / 2 + 2} ${dims.eyeY - dims.eyeHeight / 2 - 5}`}
-          fill="none"
-          stroke={currentTheme.colors.shadow.color}
-          strokeWidth={1}
-        />
-      </g>
+            fill="none"
+            stroke={currentTheme.colors.shadow.color}
+            strokeWidth={1}
+          />
+        </g>
 
-      {/* Right eye */}
-      <g transform={`translate(${ht.rightEyeShiftX}, ${ht.eyeShiftY})`}>
-        {/* Sclera */}
-        <path d={rightEyePaths.sclera} fill={currentTheme.colors.eyes.white} />
+        {/* Right eye */}
+        <g transform={`translate(${ht.rightEyeShiftX}, ${ht.eyeShiftY})`}>
+          {/* Sclera */}
+          <path
+            d={rightEyePaths.sclera}
+            fill={currentTheme.colors.eyes.white}
+          />
 
-        {/* Iris */}
-        <circle
-          cx={rightIris.cx}
-          cy={rightIris.cy}
-          r={rightIris.irisR}
-          fill={g("irisGradient")}
-        />
+          {/* Iris */}
+          <circle
+            cx={rightIris.cx}
+            cy={rightIris.cy}
+            r={rightIris.irisR}
+            fill={g("irisGradient")}
+          />
 
-        {/* Pupil */}
-        <circle
-          cx={rightIris.cx}
-          cy={rightIris.cy}
-          r={rightIris.pupilR}
-          fill={currentTheme.colors.eyes.pupil}
-        />
+          {/* Pupil */}
+          <circle
+            cx={rightIris.cx}
+            cy={rightIris.cy}
+            r={rightIris.pupilR}
+            fill={currentTheme.colors.eyes.pupil}
+          />
 
-        {/* Eye highlight */}
-        <circle
-          cx={rightIris.cx - 2}
-          cy={rightIris.cy - 2}
-          r={rightIris.pupilR * 0.6}
-          fill="rgba(255,255,255,0.8)"
-        />
-        <circle
-          cx={rightIris.cx + 3}
-          cy={rightIris.cy + 1}
-          r={rightIris.pupilR * 0.3}
-          fill="rgba(255,255,255,0.4)"
-        />
+          {/* Eye highlight */}
+          <circle
+            cx={rightIris.cx - 2}
+            cy={rightIris.cy - 2}
+            r={rightIris.pupilR * 0.6}
+            fill="rgba(255,255,255,0.8)"
+          />
+          <circle
+            cx={rightIris.cx + 3}
+            cy={rightIris.cy + 1}
+            r={rightIris.pupilR * 0.3}
+            fill="rgba(255,255,255,0.4)"
+          />
 
-        {/* Upper eyelid */}
-        <path d={rightEyePaths.upperLid} fill={g("lidGradient")} />
+          {/* Upper eyelid */}
+          <path d={rightEyePaths.upperLid} fill={g("lidGradient")} />
 
-        {/* Lower eyelid */}
-        <path d={rightEyePaths.lowerLid} fill={g("lidGradient")} />
+          {/* Lower eyelid */}
+          <path d={rightEyePaths.lowerLid} fill={g("lidGradient")} />
 
-        {/* Eyelid crease */}
-        <path
-          d={`M ${-dims.eyeSpacing / 2 - dims.eyeWidth / 2 - 2} ${dims.eyeY - dims.eyeHeight / 2 - 5}
+          {/* Eyelid crease */}
+          <path
+            d={`M ${-dims.eyeSpacing / 2 - dims.eyeWidth / 2 - 2} ${dims.eyeY - dims.eyeHeight / 2 - 5}
               Q ${-dims.eyeSpacing / 2} ${dims.eyeY - dims.eyeHeight / 2 - 8}
               ${-dims.eyeSpacing / 2 + dims.eyeWidth / 2 + 2} ${dims.eyeY - dims.eyeHeight / 2 - 6}`}
-          fill="none"
-          stroke={currentTheme.colors.shadow.color}
-          strokeWidth={1}
-        />
-      </g>
+            fill="none"
+            stroke={currentTheme.colors.shadow.color}
+            strokeWidth={1}
+          />
+        </g>
 
-      {/* Eyebrows - shift with head rotation */}
-      <g transform={`translate(${ht.eyebrowShiftX}, ${ht.eyebrowShiftY})`}>
-        <path d={leftEyebrowPath} fill={currentTheme.colors.hair.mid} />
-        <path d={rightEyebrowPath} fill={currentTheme.colors.hair.mid} />
-      </g>
+        {/* Eyebrows - shift with head rotation */}
+        <g transform={`translate(${ht.eyebrowShiftX}, ${ht.eyebrowShiftY})`}>
+          <path d={leftEyebrowPath} fill={currentTheme.colors.hair.mid} />
+          <path d={rightEyebrowPath} fill={currentTheme.colors.hair.mid} />
+        </g>
 
-      {/* Nose - shifts more prominently */}
-      <g transform={`translate(${ht.noseShiftX}, ${ht.noseShiftY})`}>
-        <path
-          d={nosePath}
-          fill="none"
-          stroke={currentTheme.colors.shadow.color.replace("0.3", "0.5")}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
-        {/* Nose tip highlight */}
-        <ellipse
-          cx={0}
-          cy={dims.noseY + dims.noseHeight * 0.3}
-          rx={4}
-          ry={3}
-          fill="rgba(255,240,230,0.4)"
-        />
-      </g>
-
-      {/* Mouth - shifts with face */}
-      <g transform={`translate(${ht.mouthShiftX}, ${ht.mouthShiftY})`}>
-        {/* Mouth opening (dark) */}
-        {mouthPaths.opening && (
+        {/* Nose - shifts more prominently */}
+        <g transform={`translate(${ht.noseShiftX}, ${ht.noseShiftY})`}>
           <path
-            d={mouthPaths.opening}
-            fill={currentTheme.colors.shadow.color.replace("0.3", "0.8")}
+            d={nosePath}
+            fill="none"
+            stroke={currentTheme.colors.shadow.color.replace("0.3", "0.5")}
+            strokeWidth={1.5}
+            strokeLinecap="round"
           />
-        )}
-
-        {/* Teeth hint when mouth is open */}
-        {expression.mouth.lowerLipTop - expression.mouth.upperLipBottom > 6 && (
-          <rect
-            x={-dims.mouthWidth * expression.mouth.width * 0.3}
-            y={dims.mouthY + expression.mouth.upperLipBottom + 2}
-            width={dims.mouthWidth * expression.mouth.width * 0.6}
-            height={Math.min(
-              8,
-              (expression.mouth.lowerLipTop - expression.mouth.upperLipBottom) *
-                0.6,
-            )}
-            fill="#f8f8f0"
-            rx={2}
+          {/* Nose tip highlight */}
+          <ellipse
+            cx={0}
+            cy={dims.noseY + dims.noseHeight * 0.3}
+            rx={4}
+            ry={3}
+            fill="rgba(255,240,230,0.4)"
           />
-        )}
+        </g>
 
-        {/* Upper lip */}
-        <path d={mouthPaths.upperLip} fill={g("upperLipGradient")} />
+        {/* Mouth - shifts with face */}
+        <g transform={`translate(${ht.mouthShiftX}, ${ht.mouthShiftY})`}>
+          {/* Mouth opening (dark) */}
+          {mouthPaths.opening && (
+            <path
+              d={mouthPaths.opening}
+              fill={currentTheme.colors.shadow.color.replace("0.3", "0.8")}
+            />
+          )}
 
-        {/* Lower lip */}
-        <path d={mouthPaths.lowerLip} fill={g("lowerLipGradient")} />
+          {/* Teeth hint when mouth is open */}
+          {expression.mouth.lowerLipTop - expression.mouth.upperLipBottom >
+            6 && (
+            <rect
+              x={-dims.mouthWidth * expression.mouth.width * 0.3}
+              y={dims.mouthY + expression.mouth.upperLipBottom + 2}
+              width={dims.mouthWidth * expression.mouth.width * 0.6}
+              height={Math.min(
+                8,
+                (expression.mouth.lowerLipTop -
+                  expression.mouth.upperLipBottom) *
+                  0.6,
+              )}
+              fill="#f8f8f0"
+              rx={2}
+            />
+          )}
 
-        {/* Lip highlight */}
-        <ellipse
-          cx={0}
-          cy={dims.mouthY + expression.mouth.lowerLipBottom - 4}
-          rx={dims.mouthWidth * expression.mouth.width * 0.25}
-          ry={2}
-          fill="rgba(255,255,255,0.25)"
-        />
-      </g>
+          {/* Upper lip */}
+          <path d={mouthPaths.upperLip} fill={g("upperLipGradient")} />
 
-      {/* Hair (on top) - slight shift */}
-      <g transform={`translate(${ht.hairShiftX}, 0)`}>
-        <path d={hairPath} fill={g("hairGradient")} />
+          {/* Lower lip */}
+          <path d={mouthPaths.lowerLip} fill={g("lowerLipGradient")} />
 
-        {/* Hair highlight */}
-        <ellipse
-          cx={-20}
-          cy={-dims.headHeight / 2 - 5}
-          rx={25}
-          ry={10}
-          fill="rgba(100,70,50,0.3)"
-        />
-      </g>
+          {/* Lip highlight */}
+          <ellipse
+            cx={0}
+            cy={dims.mouthY + expression.mouth.lowerLipBottom - 4}
+            rx={dims.mouthWidth * expression.mouth.width * 0.25}
+            ry={2}
+            fill="rgba(255,255,255,0.25)"
+          />
+        </g>
+
+        {/* Hair (on top) - slight shift */}
+        <g transform={`translate(${ht.hairShiftX}, 0)`}>
+          <path d={hairPath} fill={g("hairGradient")} />
+
+          {/* Hair highlight */}
+          <ellipse
+            cx={-20}
+            cy={-dims.headHeight / 2 - 5}
+            rx={25}
+            ry={10}
+            fill="rgba(100,70,50,0.3)"
+          />
+        </g>
       </g>
     </svg>
   );

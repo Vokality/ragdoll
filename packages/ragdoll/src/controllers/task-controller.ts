@@ -63,7 +63,11 @@ export class TaskController {
   /**
    * Update a task's status
    */
-  public updateTaskStatus(taskId: string, status: TaskStatus, blockedReason?: string): void {
+  public updateTaskStatus(
+    taskId: string,
+    status: TaskStatus,
+    blockedReason?: string,
+  ): void {
     const task = this.tasks.find((t) => t.id === taskId);
     if (!task) {
       return;
@@ -89,7 +93,10 @@ export class TaskController {
     }
 
     // If the active task is done or blocked, clear active
-    if (this.activeTaskId === taskId && (status === "done" || status === "blocked")) {
+    if (
+      this.activeTaskId === taskId &&
+      (status === "done" || status === "blocked")
+    ) {
       this.activeTaskId = null;
       // Find next todo task to make active
       const nextTodo = this.tasks.find((t) => t.status === "todo");
@@ -141,7 +148,9 @@ export class TaskController {
     if (this.activeTaskId === taskId) {
       this.activeTaskId = null;
       // Find next in_progress or todo task
-      const next = this.tasks.find((t) => t.status === "in_progress" || t.status === "todo");
+      const next = this.tasks.find(
+        (t) => t.status === "in_progress" || t.status === "todo",
+      );
       if (next) {
         if (next.status === "todo") {
           next.status = "in_progress";
@@ -247,7 +256,9 @@ export class TaskController {
    */
   public findTaskByText(text: string): Task | null {
     const searchText = text.toLowerCase().trim();
-    return this.tasks.find((t) => t.text.toLowerCase().trim() === searchText) ?? null;
+    return (
+      this.tasks.find((t) => t.text.toLowerCase().trim() === searchText) ?? null
+    );
   }
 
   /**
@@ -277,4 +288,3 @@ export class TaskController {
     });
   }
 }
-

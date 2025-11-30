@@ -1,4 +1,10 @@
-import type { FacialMood, FacialAction, SpeechBubbleState, PomodoroDuration, TaskStatus } from "@vokality/ragdoll";
+import type {
+  FacialMood,
+  FacialAction,
+  SpeechBubbleState,
+  PomodoroDuration,
+  TaskStatus,
+} from "@vokality/ragdoll";
 
 /**
  * Messages sent from VS Code extension to webview
@@ -137,10 +143,3 @@ export interface VSCodeAPI {
 declare global {
   function acquireVsCodeApi(): VSCodeAPI;
 }
-
-
-
-
-
-
-

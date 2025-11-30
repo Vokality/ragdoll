@@ -11,41 +11,115 @@ interface TaskDrawerProps {
 /**
  * Animated status icon component with pulse effect for blocked
  */
-function StatusIcon({ status, color, animate = false }: { status: TaskStatus; color: string; animate?: boolean }) {
-  const pulseStyle: React.CSSProperties = status === "blocked" ? {
-    animation: "pulse 2s ease-in-out infinite",
-  } : {};
+function StatusIcon({
+  status,
+  color,
+  animate = false,
+}: {
+  status: TaskStatus;
+  color: string;
+  animate?: boolean;
+}) {
+  const pulseStyle: React.CSSProperties =
+    status === "blocked"
+      ? {
+          animation: "pulse 2s ease-in-out infinite",
+        }
+      : {};
 
   switch (status) {
     case "todo":
       return (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transition: "all 0.3s ease", ...pulseStyle }}>
-          <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" style={{ transition: "stroke 0.3s ease" }} />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          style={{ transition: "all 0.3s ease", ...pulseStyle }}
+        >
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke={color}
+            strokeWidth="1.5"
+            style={{ transition: "stroke 0.3s ease" }}
+          />
         </svg>
       );
     case "in_progress":
       return (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transition: "all 0.3s ease" }}>
-          <circle cx="7" cy="7" r="6" fill={color} fillOpacity="0.15" style={{ transition: "all 0.3s ease" }} />
-          <path d="M5 4L10 7L5 10V4Z" fill={color} style={{ transition: "fill 0.3s ease" }} />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          style={{ transition: "all 0.3s ease" }}
+        >
+          <circle
+            cx="7"
+            cy="7"
+            r="6"
+            fill={color}
+            fillOpacity="0.15"
+            style={{ transition: "all 0.3s ease" }}
+          />
+          <path
+            d="M5 4L10 7L5 10V4Z"
+            fill={color}
+            style={{ transition: "fill 0.3s ease" }}
+          />
         </svg>
       );
     case "blocked":
       return (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transition: "all 0.3s ease", ...pulseStyle }}>
-          <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" style={{ transition: "stroke 0.3s ease" }} />
-          <line x1="4" y1="7" x2="10" y2="7" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          style={{ transition: "all 0.3s ease", ...pulseStyle }}
+        >
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke={color}
+            strokeWidth="1.5"
+            style={{ transition: "stroke 0.3s ease" }}
+          />
+          <line
+            x1="4"
+            y1="7"
+            x2="10"
+            y2="7"
+            stroke={color}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
         </svg>
       );
     case "done":
       return (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transition: "all 0.3s ease" }}>
-          <circle cx="7" cy="7" r="6" fill={color} style={{ transition: "fill 0.3s ease" }} />
-          <path 
-            d="M4 7L6 9L10 5" 
-            stroke="white" 
-            strokeWidth="1.5" 
-            strokeLinecap="round" 
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          style={{ transition: "all 0.3s ease" }}
+        >
+          <circle
+            cx="7"
+            cy="7"
+            r="6"
+            fill={color}
+            style={{ transition: "fill 0.3s ease" }}
+          />
+          <path
+            d="M4 7L6 9L10 5"
+            stroke="white"
+            strokeWidth="1.5"
+            strokeLinecap="round"
             strokeLinejoin="round"
             style={{
               strokeDasharray: animate ? 12 : 0,
@@ -61,23 +135,29 @@ function StatusIcon({ status, color, animate = false }: { status: TaskStatus; co
 /**
  * Animated chevron icon for drawer handle
  */
-function ChevronIcon({ isExpanded, color }: { isExpanded: boolean; color: string }) {
+function ChevronIcon({
+  isExpanded,
+  color,
+}: {
+  isExpanded: boolean;
+  color: string;
+}) {
   return (
-    <svg 
-      width="16" 
-      height="16" 
-      viewBox="0 0 16 16" 
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
       fill="none"
       style={{
         transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
         transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
       }}
     >
-      <path 
-        d="M4 6L8 10L12 6" 
-        stroke={color} 
-        strokeWidth="1.5" 
-        strokeLinecap="round" 
+      <path
+        d="M4 6L8 10L12 6"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
@@ -87,14 +167,14 @@ function ChevronIcon({ isExpanded, color }: { isExpanded: boolean; color: string
 /**
  * Single task item row with staggered animation
  */
-function TaskItem({ 
-  task, 
-  isActive, 
+function TaskItem({
+  task,
+  isActive,
   colors,
   index,
   isVisible,
-}: { 
-  task: Task; 
+}: {
+  task: Task;
   isActive: boolean;
   colors: TaskColors;
   index: number;
@@ -103,7 +183,7 @@ function TaskItem({
   const statusColor = getStatusColor(task.status, colors);
   const isDone = task.status === "done";
   const isBlocked = task.status === "blocked";
-  
+
   return (
     <div
       style={{
@@ -119,10 +199,12 @@ function TaskItem({
         `,
       }}
     >
-      <div style={{ 
-        flexShrink: 0,
-        animation: isBlocked ? "pulse 2s ease-in-out infinite" : undefined,
-      }}>
+      <div
+        style={{
+          flexShrink: 0,
+          animation: isBlocked ? "pulse 2s ease-in-out infinite" : undefined,
+        }}
+      >
         <StatusIcon status={task.status} color={statusColor} />
       </div>
       <span
@@ -138,15 +220,17 @@ function TaskItem({
         {task.text}
       </span>
       {isBlocked && task.blockedReason && (
-        <span style={{ 
-          fontSize: "10px", 
-          color: colors.blocked, 
-          opacity: 0.8,
-          maxWidth: "80px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
+        <span
+          style={{
+            fontSize: "10px",
+            color: colors.blocked,
+            opacity: 0.8,
+            maxWidth: "80px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {task.blockedReason}
         </span>
       )}
@@ -253,24 +337,28 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
         {activeTask ? (
           <div style={styles.activeSection}>
             <div style={styles.activeHeader}>
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
                 <StatusIcon status="in_progress" color={colors.accent} />
-                <span style={{ 
-                  ...styles.statusLabel, 
-                  color: colors.accent,
-                  animation: "glow 3s ease-in-out infinite",
-                }}>
+                <span
+                  style={{
+                    ...styles.statusLabel,
+                    color: colors.accent,
+                    animation: "glow 3s ease-in-out infinite",
+                  }}
+                >
                   IN PROGRESS
                 </span>
               </div>
             </div>
-            <div 
-              style={{ 
-                ...styles.activeText, 
+            <div
+              style={{
+                ...styles.activeText,
                 color: colors.text,
                 animation: "slideIn 0.4s ease",
               }}
@@ -278,18 +366,22 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
               {activeTask.text}
             </div>
             {/* Progress indicator */}
-            <div style={{
-              ...styles.progressBar,
-              backgroundColor: `${colors.accent}20`,
-              marginTop: "12px",
-            }}>
-              <div style={{
-                height: "100%",
-                width: `${(completedTasks / totalTasks) * 100}%`,
-                backgroundColor: colors.accent,
-                borderRadius: "2px",
-                transition: "width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
-              }} />
+            <div
+              style={{
+                ...styles.progressBar,
+                backgroundColor: `${colors.accent}20`,
+                marginTop: "12px",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${(completedTasks / totalTasks) * 100}%`,
+                  backgroundColor: colors.accent,
+                  borderRadius: "2px",
+                  transition: "width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                }}
+              />
             </div>
           </div>
         ) : (
@@ -310,11 +402,13 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
             }}
             aria-label={state.isExpanded ? "Collapse tasks" : "Expand tasks"}
           >
-            <span style={{ 
-              ...styles.handleText, 
-              color: colors.muted,
-              transition: "color 0.2s ease",
-            }}>
+            <span
+              style={{
+                ...styles.handleText,
+                color: colors.muted,
+                transition: "color 0.2s ease",
+              }}
+            >
               {progress}
             </span>
             <ChevronIcon isExpanded={state.isExpanded} color={colors.muted} />
@@ -325,10 +419,13 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
         <div
           style={{
             ...styles.expandedSection,
-            maxHeight: state.isExpanded ? `${otherTasks.length * 44 + 20}px` : "0px",
+            maxHeight: state.isExpanded
+              ? `${otherTasks.length * 44 + 20}px`
+              : "0px",
             opacity: state.isExpanded ? 1 : 0,
             borderTopColor: colors.border,
-            borderTopWidth: state.isExpanded && otherTasks.length > 0 ? "1px" : "0px",
+            borderTopWidth:
+              state.isExpanded && otherTasks.length > 0 ? "1px" : "0px",
           }}
         >
           <div style={styles.taskList}>

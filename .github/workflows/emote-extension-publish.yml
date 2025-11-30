@@ -41,5 +41,3 @@ jobs:
           extensionFile: apps/emote/emote.vsix
           registryUrl: https://open-vsx.org
           skipDuplicate: true
-
-

@@ -3,7 +3,11 @@ import { Scene } from "./ui/components/scene";
 import { ControlPanel } from "./ui/components/control-panel";
 import { SpeechBubble } from "./ui/components/speech-bubble";
 import { ThemeSelector } from "./ui/components/theme-selector";
-import { CharacterController, getTheme, getDefaultTheme } from "@vokality/ragdoll";
+import {
+  CharacterController,
+  getTheme,
+  getDefaultTheme,
+} from "@vokality/ragdoll";
 import { useServerSync } from "./ui/hooks/use-server-sync";
 import { useBubbleState } from "./ui/hooks/use-bubble-state";
 import "./App.css";

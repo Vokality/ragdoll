@@ -11,7 +11,7 @@ export type FacialMood =
   | "confusion"
   | "thinking";
 
-export type FacialAction = "none" | "wink" | "talk";
+export type FacialAction = "none" | "wink" | "talk" | "shake";
 
 export interface HeadPose {
   yaw: number;

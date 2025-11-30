@@ -5,4 +5,3 @@
 
 // Easing functions
 export * from "./easing";
-

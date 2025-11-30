@@ -1,6 +1,10 @@
 import { useMemo, useState, useEffect } from "react";
 import { CharacterController } from "@vokality/ragdoll";
-import type { FacialMood, PomodoroDuration, PomodoroStateData } from "@vokality/ragdoll";
+import type {
+  FacialMood,
+  PomodoroDuration,
+  PomodoroStateData,
+} from "@vokality/ragdoll";
 
 interface ControlPanelProps {
   controller: CharacterController | null;
@@ -21,9 +25,9 @@ const pitchLimitDeg = 20;
 export function ControlPanel({ controller }: ControlPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [currentMood, setCurrentMood] = useState<FacialMood>("neutral");
-  const [activeAction, setActiveAction] = useState<"wink" | "talk" | null>(
-    null,
-  );
+  const [activeAction, setActiveAction] = useState<
+    "wink" | "talk" | "shake" | null
+  >(null);
   const [speechText, setSpeechText] = useState("");
   const [bubbleTone, setBubbleTone] =
     useState<(typeof tones)[number]>("default");
@@ -31,7 +35,9 @@ export function ControlPanel({ controller }: ControlPanelProps) {
   const [pitchDeg, setPitchDeg] = useState(0);
   const [sessionDuration, setSessionDuration] = useState<PomodoroDuration>(30);
   const [breakDuration, setBreakDuration] = useState<PomodoroDuration>(5);
-  const [pomodoroState, setPomodoroState] = useState<PomodoroStateData | null>(null);
+  const [pomodoroState, setPomodoroState] = useState<PomodoroStateData | null>(
+    null,
+  );
 
   const headPoseInfo = useMemo(
     () => ({
@@ -66,6 +72,17 @@ export function ControlPanel({ controller }: ControlPanelProps) {
     }
     controller.triggerAction("talk");
     setActiveAction("talk");
+  };
+
+  const handleShake = () => {
+    if (!controller) return;
+    controller.triggerAction("shake", 0.6);
+    setActiveAction("shake");
+    setTimeout(
+      () =>
+        setActiveAction((current) => (current === "shake" ? null : current)),
+      700,
+    );
   };
 
   const handleSpeechChange = (text: string) => {
@@ -206,6 +223,17 @@ export function ControlPanel({ controller }: ControlPanelProps) {
                 {activeAction === "talk" ? "STOP" : "TALK"}
               </button>
               <button
+                style={{
+                  ...styles.actionButton,
+                  ...(activeAction === "shake"
+                    ? styles.actionButtonActive
+                    : {}),
+                }}
+                onClick={handleShake}
+              >
+                SHAKE
+              </button>
+              <button
                 style={styles.clearButton}
                 onClick={() => {
                   controller?.clearAction();
@@ -299,10 +327,15 @@ export function ControlPanel({ controller }: ControlPanelProps) {
                       key={dur}
                       style={{
                         ...styles.toneButton,
-                        ...(sessionDuration === dur ? styles.toneButtonActive : {}),
+                        ...(sessionDuration === dur
+                          ? styles.toneButtonActive
+                          : {}),
                       }}
                       onClick={() => setSessionDuration(dur)}
-                      disabled={pomodoroState?.state === "running" || pomodoroState?.state === "paused"}
+                      disabled={
+                        pomodoroState?.state === "running" ||
+                        pomodoroState?.state === "paused"
+                      }
                     >
                       {dur === 60 ? "1h" : dur === 120 ? "2h" : `${dur}m`}
                     </button>
@@ -317,10 +350,15 @@ export function ControlPanel({ controller }: ControlPanelProps) {
                       key={dur}
                       style={{
                         ...styles.toneButton,
-                        ...(breakDuration === dur ? styles.toneButtonActive : {}),
+                        ...(breakDuration === dur
+                          ? styles.toneButtonActive
+                          : {}),
                       }}
                       onClick={() => setBreakDuration(dur)}
-                      disabled={pomodoroState?.state === "running" || pomodoroState?.state === "paused"}
+                      disabled={
+                        pomodoroState?.state === "running" ||
+                        pomodoroState?.state === "paused"
+                      }
                     >
                       {dur}m
                     </button>

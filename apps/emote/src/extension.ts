@@ -4,7 +4,13 @@ import * as path from "path";
 import * as os from "os";
 import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
-import type { FacialMood, BubbleTone, PomodoroDuration, TaskStatus, Task } from "./types";
+import type {
+  FacialMood,
+  BubbleTone,
+  PomodoroDuration,
+  TaskStatus,
+  Task,
+} from "./types";
 
 const MAX_BUBBLE_CHARACTERS = 240;
 
@@ -19,16 +25,20 @@ const VALID_MOODS: readonly FacialMood[] = [
   "confusion",
   "thinking",
 ] as const;
-const VALID_ACTIONS = ["wink", "talk"] as const;
+const VALID_ACTIONS = ["wink", "talk", "shake"] as const;
 const VALID_TONES: readonly BubbleTone[] = ["default", "whisper", "shout"];
 const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
-type ThemeId = typeof VALID_THEMES[number];
+type ThemeId = (typeof VALID_THEMES)[number];
 type ActionId = (typeof VALID_ACTIONS)[number];
 
 let outputChannel: vscode.OutputChannel | null = null;
 const shownErrorKeys = new Set<string>();
 let currentTasks: Task[] = [];
-let currentPomodoroState: { state: string; remainingTime: number; isBreak: boolean } | null = null;
+let currentPomodoroState: {
+  state: string;
+  remainingTime: number;
+  isBreak: boolean;
+} | null = null;
 
 export function updateTasks(tasks: Task[]): void {
   currentTasks = tasks;
@@ -38,19 +48,28 @@ export function getTasks(): Task[] {
   return currentTasks;
 }
 
-export function updatePomodoroState(state: { state: string; remainingTime: number; isBreak: boolean }): void {
+export function updatePomodoroState(state: {
+  state: string;
+  remainingTime: number;
+  isBreak: boolean;
+}): void {
   currentPomodoroState = state;
 }
 
-export function getPomodoroState(): { state: string; remainingTime: number; isBreak: boolean } | null {
+export function getPomodoroState(): {
+  state: string;
+  remainingTime: number;
+  isBreak: boolean;
+} | null {
   return currentPomodoroState;
 }
 
 // Socket-based IPC paths
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
-const SOCKET_PATH = os.platform() === "win32"
-  ? "\\\\.\\pipe\\ragdoll-emote"
-  : path.join(IPC_DIR, "emote.sock");
+const SOCKET_PATH =
+  os.platform() === "win32"
+    ? "\\\\.\\pipe\\ragdoll-emote"
+    : path.join(IPC_DIR, "emote.sock");
 
 // Stable MCP server location (doesn't change with extension version)
 const EMOTE_DIR = path.join(os.homedir(), ".emote");
@@ -63,13 +82,19 @@ function initOutputChannel(context: vscode.ExtensionContext): void {
   }
 }
 
-function logMessage(level: "info" | "warn" | "error", message: string, metadata?: Record<string, unknown>): void {
+function logMessage(
+  level: "info" | "warn" | "error",
+  message: string,
+  metadata?: Record<string, unknown>,
+): void {
   if (!outputChannel) {
     return;
   }
   const suffix = metadata ? ` ${JSON.stringify(metadata)}` : "";
   const timestamp = new Date().toISOString();
-  outputChannel.appendLine(`[${timestamp}] [${level.toUpperCase()}] ${message}${suffix}`);
+  outputChannel.appendLine(
+    `[${timestamp}] [${level.toUpperCase()}] ${message}${suffix}`,
+  );
 }
 
 function notifyErrorOnce(key: string, message: string): void {
@@ -77,17 +102,21 @@ function notifyErrorOnce(key: string, message: string): void {
     return;
   }
   shownErrorKeys.add(key);
-  vscode.window.showErrorMessage(message, "Open Emote Output").then((selection) => {
-    if (selection === "Open Emote Output") {
-      outputChannel?.show(true);
-    }
-  });
+  vscode.window
+    .showErrorMessage(message, "Open Emote Output")
+    .then((selection) => {
+      if (selection === "Open Emote Output") {
+        outputChannel?.show(true);
+      }
+    });
 }
 
 function getThemeSetting(): ThemeId {
   const config = vscode.workspace.getConfiguration("emote");
   const theme = config.get<string>("theme", "default");
-  return VALID_THEMES.includes(theme as ThemeId) ? (theme as ThemeId) : "default";
+  return VALID_THEMES.includes(theme as ThemeId)
+    ? (theme as ThemeId)
+    : "default";
 }
 
 function setThemeSetting(themeId: ThemeId): Thenable<void> {
@@ -112,7 +141,12 @@ type MCPCommand = {
   blockedReason?: unknown;
 };
 
-const VALID_TASK_STATUSES: readonly TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
+const VALID_TASK_STATUSES: readonly TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+];
 
 type ValidatedCommand =
   | { type: "show" }
@@ -120,15 +154,29 @@ type ValidatedCommand =
   | { type: "clearAction" }
   | { type: "setMood"; mood: FacialMood; duration?: number }
   | { type: "triggerAction"; action: ActionId; duration?: number }
-  | { type: "setHeadPose"; yawDegrees?: number; pitchDegrees?: number; duration?: number }
+  | {
+      type: "setHeadPose";
+      yawDegrees?: number;
+      pitchDegrees?: number;
+      duration?: number;
+    }
   | { type: "setSpeechBubble"; text: string | null; tone?: BubbleTone }
   | { type: "setTheme"; themeId: ThemeId }
-  | { type: "startPomodoro"; sessionDuration?: PomodoroDuration; breakDuration?: PomodoroDuration }
+  | {
+      type: "startPomodoro";
+      sessionDuration?: PomodoroDuration;
+      breakDuration?: PomodoroDuration;
+    }
   | { type: "pausePomodoro" }
   | { type: "resetPomodoro" }
   | { type: "getPomodoroState" }
   | { type: "addTask"; text: string; status?: TaskStatus }
-  | { type: "updateTaskStatus"; taskId: string; status: TaskStatus; blockedReason?: string }
+  | {
+      type: "updateTaskStatus";
+      taskId: string;
+      status: TaskStatus;
+      blockedReason?: string;
+    }
   | { type: "setActiveTask"; taskId: string }
   | { type: "removeTask"; taskId: string }
   | { type: "completeActiveTask" }
@@ -170,7 +218,9 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function coerceNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function coerceDuration(value: unknown, min = 0, max = 30): number | undefined {
@@ -182,19 +232,31 @@ function coerceDuration(value: unknown, min = 0, max = 30): number | undefined {
 }
 
 function isMood(value: unknown): value is FacialMood {
-  return typeof value === "string" && (VALID_MOODS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (VALID_MOODS as readonly string[]).includes(value)
+  );
 }
 
 function isAction(value: unknown): value is ActionId {
-  return typeof value === "string" && (VALID_ACTIONS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (VALID_ACTIONS as readonly string[]).includes(value)
+  );
 }
 
 function isTheme(value: unknown): value is ThemeId {
-  return typeof value === "string" && (VALID_THEMES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (VALID_THEMES as readonly string[]).includes(value)
+  );
 }
 
 function isToneValue(value: unknown): value is BubbleTone {
-  return typeof value === "string" && (VALID_TONES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (VALID_TONES as readonly string[]).includes(value)
+  );
 }
 
 function coerceTone(value: unknown): BubbleTone | undefined {
@@ -253,7 +315,9 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
     }
     case "setSpeechBubble": {
       const normalizedText =
-        typeof raw.text === "string" ? raw.text.trim().slice(0, MAX_BUBBLE_CHARACTERS) : "";
+        typeof raw.text === "string"
+          ? raw.text.trim().slice(0, MAX_BUBBLE_CHARACTERS)
+          : "";
       const textValue = normalizedText.length > 0 ? normalizedText : null;
       const tone = coerceTone(raw.tone);
       return {
@@ -274,10 +338,18 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       const sessionDuration = coerceNumber(raw.sessionDuration);
       const breakDuration = coerceNumber(raw.breakDuration);
       const validDurations: PomodoroDuration[] = [5, 15, 30, 60, 120];
-      const validSession = sessionDuration === undefined || validDurations.includes(sessionDuration as PomodoroDuration);
-      const validBreak = breakDuration === undefined || validDurations.includes(breakDuration as PomodoroDuration);
+      const validSession =
+        sessionDuration === undefined ||
+        validDurations.includes(sessionDuration as PomodoroDuration);
+      const validBreak =
+        breakDuration === undefined ||
+        validDurations.includes(breakDuration as PomodoroDuration);
       if (!validSession || !validBreak) {
-        return { ok: false, reason: "Invalid pomodoro duration. Must be 5, 15, 30, 60, or 120 minutes" };
+        return {
+          ok: false,
+          reason:
+            "Invalid pomodoro duration. Must be 5, 15, 30, 60, or 120 minutes",
+        };
       }
       return {
         ok: true,
@@ -298,26 +370,50 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       if (typeof raw.text !== "string" || raw.text.trim().length === 0) {
         return { ok: false, reason: "Task requires text" };
       }
-      const status = typeof raw.status === "string" && VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
-        ? (raw.status as TaskStatus)
-        : undefined;
-      return { ok: true, command: { type: "addTask", text: raw.text.trim(), status } };
+      const status =
+        typeof raw.status === "string" &&
+        VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
+          ? (raw.status as TaskStatus)
+          : undefined;
+      return {
+        ok: true,
+        command: { type: "addTask", text: raw.text.trim(), status },
+      };
     }
     case "updateTaskStatus": {
       if (typeof raw.taskId !== "string") {
         return { ok: false, reason: "updateTaskStatus requires taskId" };
       }
-      if (typeof raw.status !== "string" || !VALID_TASK_STATUSES.includes(raw.status as TaskStatus)) {
-        return { ok: false, reason: "updateTaskStatus requires valid status (todo, in_progress, blocked, done)" };
+      if (
+        typeof raw.status !== "string" ||
+        !VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
+      ) {
+        return {
+          ok: false,
+          reason:
+            "updateTaskStatus requires valid status (todo, in_progress, blocked, done)",
+        };
       }
-      const blockedReason = typeof raw.blockedReason === "string" ? raw.blockedReason : undefined;
-      return { ok: true, command: { type: "updateTaskStatus", taskId: raw.taskId, status: raw.status as TaskStatus, blockedReason } };
+      const blockedReason =
+        typeof raw.blockedReason === "string" ? raw.blockedReason : undefined;
+      return {
+        ok: true,
+        command: {
+          type: "updateTaskStatus",
+          taskId: raw.taskId,
+          status: raw.status as TaskStatus,
+          blockedReason,
+        },
+      };
     }
     case "setActiveTask": {
       if (typeof raw.taskId !== "string") {
         return { ok: false, reason: "setActiveTask requires taskId" };
       }
-      return { ok: true, command: { type: "setActiveTask", taskId: raw.taskId } };
+      return {
+        ok: true,
+        command: { type: "setActiveTask", taskId: raw.taskId },
+      };
     }
     case "removeTask": {
       if (typeof raw.taskId !== "string") {
@@ -355,7 +451,7 @@ function installMcpServer(extensionPath: string): void {
       logMessage("warn", "MCP server build missing", { sourcePath });
       notifyErrorOnce(
         "mcp-server-missing",
-        "Emote build is missing dist/mcp-server.js. Run `bun run build` and reload the window."
+        "Emote build is missing dist/mcp-server.js. Run `bun run build` and reload the window.",
       );
       return;
     }
@@ -375,10 +471,12 @@ function installMcpServer(extensionPath: string): void {
 
     logMessage("info", "MCP server installed", { target: STABLE_MCP_SERVER });
   } catch (error) {
-    logMessage("error", "Failed to install MCP server", { error: String(error) });
+    logMessage("error", "Failed to install MCP server", {
+      error: String(error),
+    });
     notifyErrorOnce(
       "install-mcp-server",
-      "Emote could not install the MCP helper. Check the Emote output channel for details."
+      "Emote could not install the MCP helper. Check the Emote output channel for details.",
     );
   }
 }
@@ -415,7 +513,7 @@ async function copyMcpConfig(): Promise<void> {
     vscode.window
       .showInformationMessage(
         `Emote MCP config copied! Add it to mcpServers in ${configPath}`,
-        "Open Config Location"
+        "Open Config Location",
       )
       .then((selection) => {
         if (selection === "Open Config Location") {
@@ -428,7 +526,7 @@ async function copyMcpConfig(): Promise<void> {
     logMessage("error", "Failed to copy MCP config", { error: String(error) });
     notifyErrorOnce(
       "copy-mcp-config",
-      "Emote could not copy the MCP config to your clipboard. Try again after closing other clipboard apps."
+      "Emote could not copy the MCP config to your clipboard. Try again after closing other clipboard apps.",
     );
   }
 }
@@ -436,14 +534,16 @@ async function copyMcpConfig(): Promise<void> {
 /**
  * Show first-time setup notification
  */
-async function showSetupNotification(context: vscode.ExtensionContext): Promise<void> {
+async function showSetupNotification(
+  context: vscode.ExtensionContext,
+): Promise<void> {
   const hasShownSetup = context.globalState.get<boolean>("mcpSetupShown");
 
   if (!hasShownSetup) {
     const selection = await vscode.window.showInformationMessage(
       "Emote: To enable AI control, add the MCP server to your config",
       "Copy Config",
-      "Later"
+      "Later",
     );
 
     if (selection === "Copy Config") {
@@ -468,13 +568,13 @@ export function activate(context: vscode.ExtensionContext): void {
       // Send current theme to webview
       const theme = getThemeSetting();
       panel.postMessage({ type: "setTheme", themeId: theme });
-    })
+    }),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.hide", () => {
       RagdollPanel.hide();
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -486,29 +586,47 @@ export function activate(context: vscode.ExtensionContext): void {
       const panel = RagdollPanel.createOrShow(context.extensionUri);
       const theme = getThemeSetting();
       panel.postMessage({ type: "setTheme", themeId: theme });
-    })
+    }),
   );
 
   // MCP setup command
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.copyMcpConfig", () => {
       void copyMcpConfig();
-    })
+    }),
   );
 
   // Control commands
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setMood", (mood: string, duration?: number) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      panel.postMessage({ type: "setMood", mood: mood as FacialMood, duration });
-    })
+    vscode.commands.registerCommand(
+      "emote.setMood",
+      (mood: string, duration?: number) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        panel.postMessage({
+          type: "setMood",
+          mood: mood as FacialMood,
+          duration,
+        });
+      },
+    ),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.triggerAction", (action: string, duration?: number) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      panel.postMessage({ type: "triggerAction", action: action as "wink" | "talk", duration });
-    })
+    vscode.commands.registerCommand(
+      "emote.triggerAction",
+      (action: string, duration?: number) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        panel.postMessage({
+          type: "triggerAction",
+          action: action as "wink" | "talk" | "shake",
+          duration,
+        });
+      },
+    ),
   );
 
   context.subscriptions.push(
@@ -516,69 +634,121 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "clearAction" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setHeadPose", (yawDegrees?: number, pitchDegrees?: number, duration?: number) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      const yaw = yawDegrees !== undefined ? (yawDegrees * Math.PI) / 180 : undefined;
-      const pitch = pitchDegrees !== undefined ? (pitchDegrees * Math.PI) / 180 : undefined;
-      panel.postMessage({ type: "setHeadPose", yaw, pitch, duration });
-    })
+    vscode.commands.registerCommand(
+      "emote.setHeadPose",
+      (yawDegrees?: number, pitchDegrees?: number, duration?: number) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        const yaw =
+          yawDegrees !== undefined ? (yawDegrees * Math.PI) / 180 : undefined;
+        const pitch =
+          pitchDegrees !== undefined
+            ? (pitchDegrees * Math.PI) / 180
+            : undefined;
+        panel.postMessage({ type: "setHeadPose", yaw, pitch, duration });
+      },
+    ),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setSpeechBubble", (text?: string, tone?: string) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      panel.postMessage({ type: "setSpeechBubble", text: text ?? null, tone: tone as BubbleTone | undefined });
-    })
+    vscode.commands.registerCommand(
+      "emote.setSpeechBubble",
+      (text?: string, tone?: string) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        panel.postMessage({
+          type: "setSpeechBubble",
+          text: text ?? null,
+          tone: tone as BubbleTone | undefined,
+        });
+      },
+    ),
   );
 
   // Theme command
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setTheme", async (themeId?: string) => {
-      // If themeId is provided, use it directly (e.g., from MCP command)
-      if (themeId && VALID_THEMES.includes(themeId as ThemeId)) {
-        void setThemeSetting(themeId as ThemeId);
-        if (RagdollPanel.currentPanel) {
-          RagdollPanel.currentPanel.postMessage({ type: "setTheme", themeId });
+    vscode.commands.registerCommand(
+      "emote.setTheme",
+      async (themeId?: string) => {
+        // If themeId is provided, use it directly (e.g., from MCP command)
+        if (themeId && VALID_THEMES.includes(themeId as ThemeId)) {
+          void setThemeSetting(themeId as ThemeId);
+          if (RagdollPanel.currentPanel) {
+            RagdollPanel.currentPanel.postMessage({
+              type: "setTheme",
+              themeId,
+            });
+          }
+          return;
         }
-        return;
-      }
 
-      // Otherwise, show quick pick dialog for user selection
-      const themeOptions: Array<{ label: string; description: string; id: ThemeId }> = [
-        { label: "Default", description: "Warm, human-like appearance", id: "default" },
-        { label: "Robot", description: "Metallic, futuristic robot", id: "robot" },
-        { label: "Alien", description: "Green, otherworldly alien", id: "alien" },
-        { label: "Monochrome", description: "Classic black and white", id: "monochrome" },
-      ];
+        // Otherwise, show quick pick dialog for user selection
+        const themeOptions: Array<{
+          label: string;
+          description: string;
+          id: ThemeId;
+        }> = [
+          {
+            label: "Default",
+            description: "Warm, human-like appearance",
+            id: "default",
+          },
+          {
+            label: "Robot",
+            description: "Metallic, futuristic robot",
+            id: "robot",
+          },
+          {
+            label: "Alien",
+            description: "Green, otherworldly alien",
+            id: "alien",
+          },
+          {
+            label: "Monochrome",
+            description: "Classic black and white",
+            id: "monochrome",
+          },
+        ];
 
-      const currentTheme = getThemeSetting();
-      const selected = await vscode.window.showQuickPick(themeOptions, {
-        placeHolder: `Select theme (current: ${currentTheme})`,
-      });
+        const currentTheme = getThemeSetting();
+        const selected = await vscode.window.showQuickPick(themeOptions, {
+          placeHolder: `Select theme (current: ${currentTheme})`,
+        });
 
-      if (selected) {
-        void setThemeSetting(selected.id);
-        if (RagdollPanel.currentPanel) {
-          RagdollPanel.currentPanel.postMessage({ type: "setTheme", themeId: selected.id });
+        if (selected) {
+          void setThemeSetting(selected.id);
+          if (RagdollPanel.currentPanel) {
+            RagdollPanel.currentPanel.postMessage({
+              type: "setTheme",
+              themeId: selected.id,
+            });
+          }
         }
-      }
-    })
+      },
+    ),
   );
 
   // Pomodoro commands
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.startPomodoro", (sessionDuration?: number, breakDuration?: number) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      panel.postMessage({ 
-        type: "startPomodoro", 
-        sessionDuration: sessionDuration as PomodoroDuration | undefined,
-        breakDuration: breakDuration as PomodoroDuration | undefined,
-      });
-    })
+    vscode.commands.registerCommand(
+      "emote.startPomodoro",
+      (sessionDuration?: number, breakDuration?: number) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        panel.postMessage({
+          type: "startPomodoro",
+          sessionDuration: sessionDuration as PomodoroDuration | undefined,
+          breakDuration: breakDuration as PomodoroDuration | undefined,
+        });
+      },
+    ),
   );
 
   context.subscriptions.push(
@@ -586,7 +756,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "pausePomodoro" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -594,7 +764,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "resetPomodoro" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -604,31 +774,47 @@ export function activate(context: vscode.ExtensionContext): void {
         RagdollPanel.currentPanel.postMessage({ type: "getPomodoroState" });
       }
       return null;
-    })
+    }),
   );
 
   // Task commands
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.addTask", (text: string, status?: TaskStatus) => {
-      const panel = RagdollPanel.currentPanel ?? RagdollPanel.createOrShow(context.extensionUri);
-      panel.postMessage({ type: "addTask", text, status });
-    })
+    vscode.commands.registerCommand(
+      "emote.addTask",
+      (text: string, status?: TaskStatus) => {
+        const panel =
+          RagdollPanel.currentPanel ??
+          RagdollPanel.createOrShow(context.extensionUri);
+        panel.postMessage({ type: "addTask", text, status });
+      },
+    ),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("emote.updateTaskStatus", (taskId: string, status: TaskStatus, blockedReason?: string) => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "updateTaskStatus", taskId, status, blockedReason });
-      }
-    })
+    vscode.commands.registerCommand(
+      "emote.updateTaskStatus",
+      (taskId: string, status: TaskStatus, blockedReason?: string) => {
+        if (RagdollPanel.currentPanel) {
+          RagdollPanel.currentPanel.postMessage({
+            type: "updateTaskStatus",
+            taskId,
+            status,
+            blockedReason,
+          });
+        }
+      },
+    ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.setActiveTask", (taskId: string) => {
       if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "setActiveTask", taskId });
+        RagdollPanel.currentPanel.postMessage({
+          type: "setActiveTask",
+          taskId,
+        });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -636,7 +822,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "removeTask", taskId });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -644,7 +830,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "completeActiveTask" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -652,7 +838,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "clearCompletedTasks" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -660,7 +846,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "clearAllTasks" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -668,7 +854,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "expandTasks" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -676,7 +862,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "collapseTasks" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -684,7 +870,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (RagdollPanel.currentPanel) {
         RagdollPanel.currentPanel.postMessage({ type: "toggleTasks" });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -695,7 +881,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       // Return current stored tasks (will be updated by webview)
       return getTasks();
-    })
+    }),
   );
 
   // Watch for configuration changes
@@ -705,10 +891,13 @@ export function activate(context: vscode.ExtensionContext): void {
         const theme = getThemeSetting();
         logMessage("info", "Theme setting changed", { theme });
         if (RagdollPanel.currentPanel) {
-          RagdollPanel.currentPanel.postMessage({ type: "setTheme", themeId: theme });
+          RagdollPanel.currentPanel.postMessage({
+            type: "setTheme",
+            themeId: theme,
+          });
         }
       }
-    })
+    }),
   );
 
   // Start socket server for MCP commands
@@ -750,30 +939,55 @@ function startSocketServer(context: vscode.ExtensionContext): void {
               }
               // Return current stored tasks (webview will update them)
               const tasks = getTasks();
-              logMessage("info", "Processed MCP command", { type: result.command.type });
-              socket.write(JSON.stringify({ ok: true, type: result.command.type, tasks }) + "\n");
+              logMessage("info", "Processed MCP command", {
+                type: result.command.type,
+              });
+              socket.write(
+                JSON.stringify({ ok: true, type: result.command.type, tasks }) +
+                  "\n",
+              );
             } else if (result.command.type === "getPomodoroState") {
               // Request fresh pomodoro state from webview
               if (RagdollPanel.currentPanel) {
-                RagdollPanel.currentPanel.postMessage({ type: "getPomodoroState" });
+                RagdollPanel.currentPanel.postMessage({
+                  type: "getPomodoroState",
+                });
               }
               // Return current stored state (webview will update it)
               const state = getPomodoroState();
-              logMessage("info", "Processed MCP command", { type: result.command.type });
-              socket.write(JSON.stringify({ ok: true, type: result.command.type, state }) + "\n");
+              logMessage("info", "Processed MCP command", {
+                type: result.command.type,
+              });
+              socket.write(
+                JSON.stringify({ ok: true, type: result.command.type, state }) +
+                  "\n",
+              );
             } else {
               handleValidatedCommand(result.command);
-              logMessage("info", "Processed MCP command", { type: result.command.type });
-              socket.write(JSON.stringify({ ok: true, type: result.command.type }) + "\n");
+              logMessage("info", "Processed MCP command", {
+                type: result.command.type,
+              });
+              socket.write(
+                JSON.stringify({ ok: true, type: result.command.type }) + "\n",
+              );
             }
           } else {
-            logMessage("warn", "Rejected MCP command", { reason: result.reason });
-            socket.write(JSON.stringify({ ok: false, error: result.reason }) + "\n");
+            logMessage("warn", "Rejected MCP command", {
+              reason: result.reason,
+            });
+            socket.write(
+              JSON.stringify({ ok: false, error: result.reason }) + "\n",
+            );
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logMessage("warn", "Failed to parse MCP command", { error: errorMessage });
-          socket.write(JSON.stringify({ ok: false, error: "Invalid JSON" }) + "\n");
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          logMessage("warn", "Failed to parse MCP command", {
+            error: errorMessage,
+          });
+          socket.write(
+            JSON.stringify({ ok: false, error: "Invalid JSON" }) + "\n",
+          );
         }
       }
     });
@@ -785,14 +999,18 @@ function startSocketServer(context: vscode.ExtensionContext): void {
 
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
-      logMessage("warn", "Socket already in use - another VS Code window may be active", {
-        path: SOCKET_PATH,
-      });
+      logMessage(
+        "warn",
+        "Socket already in use - another VS Code window may be active",
+        {
+          path: SOCKET_PATH,
+        },
+      );
     } else {
       logMessage("error", "Socket server error", { error: error.message });
       notifyErrorOnce(
         "socket-server-error",
-        "Emote could not start the command server. Check the Emote output channel for details."
+        "Emote could not start the command server. Check the Emote output channel for details.",
       );
     }
   });
@@ -831,27 +1049,43 @@ function handleValidatedCommand(command: ValidatedCommand): void {
       void vscode.commands.executeCommand("emote.clearAction");
       break;
     case "setMood":
-      void vscode.commands.executeCommand("emote.setMood", command.mood, command.duration);
+      void vscode.commands.executeCommand(
+        "emote.setMood",
+        command.mood,
+        command.duration,
+      );
       break;
     case "triggerAction":
-      void vscode.commands.executeCommand("emote.triggerAction", command.action, command.duration);
+      void vscode.commands.executeCommand(
+        "emote.triggerAction",
+        command.action,
+        command.duration,
+      );
       break;
     case "setHeadPose":
       void vscode.commands.executeCommand(
         "emote.setHeadPose",
         command.yawDegrees,
         command.pitchDegrees,
-        command.duration
+        command.duration,
       );
       break;
     case "setSpeechBubble":
-      void vscode.commands.executeCommand("emote.setSpeechBubble", command.text, command.tone);
+      void vscode.commands.executeCommand(
+        "emote.setSpeechBubble",
+        command.text,
+        command.tone,
+      );
       break;
     case "setTheme":
       void vscode.commands.executeCommand("emote.setTheme", command.themeId);
       break;
     case "startPomodoro":
-      void vscode.commands.executeCommand("emote.startPomodoro", command.sessionDuration, command.breakDuration);
+      void vscode.commands.executeCommand(
+        "emote.startPomodoro",
+        command.sessionDuration,
+        command.breakDuration,
+      );
       break;
     case "pausePomodoro":
       void vscode.commands.executeCommand("emote.pausePomodoro");
@@ -860,13 +1094,25 @@ function handleValidatedCommand(command: ValidatedCommand): void {
       void vscode.commands.executeCommand("emote.resetPomodoro");
       break;
     case "addTask":
-      void vscode.commands.executeCommand("emote.addTask", command.text, command.status);
+      void vscode.commands.executeCommand(
+        "emote.addTask",
+        command.text,
+        command.status,
+      );
       break;
     case "updateTaskStatus":
-      void vscode.commands.executeCommand("emote.updateTaskStatus", command.taskId, command.status, command.blockedReason);
+      void vscode.commands.executeCommand(
+        "emote.updateTaskStatus",
+        command.taskId,
+        command.status,
+        command.blockedReason,
+      );
       break;
     case "setActiveTask":
-      void vscode.commands.executeCommand("emote.setActiveTask", command.taskId);
+      void vscode.commands.executeCommand(
+        "emote.setActiveTask",
+        command.taskId,
+      );
       break;
     case "removeTask":
       void vscode.commands.executeCommand("emote.removeTask", command.taskId);

@@ -6,7 +6,10 @@ interface StatusOverlayProps {
   variant: OverlayVariant;
 }
 
-const messages: Record<OverlayVariant, { title: string; body: string; tips: string[] }> = {
+const messages: Record<
+  OverlayVariant,
+  { title: string; body: string; tips: string[] }
+> = {
   initial: {
     title: "Getting Emote ready",
     body: "The companion loads beside your editor as soon as the extension spins up.",
@@ -84,4 +87,3 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: "4px",
   },
 };
-

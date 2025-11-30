@@ -3,7 +3,11 @@
  * Manages pomodoro session state, timing, and transitions
  */
 
-import type { PomodoroState, PomodoroDuration, PomodoroStateData } from "../types";
+import type {
+  PomodoroState,
+  PomodoroDuration,
+  PomodoroStateData,
+} from "../types";
 
 type TimerCallback = (state: PomodoroStateData) => void;
 
@@ -51,7 +55,8 @@ export class PomodoroController {
     }
 
     const currentTime = Date.now() / 1000;
-    const sessionDurationSeconds = (this.isBreak ? this.breakDuration : this.sessionDuration) * 60;
+    const sessionDurationSeconds =
+      (this.isBreak ? this.breakDuration : this.sessionDuration) * 60;
     this.elapsedTime = this.pausedElapsed + (currentTime - this.startTime);
 
     if (this.elapsedTime >= sessionDurationSeconds) {
@@ -65,7 +70,10 @@ export class PomodoroController {
   /**
    * Start a pomodoro session
    */
-  public start(sessionDuration?: PomodoroDuration, breakDuration?: PomodoroDuration): void {
+  public start(
+    sessionDuration?: PomodoroDuration,
+    breakDuration?: PomodoroDuration,
+  ): void {
     if (sessionDuration) {
       this.sessionDuration = sessionDuration;
     }
@@ -152,8 +160,12 @@ export class PomodoroController {
    * Get current pomodoro state
    */
   public getState(): PomodoroStateData {
-    const sessionDurationSeconds = (this.isBreak ? this.breakDuration : this.sessionDuration) * 60;
-    const remainingTime = Math.max(0, sessionDurationSeconds - this.elapsedTime);
+    const sessionDurationSeconds =
+      (this.isBreak ? this.breakDuration : this.sessionDuration) * 60;
+    const remainingTime = Math.max(
+      0,
+      sessionDurationSeconds - this.elapsedTime,
+    );
 
     return {
       state: this.state,

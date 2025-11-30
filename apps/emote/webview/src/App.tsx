@@ -68,7 +68,9 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
     case "addTask":
       return typeof payload.text === "string";
     case "updateTaskStatus":
-      return typeof payload.taskId === "string" && typeof payload.status === "string";
+      return (
+        typeof payload.taskId === "string" && typeof payload.status === "string"
+      );
     case "setActiveTask":
     case "removeTask":
       return typeof payload.taskId === "string";
@@ -87,14 +89,20 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
 export function App() {
   const persistedState = useMemo(
     () => (vscode?.getState() as PersistedState | undefined) ?? undefined,
-    []
+    [],
   );
-  const [controller, setController] = useState<CharacterController | null>(null);
-  const [theme, setTheme] = useState<RagdollTheme>(() => getThemeSafe(persistedState?.themeId));
+  const [controller, setController] = useState<CharacterController | null>(
+    null,
+  );
+  const [theme, setTheme] = useState<RagdollTheme>(() =>
+    getThemeSafe(persistedState?.themeId),
+  );
   const [bubbleState, setBubbleState] = useState<SpeechBubbleState>(
-    () => persistedState?.bubble ?? FALLBACK_BUBBLE
+    () => persistedState?.bubble ?? FALLBACK_BUBBLE,
   );
-  const [hasReceivedMessage, setHasReceivedMessage] = useState<boolean>(Boolean(persistedState));
+  const [hasReceivedMessage, setHasReceivedMessage] = useState<boolean>(
+    Boolean(persistedState),
+  );
 
   const controllerRef = useRef<CharacterController | null>(null);
 
@@ -131,7 +139,10 @@ export function App() {
           ctrl.clearAction();
           break;
         case "setHeadPose":
-          ctrl.setHeadPose({ yaw: message.yaw, pitch: message.pitch }, message.duration);
+          ctrl.setHeadPose(
+            { yaw: message.yaw, pitch: message.pitch },
+            message.duration,
+          );
           break;
         case "setSpeechBubble":
           setBubbleState({
@@ -162,7 +173,11 @@ export function App() {
           ctrl.addTask(message.text, message.status);
           break;
         case "updateTaskStatus":
-          ctrl.updateTaskStatus(message.taskId, message.status, message.blockedReason);
+          ctrl.updateTaskStatus(
+            message.taskId,
+            message.status,
+            message.blockedReason,
+          );
           break;
         case "setActiveTask":
           ctrl.setActiveTask(message.taskId);
@@ -299,12 +314,19 @@ export function App() {
         />
       </div>
       {controller && (
-        <PomodoroTimer controller={controller.getPomodoroController()} theme={theme} />
+        <PomodoroTimer
+          controller={controller.getPomodoroController()}
+          theme={theme}
+        />
       )}
       {controller && (
         <TaskDrawer controller={controller.getTaskController()} theme={theme} />
       )}
-      <SpeechBubble text={bubbleState.text} tone={bubbleState.tone} />
+      <SpeechBubble
+        text={bubbleState.text}
+        tone={bubbleState.tone}
+        theme={theme}
+      />
     </div>
   );
 }
@@ -328,7 +350,3 @@ const styles = {
     justifyContent: "center",
   },
 };
-
-
-
-
