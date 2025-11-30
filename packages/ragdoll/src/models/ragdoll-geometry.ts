@@ -1,4 +1,4 @@
-import type { FacialMood, FacialAction } from "../types";
+import type { FacialMood } from "../types";
 
 /**
  * Point interface for 2D coordinates
@@ -410,59 +410,6 @@ export class RagdollGeometry {
     }
   }
 
-  public getActionOverlay(
-    action: FacialAction | null,
-    elapsed: number,
-    currentExpression: ExpressionConfig,
-  ): Partial<ExpressionConfig> {
-    if (!action || action === "none") {
-      return {};
-    }
-
-    if (action === "wink") {
-      // Wink affects only the right eye (character's left from viewer)
-      const progress = Math.min(1, elapsed / 0.4);
-      // Quick close, slower open
-      const winkCurve =
-        progress < 0.3
-          ? Math.sin(((progress / 0.3) * Math.PI) / 2)
-          : Math.cos((((progress - 0.3) / 0.7) * Math.PI) / 2);
-
-      return {
-        rightEye: {
-          ...currentExpression.rightEye,
-          openness: 1 - winkCurve * 0.95,
-        },
-        // Slight cheek raise on winking side
-        cheekPuff: winkCurve * 0.2,
-      };
-    }
-
-    if (action === "talk") {
-      // Organic talking animation with varied mouth shapes
-      const baseFreq = 6;
-      const variation = Math.sin(elapsed * 1.7) * 0.3;
-      const cycle = Math.sin(elapsed * baseFreq + variation);
-      const cycle2 = Math.sin(elapsed * baseFreq * 1.3);
-
-      const openAmount = Math.abs(cycle) * 0.7 + Math.abs(cycle2) * 0.3;
-
-      return {
-        mouth: {
-          ...currentExpression.mouth,
-          upperLipBottom:
-            currentExpression.mouth.upperLipBottom + openAmount * 4,
-          lowerLipTop: currentExpression.mouth.lowerLipTop + openAmount * 10,
-          lowerLipBottom:
-            currentExpression.mouth.lowerLipBottom + openAmount * 6,
-          width:
-            currentExpression.mouth.width * (1 + Math.sin(elapsed * 4) * 0.08),
-        },
-      };
-    }
-
-    return {};
-  }
 
   /**
    * Generate SVG path for the face outline

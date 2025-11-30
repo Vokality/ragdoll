@@ -1,12 +1,7 @@
-import type { FacialAction, FacialMood } from "../types";
+import type { FacialMood } from "../types";
 import { RagdollGeometry } from "../models/ragdoll-geometry";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
-
-interface ActionState {
-  name: Exclude<FacialAction, "none">;
-  elapsed: number;
-  duration: number;
-}
+import { ActionController } from "./action-controller";
 
 export class ExpressionController {
   private geometry: RagdollGeometry;
@@ -16,10 +11,11 @@ export class ExpressionController {
   private currentExpression: ExpressionConfig;
   private transitionProgress = 1;
   private transitionDuration = 0.3;
-  private actionState: ActionState | null = null;
+  private actionController: ActionController;
 
-  constructor(geometry: RagdollGeometry) {
+  constructor(geometry: RagdollGeometry, actionController: ActionController) {
     this.geometry = geometry;
+    this.actionController = actionController;
     this.currentExpression = geometry.getExpressionForMood("neutral");
     this.targetExpression = geometry.getExpressionForMood("neutral");
     this.geometry.setExpression(this.currentExpression);
@@ -35,16 +31,8 @@ export class ExpressionController {
     this.transitionProgress = 0;
   }
 
-  public triggerAction(
-    action: Exclude<FacialAction, "none">,
-    duration: number = 0.6,
-  ): void {
-    const resolvedDuration = Math.max(0.2, duration);
-    this.actionState = { name: action, elapsed: 0, duration: resolvedDuration };
-  }
-
-  public clearAction(): void {
-    this.actionState = null;
+  public getActionController(): ActionController {
+    return this.actionController;
   }
 
   public update(deltaTime: number): void {
@@ -58,13 +46,8 @@ export class ExpressionController {
       this.interpolateExpression(t);
     }
 
-    // Update action state
-    if (this.actionState) {
-      this.actionState.elapsed += deltaTime;
-      if (this.actionState.elapsed >= this.actionState.duration) {
-        this.actionState = null;
-      }
-    }
+    // Update action controller (handles action state)
+    this.actionController.update(deltaTime);
 
     this.geometry.setExpression(this.currentExpression);
   }
@@ -73,24 +56,20 @@ export class ExpressionController {
     return this.currentMood;
   }
 
-  public getActiveAction(): FacialAction | null {
-    return this.actionState?.name ?? null;
+  public getActiveAction() {
+    return this.actionController.getActiveAction();
   }
 
   public isTalking(): boolean {
-    return this.actionState?.name === "talk";
+    return this.actionController.isTalking();
   }
 
   public getActionProgress(): number {
-    if (!this.actionState) {
-      return 0;
-    }
-
-    return Math.min(1, this.actionState.elapsed / this.actionState.duration);
+    return this.actionController.getActionProgress();
   }
 
   public getActionElapsed(): number {
-    return this.actionState?.elapsed ?? 0;
+    return this.actionController.getActionElapsed();
   }
 
   public getExpression(): ExpressionConfig {
@@ -101,13 +80,7 @@ export class ExpressionController {
    * Get the current expression with action overlay applied
    */
   public getExpressionWithAction(): ExpressionConfig {
-    if (!this.actionState) {
-      return this.currentExpression;
-    }
-
-    const overlay = this.geometry.getActionOverlay(
-      this.actionState.name,
-      this.actionState.elapsed,
+    const overlay = this.actionController.getExpressionOverlay(
       this.currentExpression,
     );
 

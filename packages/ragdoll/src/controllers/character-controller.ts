@@ -3,10 +3,14 @@ import { RagdollGeometry } from "../models/ragdoll-geometry";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
 import { ExpressionController } from "./expression-controller";
 import { HeadPoseController } from "./head-pose-controller";
+import { ActionController } from "./action-controller";
 import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
 import { PomodoroController } from "./pomodoro-controller";
 import { TaskController } from "./task-controller";
+import { StateManager } from "../state/state-manager";
+import { EventBus } from "../state/event-bus";
+import type { FeaturePlugin } from "../plugins/plugin-interface";
 import type {
   PomodoroStateData,
   PomodoroDuration,
@@ -30,6 +34,7 @@ import type {
 export class CharacterController {
   private skeleton: RagdollSkeleton;
   private geometry: RagdollGeometry;
+  private actionController: ActionController;
   private expressionController: ExpressionController;
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
@@ -40,17 +45,43 @@ export class CharacterController {
   private lastPomodoroState: PomodoroStateData | null = null;
   private lastReminderTime: number | null = null;
   private pomodoroUnsubscribe?: () => void;
-  private shakeState: { elapsed: number; duration: number } | null = null;
+  private stateManager: StateManager;
+  private eventBus: EventBus;
+  private plugins: Map<string, FeaturePlugin> = new Map();
 
   constructor(themeId?: string) {
     this.skeleton = new RagdollSkeleton();
     this.geometry = new RagdollGeometry();
     this.theme = themeId ? getTheme(themeId) : getDefaultTheme();
-    this.expressionController = new ExpressionController(this.geometry);
     this.headPoseController = new HeadPoseController(this.skeleton);
+    this.actionController = new ActionController(this.headPoseController);
+    this.expressionController = new ExpressionController(
+      this.geometry,
+      this.actionController,
+    );
     this.idleController = new IdleController();
     this.pomodoroController = new PomodoroController();
     this.taskController = new TaskController();
+
+    // Initialize state management
+    this.eventBus = new EventBus();
+    const joints: Record<JointName, { x: number; y: number; z: number }> = {
+      headPivot: { x: 0, y: 0, z: 0 },
+      neck: { x: 0, y: 0, z: 0 },
+    };
+    const initialState: CharacterState = {
+      headPose: { yaw: 0, pitch: 0 },
+      joints,
+      mood: "neutral",
+      action: null,
+      bubble: { text: null, tone: "default" },
+      animation: {
+        action: null,
+        actionProgress: 0,
+        isTalking: false,
+      },
+    };
+    this.stateManager = new StateManager(initialState, this.eventBus);
 
     // Set up pomodoro reminders
     this.pomodoroUnsubscribe = this.pomodoroController.onUpdate((state) => {
@@ -79,33 +110,29 @@ export class CharacterController {
   }
 
   public setMood(mood: FacialMood, duration?: number): void {
+    const previousMood = this.expressionController.getCurrentMood();
     this.expressionController.setMood(mood, duration);
+    this.stateManager.setMood(mood, previousMood);
   }
 
   public triggerAction(
     action: Exclude<FacialAction, "none">,
     duration?: number,
   ): void {
-    if (action === "shake") {
-      // Shake affects head pose, not expression
-      const shakeDuration = duration ?? 0.6;
-      this.shakeState = { elapsed: 0, duration: shakeDuration };
-    } else {
-      this.expressionController.triggerAction(action, duration);
-    }
+    this.actionController.triggerAction(action, duration);
+    this.stateManager.setAction(action, duration);
   }
 
   public clearAction(): void {
-    this.expressionController.clearAction();
-    this.shakeState = null;
-    // Return head to center when clearing shake
-    if (this.headPoseController.getPose().yaw !== 0) {
-      this.headPoseController.lookForward(0.2);
-    }
+    this.actionController.clearAction();
+    this.stateManager.setAction(null);
   }
 
   public setHeadPose(pose: Partial<HeadPose>, duration?: number): void {
     this.headPoseController.setTargetPose(pose, duration);
+    // Update state manager with current pose (will be updated in update loop)
+    const currentPose = this.headPoseController.getPose();
+    this.stateManager.setHeadPose(currentPose);
   }
 
   public nudgeHead(delta: Partial<HeadPose>, duration?: number): void {
@@ -117,18 +144,19 @@ export class CharacterController {
       text: payload.text,
       tone: payload.tone ?? "default",
     };
+    this.stateManager.setSpeechBubble(this.speechBubble);
 
     if (payload.text) {
       const duration = this.calculateTalkDuration(payload.text);
-      if (!this.expressionController.isTalking()) {
-        this.expressionController.triggerAction("talk", duration);
+      if (!this.actionController.isTalking()) {
+        this.actionController.triggerAction("talk", duration);
       } else {
         // Update duration if already talking (restart with new duration)
-        this.expressionController.triggerAction("talk", duration);
+        this.actionController.triggerAction("talk", duration);
       }
     } else {
-      if (this.expressionController.isTalking()) {
-        this.expressionController.clearAction();
+      if (this.actionController.isTalking()) {
+        this.actionController.clearAction();
       }
     }
   }
@@ -162,39 +190,30 @@ export class CharacterController {
   }
 
   public update(deltaTime: number): void {
-    // Update shake animation
-    if (this.shakeState) {
-      this.shakeState.elapsed += deltaTime;
-
-      if (this.shakeState.elapsed >= this.shakeState.duration) {
-        // Shake complete, return to center
-        this.shakeState = null;
-        this.headPoseController.lookForward(0.2);
-      } else {
-        // Oscillate head left-right during shake
-        const progress = this.shakeState.elapsed / this.shakeState.duration;
-        // Use a sine wave for smooth oscillation
-        const frequency = 3; // Number of shakes per duration
-        const amplitude = 0.6; // How far to shake (60% of max yaw in radians)
-        const MAX_YAW_RAD = (35 * Math.PI) / 180;
-        const yaw =
-          Math.sin(progress * frequency * Math.PI * 2) *
-          amplitude *
-          MAX_YAW_RAD;
-        // Apply easing to slow down at the end
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        const finalYaw = yaw * easeOut;
-        this.headPoseController.setTargetPose({ yaw: finalYaw }, 0.25); // Slower transition (increased from 0.05)
-      }
-    }
-
+    // Update action controller (handles shake and other actions)
+    this.actionController.update(deltaTime);
     this.expressionController.update(deltaTime);
     this.headPoseController.update(deltaTime);
     this.idleController.update(deltaTime);
     this.skeleton.update(deltaTime);
+
+    // Update plugins
+    for (const plugin of this.plugins.values()) {
+      if (plugin.update) {
+        plugin.update(deltaTime);
+      }
+    }
+
+    // Sync state manager with current controller states
+    const currentPose = this.headPoseController.getPose();
+    this.stateManager.setHeadPose(currentPose);
+    this.stateManager.setAction(this.actionController.getActiveAction());
+    this.stateManager.setActionProgress(this.actionController.getActionProgress());
+    this.stateManager.setIsTalking(this.actionController.isTalking());
   }
 
   public getState(): CharacterState {
+    // Update joints from skeleton
     const joints: Record<JointName, { x: number; y: number; z: number }> =
       {} as Record<JointName, { x: number; y: number; z: number }>;
     this.skeleton.skeleton.joints.forEach((_joint, name) => {
@@ -203,25 +222,17 @@ export class CharacterController {
         joints[name] = { x: 0, y: rotation, z: 0 };
       }
     });
+    this.stateManager.setJoints(joints);
 
-    return {
-      headPose: this.headPoseController.getPose(),
-      joints: joints as Record<JointName, { x: number; y: number; z: number }>,
-      mood: this.expressionController.getCurrentMood(),
-      action: this.shakeState
-        ? "shake"
-        : this.expressionController.getActiveAction(),
-      bubble: this.getSpeechBubble(),
-      animation: {
-        action: this.shakeState
-          ? "shake"
-          : this.expressionController.getActiveAction(),
-        actionProgress: this.shakeState
-          ? Math.min(1, this.shakeState.elapsed / this.shakeState.duration)
-          : this.expressionController.getActionProgress(),
-        isTalking: this.expressionController.isTalking(),
-      },
-    };
+    // Get state from StateManager (single source of truth)
+    return this.stateManager.getState();
+  }
+
+  /**
+   * Get the event bus for subscribing to state changes
+   */
+  public getEventBus(): EventBus {
+    return this.eventBus;
   }
 
   public getSpeechBubble(): SpeechBubbleState {
@@ -506,14 +517,55 @@ export class CharacterController {
   }
 
   /**
+   * Register a feature plugin
+   */
+  public registerPlugin(plugin: FeaturePlugin): void {
+    if (this.plugins.has(plugin.name)) {
+      console.warn(`Plugin ${plugin.name} is already registered`);
+      return;
+    }
+    this.plugins.set(plugin.name, plugin);
+    plugin.initialize(this);
+  }
+
+  /**
+   * Unregister a feature plugin
+   */
+  public unregisterPlugin(pluginName: string): void {
+    const plugin = this.plugins.get(pluginName);
+    if (plugin) {
+      if (plugin.destroy) {
+        plugin.destroy();
+      }
+      this.plugins.delete(pluginName);
+    }
+  }
+
+  /**
+   * Get a registered plugin by name
+   */
+  public getPlugin<T extends FeaturePlugin>(pluginName: string): T | undefined {
+    return this.plugins.get(pluginName) as T | undefined;
+  }
+
+  /**
    * Cleanup resources (timers, subscriptions)
    */
   public destroy(): void {
+    // Clean up pomodoro subscription
     if (this.pomodoroUnsubscribe) {
       this.pomodoroUnsubscribe();
       this.pomodoroUnsubscribe = undefined;
     }
     this.pomodoroController.destroy();
     this.idleController.reset();
+
+    // Destroy all plugins
+    for (const plugin of this.plugins.values()) {
+      if (plugin.destroy) {
+        plugin.destroy();
+      }
+    }
+    this.plugins.clear();
   }
 }
