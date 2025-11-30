@@ -410,7 +410,6 @@ export class RagdollGeometry {
     }
   }
 
-
   /**
    * Generate SVG path for the face outline
    */

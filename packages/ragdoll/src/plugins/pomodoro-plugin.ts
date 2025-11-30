@@ -31,4 +31,3 @@ export class PomodoroPlugin implements FeaturePlugin {
     return this.pomodoroController;
   }
 }
-

@@ -24,7 +24,6 @@ export class ActionController {
     this.headPoseController = headPoseController;
   }
 
-
   /**
    * Trigger an action
    */
@@ -178,4 +177,3 @@ export class ActionController {
     return {};
   }
 }
-

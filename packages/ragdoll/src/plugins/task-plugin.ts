@@ -31,4 +31,3 @@ export class TaskPlugin implements FeaturePlugin {
     return this.taskController;
   }
 }
-

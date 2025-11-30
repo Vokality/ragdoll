@@ -7,33 +7,39 @@ We've made Ragdoll fully testable by implementing key architectural patterns and
 ## ✅ Completed Improvements
 
 ### 1. Interface-Based Design
+
 - Created `IHeadPoseController` interface for dependency injection
 - `ActionController` now accepts interfaces instead of concrete classes
 - Easy to mock/stub for unit tests
 
 **Files Created:**
+
 - `packages/ragdoll/src/controllers/interfaces.ts`
 
 ### 2. Testing Utilities Package
 
 **Clock Abstraction** (`src/testing/clock.ts`):
+
 - `IClock` interface for time-dependent behavior
 - `SystemClock` for production use
 - `MockClock` for testing with full time control
 - Supports `setTimeout`, `setInterval`, time advancement
 
 **Test Builders** (`src/testing/builders.ts`):
+
 - `CharacterStateBuilder` - Fluent API for creating test states
 - `HeadPoseBuilder` - Build head poses in degrees or radians
 - `SpeechBubbleBuilder` - Build speech bubble states
 
 **Mocks** (`src/testing/mocks.ts`):
+
 - `MockHeadPoseController` - Lightweight mock with call tracking
 - `SpyEventBus` - EventBus that records all emitted events
 
 ### 3. Example Tests
 
 Created `src/testing/examples.test.ts` with 16 passing tests demonstrating:
+
 - Unit testing `ActionController` in isolation
 - Testing state synchronization with `StateManager` and `EventBus`
 - Using `MockClock` for time-dependent tests
@@ -43,6 +49,7 @@ Created `src/testing/examples.test.ts` with 16 passing tests demonstrating:
 ### 4. Package Exports
 
 Updated `package.json` to export testing utilities:
+
 ```json
 {
   "exports": {
@@ -63,61 +70,65 @@ Updated `package.json` to export testing utilities:
 ## Usage Examples
 
 ### Unit Test with Mocks
-```typescript
-import { ActionController } from '@vokality/ragdoll';
-import { MockHeadPoseController } from '@vokality/ragdoll/testing';
 
-test('should trigger shake action', () => {
+```typescript
+import { ActionController } from "@vokality/ragdoll";
+import { MockHeadPoseController } from "@vokality/ragdoll/testing";
+
+test("should trigger shake action", () => {
   const mockHeadPose = new MockHeadPoseController();
   const controller = new ActionController(mockHeadPose);
-  
-  controller.triggerAction('shake', 0.6);
-  
-  expect(controller.getActiveAction()).toBe('shake');
+
+  controller.triggerAction("shake", 0.6);
+
+  expect(controller.getActiveAction()).toBe("shake");
 });
 ```
 
 ### Time-Controlled Tests
-```typescript
-import { MockClock } from '@vokality/ragdoll/testing';
 
-test('should complete after duration', () => {
+```typescript
+import { MockClock } from "@vokality/ragdoll/testing";
+
+test("should complete after duration", () => {
   const clock = new MockClock();
   // ... use clock in controller
-  
+
   clock.advance(1000); // Advance 1 second
-  
+
   // Assert time-dependent behavior
 });
 ```
 
 ### Test Data Builders
-```typescript
-import { CharacterStateBuilder } from '@vokality/ragdoll/testing';
 
-test('should update state', () => {
+```typescript
+import { CharacterStateBuilder } from "@vokality/ragdoll/testing";
+
+test("should update state", () => {
   const state = new CharacterStateBuilder()
-    .withMood('smile')
-    .withAction('wink', 0.5)
-    .withSpeechBubble('Hello!', 'shout')
+    .withMood("smile")
+    .withAction("wink", 0.5)
+    .withSpeechBubble("Hello!", "shout")
     .build();
-  
+
   // Use state in test
 });
 ```
 
 ### Event Tracking
-```typescript
-import { SpyEventBus } from '@vokality/ragdoll/testing';
 
-test('should emit events', () => {
+```typescript
+import { SpyEventBus } from "@vokality/ragdoll/testing";
+
+test("should emit events", () => {
   const eventBus = new SpyEventBus();
   // ... use eventBus in StateManager
-  
+
   expect(eventBus.emittedEvents).toHaveLength(1);
   expect(eventBus.emittedEvents[0]).toMatchObject({
-    type: 'moodChanged',
-    mood: 'smile'
+    type: "moodChanged",
+    mood: "smile",
   });
 });
 ```
@@ -125,6 +136,7 @@ test('should emit events', () => {
 ## Architecture Benefits
 
 ### Before
+
 - ❌ Hard-coded dependencies
 - ❌ Difficult to test time-dependent behavior
 - ❌ Tight coupling to concrete classes
@@ -132,6 +144,7 @@ test('should emit events', () => {
 - ❌ Complex test setup
 
 ### After
+
 - ✅ Interface-based dependency injection
 - ✅ Mockable time via `IClock`
 - ✅ Loose coupling via interfaces
@@ -141,6 +154,7 @@ test('should emit events', () => {
 ## What's Ready for Testing
 
 ### Fully Testable Components
+
 - ✅ `ActionController` - All actions (shake, wink, talk)
 - ✅ `StateManager` - State updates and synchronization
 - ✅ `EventBus` - Event emission and subscription
@@ -148,6 +162,7 @@ test('should emit events', () => {
 - ✅ Action progress and completion
 
 ### Test Utilities Available
+
 - ✅ Mock controllers
 - ✅ Test data builders
 - ✅ Time control
@@ -192,4 +207,3 @@ For teams wanting to go further:
 5. **Production ready** - All tests passing, fully typed
 
 The architecture is now testable, maintainable, and ready for confident refactoring! 🎉
-

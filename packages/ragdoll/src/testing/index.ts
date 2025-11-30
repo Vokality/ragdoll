@@ -16,4 +16,3 @@ export {
 
 // Mock implementations
 export { MockHeadPoseController, SpyEventBus } from "./mocks";
-

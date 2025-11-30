@@ -11,7 +11,11 @@ import type {
  */
 export type StateEvent =
   | { type: "moodChanged"; mood: FacialMood; previousMood: FacialMood }
-  | { type: "actionTriggered"; action: Exclude<FacialAction, "none">; duration?: number }
+  | {
+      type: "actionTriggered";
+      action: Exclude<FacialAction, "none">;
+      duration?: number;
+    }
   | { type: "actionCleared" }
   | { type: "headPoseChanged"; pose: HeadPose }
   | { type: "speechBubbleChanged"; bubble: SpeechBubbleState }
@@ -29,4 +33,3 @@ export interface StateSnapshot {
   timestamp: number;
   state: CharacterState;
 }
-

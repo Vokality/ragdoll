@@ -208,7 +208,9 @@ export class CharacterController {
     const currentPose = this.headPoseController.getPose();
     this.stateManager.setHeadPose(currentPose);
     this.stateManager.setAction(this.actionController.getActiveAction());
-    this.stateManager.setActionProgress(this.actionController.getActionProgress());
+    this.stateManager.setActionProgress(
+      this.actionController.getActionProgress(),
+    );
     this.stateManager.setIsTalking(this.actionController.isTalking());
   }
 

@@ -11,7 +11,10 @@ import type { IHeadPoseController } from "../controllers/interfaces";
 export class MockHeadPoseController implements IHeadPoseController {
   private pose: HeadPose = { yaw: 0, pitch: 0 };
   private targetPose: HeadPose = { yaw: 0, pitch: 0 };
-  public setTargetPoseCalls: Array<{ pose: Partial<HeadPose>; duration?: number }> = [];
+  public setTargetPoseCalls: Array<{
+    pose: Partial<HeadPose>;
+    duration?: number;
+  }> = [];
   public lookForwardCalls: Array<{ duration?: number }> = [];
 
   setTargetPose(pose: Partial<HeadPose>, duration?: number): void {
@@ -76,4 +79,3 @@ export class SpyEventBus {
     this.subscribers.clear();
   }
 }
-

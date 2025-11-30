@@ -11,7 +11,11 @@ export class RagdollPanel {
   private disposables: vscode.Disposable[] = [];
   private isReady = false;
   private pendingMessages: ExtensionMessage[] = [];
-  private lastPomodoroState: { state: string; remainingTime: number; isBreak: boolean } | null = null;
+  private lastPomodoroState: {
+    state: string;
+    remainingTime: number;
+    isBreak: boolean;
+  } | null = null;
 
   public static createOrShow(extensionUri: vscode.Uri): RagdollPanel {
     const column = vscode.ViewColumn.Beside;
@@ -92,43 +96,56 @@ export class RagdollPanel {
             remainingTime: message.state.remainingTime,
             isBreak: message.state.isBreak,
           };
-          
+
           // Detect timer completion and show notification
           if (this.lastPomodoroState) {
             const prevState = this.lastPomodoroState.state;
             const prevRemaining = this.lastPomodoroState.remainingTime;
             const prevIsBreak = this.lastPomodoroState.isBreak;
-            
+
             // Timer completed: transition from running to idle (break completed)
-            if (prevState === "running" && prevIsBreak && newState.state === "idle") {
+            if (
+              prevState === "running" &&
+              prevIsBreak &&
+              newState.state === "idle"
+            ) {
               vscode.window.showInformationMessage(
                 "🍅 Pomodoro: Break's over! Time to get back to work! 💪",
-                { modal: false }
+                { modal: false },
               );
             }
             // Session completed: transition from running (session) to running (break)
-            else if (prevState === "running" && !prevIsBreak && newState.state === "running" && newState.isBreak) {
+            else if (
+              prevState === "running" &&
+              !prevIsBreak &&
+              newState.state === "running" &&
+              newState.isBreak
+            ) {
               vscode.window.showInformationMessage(
                 "🍅 Pomodoro: Focus session complete! Time for a break! ☕",
-                { modal: false }
+                { modal: false },
               );
             }
             // Timer reached zero while running (fallback detection)
-            else if (prevState === "running" && prevRemaining > 0 && newState.remainingTime === 0) {
+            else if (
+              prevState === "running" &&
+              prevRemaining > 0 &&
+              newState.remainingTime === 0
+            ) {
               if (prevIsBreak) {
                 vscode.window.showInformationMessage(
                   "🍅 Pomodoro: Break's over! Time to get back to work! 💪",
-                  { modal: false }
+                  { modal: false },
                 );
               } else {
                 vscode.window.showInformationMessage(
                   "🍅 Pomodoro: Focus session complete! Time for a break! ☕",
-                  { modal: false }
+                  { modal: false },
                 );
               }
             }
           }
-          
+
           // Store pomodoro state for MCP server access
           updatePomodoroState(newState);
           this.lastPomodoroState = newState;

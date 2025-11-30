@@ -1,4 +1,10 @@
-import type { CharacterState, FacialMood, FacialAction, HeadPose, SpeechBubbleState } from "../types";
+import type {
+  CharacterState,
+  FacialMood,
+  FacialAction,
+  HeadPose,
+  SpeechBubbleState,
+} from "../types";
 import { EventBus } from "./event-bus";
 
 /**
@@ -99,4 +105,3 @@ export class StateManager {
     this.currentState = { ...this.currentState, ...updates };
   }
 }
-
