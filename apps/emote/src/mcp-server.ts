@@ -52,7 +52,7 @@ type MoodId = (typeof VALID_MOODS)[number];
 type ActionId = (typeof VALID_ACTIONS)[number];
 type ToneId = (typeof VALID_TONES)[number];
 type ThemeId = (typeof VALID_THEMES)[number];
-type PomodoroDuration = 15 | 30 | 60 | 120;
+type PomodoroDuration = 5 | 15 | 30 | 60 | 120;
 type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
 
 const VALID_TASK_STATUSES: TaskStatus[] = [
