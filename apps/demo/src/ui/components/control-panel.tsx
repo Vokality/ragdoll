@@ -133,7 +133,7 @@ export function ControlPanel({ controller }: ControlPanelProps) {
   };
 
   const sessionDurations: PomodoroDuration[] = [15, 30, 60, 120];
-  const breakDurations: PomodoroDuration[] = [5, 10, 15, 30];
+  const breakDurations: PomodoroDuration[] = [5, 15, 30, 60];
 
   return (
     <>

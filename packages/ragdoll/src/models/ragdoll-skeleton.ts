@@ -46,8 +46,8 @@ export class RagdollSkeleton {
         current: 0,
         target: 0,
         velocity: 0,
-        stiffness: config.stiffness * 8,
-        damping: config.damping * 4,
+        stiffness: config.stiffness,
+        damping: config.damping,
         mass: config.mass,
       };
 
@@ -102,7 +102,9 @@ export class RagdollSkeleton {
   public update(deltaTime: number): void {
     this.jointAnimationStates.forEach((animState) => {
       const dt = Math.min(deltaTime, 0.05);
-      const smoothTime = 0.1 / animState.stiffness;
+      const stiffness = Math.max(0.05, animState.stiffness);
+      const dampingFactor = 1 + animState.damping;
+      const smoothTime = (0.12 / stiffness) * dampingFactor;
 
       // Critically damped spring for 2D
       const result = this.criticallyDampedSpring(

@@ -7,17 +7,15 @@ const MAX_PITCH = (20 * Math.PI) / 180;
 export class HeadPoseController {
   private skeleton: RagdollSkeleton;
   private currentPose: HeadPose = { yaw: 0, pitch: 0 };
-  private startPose: HeadPose = { yaw: 0, pitch: 0 };
   private targetPose: HeadPose = { yaw: 0, pitch: 0 };
+  private velocity: HeadPose = { yaw: 0, pitch: 0 };
   private transitionDuration = 0.35;
-  private elapsed = 0;
 
   constructor(skeleton: RagdollSkeleton) {
     this.skeleton = skeleton;
   }
 
   public setTargetPose(pose: Partial<HeadPose>, duration: number = 0.35): void {
-    this.startPose = { ...this.currentPose };
     this.targetPose = {
       yaw:
         pose.yaw !== undefined ? this.clampYaw(pose.yaw) : this.targetPose.yaw,
@@ -26,8 +24,7 @@ export class HeadPoseController {
           ? this.clampPitch(pose.pitch)
           : this.targetPose.pitch,
     };
-    this.transitionDuration = Math.max(0.05, duration);
-    this.elapsed = 0;
+    this.transitionDuration = Math.max(0.08, duration);
   }
 
   public nudge(delta: Partial<HeadPose>, duration: number = 0.25): void {
@@ -45,19 +42,27 @@ export class HeadPoseController {
   }
 
   public update(deltaTime: number): void {
-    if (this.elapsed < this.transitionDuration) {
-      this.elapsed += deltaTime;
-    }
-    const t =
-      this.transitionDuration === 0
-        ? 1
-        : Math.min(1, this.elapsed / this.transitionDuration);
-    const eased = this.easeOutQuad(t);
+    const dt = Math.min(deltaTime, 0.05);
+    const smoothTime = this.transitionDuration;
 
-    this.currentPose = {
-      yaw: this.lerp(this.startPose.yaw, this.targetPose.yaw, eased),
-      pitch: this.lerp(this.startPose.pitch, this.targetPose.pitch, eased),
-    };
+    const yawResult = this.criticallyDampedSpring(
+      this.currentPose.yaw,
+      this.targetPose.yaw,
+      this.velocity.yaw,
+      smoothTime,
+      dt,
+    );
+
+    const pitchResult = this.criticallyDampedSpring(
+      this.currentPose.pitch,
+      this.targetPose.pitch,
+      this.velocity.pitch,
+      smoothTime,
+      dt,
+    );
+
+    this.currentPose = { yaw: yawResult.value, pitch: pitchResult.value };
+    this.velocity = { yaw: yawResult.velocity, pitch: pitchResult.velocity };
 
     this.applyPose(this.currentPose);
   }
@@ -79,11 +84,23 @@ export class HeadPoseController {
     return Math.max(-MAX_PITCH, Math.min(MAX_PITCH, value));
   }
 
-  private lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
-  }
+  private criticallyDampedSpring(
+    current: number,
+    target: number,
+    velocity: number,
+    smoothTime: number,
+    deltaTime: number,
+  ): { value: number; velocity: number } {
+    const safeSmooth = Math.max(0.08, smoothTime);
+    const omega = 2 / safeSmooth;
+    const x = omega * deltaTime;
+    const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
 
-  private easeOutQuad(t: number): number {
-    return 1 - (1 - t) * (1 - t);
+    const change = current - target;
+    const temp = (velocity + omega * change) * deltaTime;
+    const newVelocity = (velocity - omega * temp) * exp;
+    const newValue = target + (change + temp) * exp;
+
+    return { value: newValue, velocity: newVelocity };
   }
 }

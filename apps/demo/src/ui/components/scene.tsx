@@ -38,7 +38,10 @@ export function Scene({ onControllerReady, theme }: SceneProps) {
         theme={theme}
       />
       {controller && (
-        <PomodoroTimer controller={controller.getPomodoroController()} />
+        <PomodoroTimer
+          controller={controller.getPomodoroController()}
+          theme={theme}
+        />
       )}
     </div>
   );

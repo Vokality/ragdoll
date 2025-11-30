@@ -129,7 +129,11 @@ function App() {
       <div className="scanlines" />
 
       <Scene onControllerReady={handleControllerReady} theme={theme} />
-      <SpeechBubble text={bubbleState.text} tone={bubbleState.tone} />
+      <SpeechBubble
+        text={bubbleState.text}
+        tone={bubbleState.tone}
+        theme={theme}
+      />
       <ControlPanel controller={controller} />
 
       {/* Theme selector */}

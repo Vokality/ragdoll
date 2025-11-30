@@ -155,6 +155,9 @@ interface RenderData {
     ReturnType<CharacterController["getGeometry"]>["getMouthPath"]
   >;
   currentTheme: RagdollTheme;
+  breathingOffsetY: number;
+  breathingScale: number;
+  headRollDeg: number;
 }
 
 function computeRenderData(
@@ -180,6 +183,9 @@ function computeRenderData(
   const yawWithIdle = headPose.yaw + (idleState.headMicroX * Math.PI) / 180;
   const pitchWithIdle = headPose.pitch + (idleState.headMicroY * Math.PI) / 180;
   const ht = calculateHeadTransforms(yawWithIdle, pitchWithIdle);
+  const breathingOffsetY = -idleState.breathAmount * dims.headHeight * 0.8;
+  const breathingScale = 1 + idleState.breathAmount * 2.5;
+  const headRollDeg = ht.yaw * 4 + ht.pitch * -3;
 
   return {
     dims,
@@ -198,6 +204,9 @@ function computeRenderData(
     rightEyebrowPath: geometry.getEyebrowPath(false, expression.rightEyebrow),
     mouthPaths: geometry.getMouthPath(expression.mouth),
     currentTheme: theme || controller.getTheme(),
+    breathingOffsetY,
+    breathingScale,
+    headRollDeg,
   };
 }
 
@@ -208,7 +217,8 @@ export function RagdollCharacter({
 }: RagdollCharacterProps) {
   // Create controller once and store in state (not ref) so it's safe to read during render
   const [controller] = useState(() => new CharacterController(theme?.id));
-  const lastTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   // Store all render data in state to avoid accessing refs during render
   const [renderData, setRenderData] = useState<RenderData>(() =>
@@ -230,19 +240,29 @@ export function RagdollCharacter({
 
   // Update animations at 60fps
   useEffect(() => {
-    // Initialize lastTime on mount
-    lastTimeRef.current = Date.now();
+    let isMounted = true;
+    lastTimeRef.current = performance.now();
 
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const deltaTime = (now - lastTimeRef.current) / 1000;
+    const tick = (now: number) => {
+      if (!isMounted || lastTimeRef.current === null) return;
+
+      const deltaTime = Math.min((now - lastTimeRef.current) / 1000, 0.05);
       lastTimeRef.current = now;
-      controller.update(deltaTime);
-      // Update render data in state
-      setRenderData(computeRenderData(controller, theme));
-    }, 16);
 
-    return () => clearInterval(interval);
+      controller.update(deltaTime);
+      setRenderData(computeRenderData(controller, theme));
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      isMounted = false;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
   }, [controller, theme]);
 
   // Cleanup owned controller when unmounting
@@ -273,10 +293,14 @@ export function RagdollCharacter({
     rightEyebrowPath,
     mouthPaths,
     currentTheme,
+    breathingOffsetY,
+    breathingScale,
+    headRollDeg,
   } = renderData;
 
   // Helper to generate gradient URL with theme prefix
   const g = (name: string) => `url(#${currentTheme.id}-${name})`;
+  const rootTransform = `translate(0 ${breathingOffsetY}) scale(${breathingScale}) rotate(${headRollDeg})`;
 
   return (
     <svg
@@ -292,6 +316,7 @@ export function RagdollCharacter({
     >
       {renderGradients(currentTheme)}
 
+      <g transform={rootTransform}>
       {/* Left Ear (behind face) - visibility changes with yaw */}
       <g
         transform={`translate(${ht.yaw * 5}, 0) scale(${ht.leftEarScale}, 1)`}
@@ -537,6 +562,7 @@ export function RagdollCharacter({
           ry={10}
           fill="rgba(100,70,50,0.3)"
         />
+      </g>
       </g>
     </svg>
   );
