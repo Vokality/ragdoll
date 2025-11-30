@@ -8,17 +8,110 @@ interface TaskDrawerProps {
   theme?: RagdollTheme;
 }
 
+interface TaskColors {
+  text: string;
+  muted: string;
+  accent: string;
+  blocked: string;
+  done: string;
+  border: string;
+  background: string;
+  glow: string;
+}
+
+// Gesture tracking
+interface DragState {
+  isDragging: boolean;
+  startX: number;
+  currentX: number;
+  startTime: number;
+}
+
+const SWIPE_THRESHOLD = 50; // px
+const VELOCITY_THRESHOLD = 0.5; // px/ms
+const MAX_PEEK_CARDS = 3;
+
 /**
- * Animated status icon component with pulse effect for blocked
+ * Get card style based on position in stack
+ */
+function getCardStyle(
+  index: number,
+  currentIndex: number,
+  dragOffset: number = 0,
+  isDragging: boolean = false,
+): React.CSSProperties {
+  const distance = index - currentIndex;
+
+  // Cards behind current (already viewed)
+  if (distance < 0) {
+    return {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      opacity: 0,
+      pointerEvents: "none",
+      transform: "translateX(-100%) scale(0.8)",
+    };
+  }
+
+  // Cards too far ahead
+  if (distance > MAX_PEEK_CARDS) {
+    return {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      opacity: 0,
+      pointerEvents: "none",
+    };
+  }
+
+  // Current card
+  if (distance === 0) {
+    const dragTransform = isDragging ? `translateX(${dragOffset * 0.3}px)` : "";
+    return {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 50,
+      transform: `${dragTransform} scale(1) translateY(0px)`,
+      opacity: 1,
+      transition: isDragging ? "none" : "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      pointerEvents: "auto",
+    };
+  }
+
+  // Peek cards
+  const yOffset = distance * 4;
+  const scale = 1 - distance * 0.05;
+  const opacity = 0.6 + (1 - distance * 0.2);
+
+  return {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50 - distance * 10,
+    transform: `translateY(-${yOffset}px) scale(${scale})`,
+    opacity,
+    transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+    pointerEvents: "none",
+  };
+}
+
+/**
+ * Status icon component
  */
 function StatusIcon({
   status,
   color,
-  animate = false,
+  size = 16,
 }: {
   status: TaskStatus;
   color: string;
-  animate?: boolean;
+  size?: number;
 }) {
   const pulseStyle: React.CSSProperties =
     status === "blocked"
@@ -31,63 +124,38 @@ function StatusIcon({
     case "todo":
       return (
         <svg
-          width="14"
-          height="14"
+          width={size}
+          height={size}
           viewBox="0 0 14 14"
           fill="none"
           style={{ transition: "all 0.3s ease", ...pulseStyle }}
         >
-          <circle
-            cx="7"
-            cy="7"
-            r="5.5"
-            stroke={color}
-            strokeWidth="1.5"
-            style={{ transition: "stroke 0.3s ease" }}
-          />
+          <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" />
         </svg>
       );
     case "in_progress":
       return (
         <svg
-          width="14"
-          height="14"
+          width={size}
+          height={size}
           viewBox="0 0 14 14"
           fill="none"
           style={{ transition: "all 0.3s ease" }}
         >
-          <circle
-            cx="7"
-            cy="7"
-            r="6"
-            fill={color}
-            fillOpacity="0.15"
-            style={{ transition: "all 0.3s ease" }}
-          />
-          <path
-            d="M5 4L10 7L5 10V4Z"
-            fill={color}
-            style={{ transition: "fill 0.3s ease" }}
-          />
+          <circle cx="7" cy="7" r="6" fill={color} fillOpacity="0.15" />
+          <path d="M5 4L10 7L5 10V4Z" fill={color} />
         </svg>
       );
     case "blocked":
       return (
         <svg
-          width="14"
-          height="14"
+          width={size}
+          height={size}
           viewBox="0 0 14 14"
           fill="none"
           style={{ transition: "all 0.3s ease", ...pulseStyle }}
         >
-          <circle
-            cx="7"
-            cy="7"
-            r="5.5"
-            stroke={color}
-            strokeWidth="1.5"
-            style={{ transition: "stroke 0.3s ease" }}
-          />
+          <circle cx="7" cy="7" r="5.5" stroke={color} strokeWidth="1.5" />
           <line
             x1="4"
             y1="7"
@@ -102,30 +170,19 @@ function StatusIcon({
     case "done":
       return (
         <svg
-          width="14"
-          height="14"
+          width={size}
+          height={size}
           viewBox="0 0 14 14"
           fill="none"
           style={{ transition: "all 0.3s ease" }}
         >
-          <circle
-            cx="7"
-            cy="7"
-            r="6"
-            fill={color}
-            style={{ transition: "fill 0.3s ease" }}
-          />
+          <circle cx="7" cy="7" r="6" fill={color} />
           <path
             d="M4 7L6 9L10 5"
             stroke="white"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{
-              strokeDasharray: animate ? 12 : 0,
-              strokeDashoffset: animate ? 0 : 0,
-              transition: "stroke-dashoffset 0.4s ease",
-            }}
           />
         </svg>
       );
@@ -133,120 +190,96 @@ function StatusIcon({
 }
 
 /**
- * Animated chevron icon for drawer handle
+ * Single task card
  */
-function ChevronIcon({
-  isExpanded,
-  color,
-}: {
-  isExpanded: boolean;
-  color: string;
-}) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      style={{
-        transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
-        transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-      }}
-    >
-      <path
-        d="M4 6L8 10L12 6"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/**
- * Single task item row with staggered animation
- */
-function TaskItem({
+function TaskCard({
   task,
-  isActive,
   colors,
-  index,
-  isVisible,
+  style,
+  isActive,
+  onPointerDown,
 }: {
   task: Task;
-  isActive: boolean;
   colors: TaskColors;
-  index: number;
-  isVisible: boolean;
+  style: React.CSSProperties;
+  isActive: boolean;
+  onPointerDown?: (e: React.PointerEvent) => void;
 }) {
   const statusColor = getStatusColor(task.status, colors);
-  const isDone = task.status === "done";
   const isBlocked = task.status === "blocked";
+  const isDone = task.status === "done";
+  const isInProgress = task.status === "in_progress";
+
+  // Enhanced styles for priority
+  const cardBorder = isBlocked
+    ? `1px solid ${colors.blocked}`
+    : isDone
+      ? `0.5px solid ${colors.border}`
+      : isInProgress && isActive
+        ? `1px solid ${colors.accent}`
+        : `0.5px solid ${colors.border}`;
+
+  const cardGlow = isInProgress && isActive ? `0 0 12px 0 ${colors.glow}15` : "none";
+
+  const cardFilter = isDone ? "saturate(0.5)" : "none";
 
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        padding: "10px 0",
-        opacity: isVisible ? (isDone ? 0.5 : isActive ? 1 : 0.75) : 0,
-        transform: isVisible ? "translateY(0)" : "translateY(-8px)",
-        transition: `
-          opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1) ${index * 50}ms,
-          transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) ${index * 50}ms
-        `,
+        ...style,
+        borderRadius: "10px",
+        border: cardBorder,
+        backgroundColor: colors.background,
+        boxShadow: cardGlow,
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        padding: "12px 14px",
+        minHeight: "70px",
+        filter: cardFilter,
+        cursor: isActive ? "grab" : "default",
       }}
+      onPointerDown={onPointerDown}
     >
-      <div
-        style={{
-          flexShrink: 0,
-          animation: isBlocked ? "pulse 2s ease-in-out infinite" : undefined,
-        }}
-      >
-        <StatusIcon status={task.status} color={statusColor} />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+        <div style={{ flexShrink: 0, marginTop: "1px" }}>
+          <StatusIcon
+            status={task.status}
+            color={statusColor}
+            size={isBlocked ? 15 : 13}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              fontSize: isActive && isInProgress ? "14px" : "13px",
+              fontWeight: isActive ? 500 : 400,
+              color: colors.text,
+              lineHeight: 1.4,
+              marginBottom: "2px",
+              transition: "all 0.3s ease",
+            }}
+          >
+            {task.text}
+          </div>
+          {isBlocked && task.blockedReason && (
+            <div
+              style={{
+                fontSize: "11px",
+                color: colors.blocked,
+                marginTop: "6px",
+                padding: "4px 8px",
+                backgroundColor: `${colors.blocked}15`,
+                borderRadius: "4px",
+                borderLeft: `2px solid ${colors.blocked}`,
+              }}
+            >
+              {task.blockedReason}
+            </div>
+          )}
+        </div>
       </div>
-      <span
-        style={{
-          flex: 1,
-          fontSize: "13px",
-          color: colors.text,
-          textDecoration: isDone ? "line-through" : "none",
-          fontWeight: isActive ? 600 : 400,
-          transition: "all 0.3s ease",
-        }}
-      >
-        {task.text}
-      </span>
-      {isBlocked && task.blockedReason && (
-        <span
-          style={{
-            fontSize: "10px",
-            color: colors.blocked,
-            opacity: 0.8,
-            maxWidth: "80px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {task.blockedReason}
-        </span>
-      )}
     </div>
   );
-}
-
-interface TaskColors {
-  text: string;
-  muted: string;
-  accent: string;
-  blocked: string;
-  done: string;
-  border: string;
-  background: string;
-  glow: string;
 }
 
 function getStatusColor(status: TaskStatus, colors: TaskColors): string {
@@ -263,31 +296,170 @@ function getStatusColor(status: TaskStatus, colors: TaskColors): string {
 }
 
 /**
- * Task drawer component with beautiful animations
+ * Stacked card task drawer with gestures, keyboard nav, and search
  */
 export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
   const [state, setState] = useState<TaskState>(controller.getState());
-  const prevExpandedRef = useRef(state.isExpanded);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [dragState, setDragState] = useState<DragState>({
+    isDragging: false,
+    startX: 0,
+    currentX: 0,
+    startTime: 0,
+  });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const unsubscribe = controller.onUpdate((newState) => {
-      prevExpandedRef.current = newState.isExpanded;
       setState(newState);
     });
     setState(controller.getState());
     return unsubscribe;
   }, [controller]);
 
-  const handleToggle = useCallback(() => {
-    controller.toggle();
-  }, [controller]);
+  // Filter tasks
+  const filteredTasks = state.tasks.filter((task) => {
+    // Auto-hide completed unless toggled
+    if (!showCompleted && task.status === "done") return false;
+
+    // Search query
+    if (searchQuery) {
+      return task.text.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+
+    return true;
+  });
+
+  // Reset card index if needed
+  useEffect(() => {
+    if (currentCardIndex >= filteredTasks.length && filteredTasks.length > 0) {
+      setCurrentCardIndex(0);
+    }
+  }, [filteredTasks.length, currentCardIndex]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if typing in search
+      if (document.activeElement === searchInputRef.current) {
+        if (e.key === "Escape") {
+          setSearchQuery("");
+          searchInputRef.current?.blur();
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case "ArrowRight":
+          e.preventDefault();
+          setCurrentCardIndex((prev) =>
+            Math.min(prev + 1, filteredTasks.length - 1),
+          );
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          setCurrentCardIndex((prev) => Math.max(prev - 1, 0));
+          break;
+        case "Home":
+          e.preventDefault();
+          setCurrentCardIndex(0);
+          break;
+        case "End":
+          e.preventDefault();
+          setCurrentCardIndex(filteredTasks.length - 1);
+          break;
+        case "/":
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          break;
+        case "Escape":
+          setSearchQuery("");
+          break;
+        default:
+          // Number keys 1-9
+          if (e.key >= "1" && e.key <= "9") {
+            const index = parseInt(e.key) - 1;
+            if (index < filteredTasks.length) {
+              e.preventDefault();
+              setCurrentCardIndex(index);
+            }
+          }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [filteredTasks.length]);
+
+  // Gesture handlers
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    setDragState({
+      isDragging: true,
+      startX: e.clientX,
+      currentX: e.clientX,
+      startTime: Date.now(),
+    });
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragState.isDragging) return;
+
+      setDragState((prev) => ({
+        ...prev,
+        currentX: e.clientX,
+      }));
+    },
+    [dragState.isDragging],
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragState.isDragging) return;
+
+      const deltaX = dragState.currentX - dragState.startX;
+      const deltaTime = Date.now() - dragState.startTime;
+      const velocity = Math.abs(deltaX) / deltaTime;
+
+      // Determine if swipe occurred
+      if (
+        Math.abs(deltaX) > SWIPE_THRESHOLD ||
+        velocity > VELOCITY_THRESHOLD
+      ) {
+        if (deltaX < 0) {
+          // Swipe left - next card
+          setCurrentCardIndex((prev) =>
+            Math.min(prev + 1, filteredTasks.length - 1),
+          );
+        } else {
+          // Swipe right - previous card
+          setCurrentCardIndex((prev) => Math.max(prev - 1, 0));
+        }
+      }
+
+      setDragState({
+        isDragging: false,
+        startX: 0,
+        currentX: 0,
+        startTime: 0,
+      });
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    },
+    [dragState, filteredTasks.length],
+  );
+
 
   // Don't render if no tasks
   if (state.tasks.length === 0) {
     return null;
   }
 
-  // Theme-aware colors with glow
+  // Theme-aware colors
   const colors: TaskColors = {
     text: theme?.colors.hair.light ?? "#f1f5f9",
     muted: theme?.colors.skin.dark ?? "#94a3b8",
@@ -299,149 +471,179 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
     glow: theme?.colors.eyes.iris ?? "#5a9bc4",
   };
 
-  const activeTask = state.tasks.find((t) => t.id === state.activeTaskId);
-  const otherTasks = state.tasks.filter((t) => t.id !== state.activeTaskId);
-  const totalTasks = state.tasks.length;
-  const completedTasks = state.tasks.filter((t) => t.status === "done").length;
-  const progress = `${completedTasks}/${totalTasks}`;
+  const dragOffset = dragState.isDragging
+    ? dragState.currentX - dragState.startX
+    : 0;
+
+  const hiddenCompletedCount = state.tasks.filter(
+    (t) => t.status === "done" && !showCompleted,
+  ).length;
+
+  const currentTask = filteredTasks[currentCardIndex];
 
   return (
-    <div style={styles.container}>
-      {/* CSS for pulse animation */}
+    <div style={styles.container} ref={containerRef}>
+      {/* CSS animations */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
         }
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateY(-10px); }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(90, 155, 196, 0); }
-          50% { box-shadow: 0 0 12px 2px rgba(90, 155, 196, 0.15); }
         }
       `}</style>
 
-      {/* Main card */}
-      <div
-        style={{
-          ...styles.card,
-          borderColor: colors.border,
-          backgroundColor: colors.background,
-          boxShadow: activeTask ? `0 0 20px 0 ${colors.glow}15` : "none",
-          transition: "box-shadow 0.5s ease, transform 0.3s ease",
-        }}
-      >
-        {/* Active task section */}
-        {activeTask ? (
-          <div style={styles.activeSection}>
-            <div style={styles.activeHeader}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
-                <StatusIcon status="in_progress" color={colors.accent} />
-                <span
-                  style={{
-                    ...styles.statusLabel,
-                    color: colors.accent,
-                    animation: "glow 3s ease-in-out infinite",
-                  }}
-                >
-                  IN PROGRESS
-                </span>
-              </div>
-            </div>
-            <div
-              style={{
-                ...styles.activeText,
-                color: colors.text,
-                animation: "slideIn 0.4s ease",
-              }}
-            >
-              {activeTask.text}
-            </div>
-            {/* Progress indicator */}
-            <div
-              style={{
-                ...styles.progressBar,
-                backgroundColor: `${colors.accent}20`,
-                marginTop: "12px",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${(completedTasks / totalTasks) * 100}%`,
-                  backgroundColor: colors.accent,
-                  borderRadius: "2px",
-                  transition: "width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div style={styles.activeSection}>
-            <div style={{ ...styles.noActiveText, color: colors.muted }}>
-              No active task
-            </div>
-          </div>
-        )}
-
-        {/* Drawer handle */}
-        {otherTasks.length > 0 && (
-          <button
-            onClick={handleToggle}
-            style={{
-              ...styles.handle,
-              borderTopColor: colors.border,
-            }}
-            aria-label={state.isExpanded ? "Collapse tasks" : "Expand tasks"}
+      {/* Search bar */}
+      <div style={styles.searchBar}>
+        <div style={styles.searchInputWrapper}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            style={{ flexShrink: 0 }}
           >
-            <span
+            <circle
+              cx="6"
+              cy="6"
+              r="4"
+              stroke={colors.muted}
+              strokeWidth="1.5"
+            />
+            <path
+              d="M9 9L12 12"
+              stroke={colors.muted}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search tasks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              ...styles.searchInput,
+              color: colors.text,
+              borderColor: colors.border,
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
               style={{
-                ...styles.handleText,
+                ...styles.clearButton,
                 color: colors.muted,
-                transition: "color 0.2s ease",
               }}
+              aria-label="Clear search"
             >
-              {progress}
-            </span>
-            <ChevronIcon isExpanded={state.isExpanded} color={colors.muted} />
-          </button>
-        )}
-
-        {/* Expanded task list with staggered animations */}
-        <div
-          style={{
-            ...styles.expandedSection,
-            maxHeight: state.isExpanded
-              ? `${otherTasks.length * 44 + 20}px`
-              : "0px",
-            opacity: state.isExpanded ? 1 : 0,
-            borderTopColor: colors.border,
-            borderTopWidth:
-              state.isExpanded && otherTasks.length > 0 ? "1px" : "0px",
-          }}
-        >
-          <div style={styles.taskList}>
-            {otherTasks.map((task, index) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                isActive={false}
-                colors={colors}
-                index={index}
-                isVisible={state.isExpanded}
-              />
-            ))}
-          </div>
+              ✕
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Card stack */}
+      <div
+        style={styles.cardStack}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        {filteredTasks.length === 0 ? (
+          <div
+            style={{
+              ...styles.emptyState,
+              color: colors.muted,
+              borderColor: colors.border,
+            }}
+          >
+            {searchQuery ? "No matching tasks" : "All tasks completed!"}
+          </div>
+        ) : (
+          <>
+            {filteredTasks.map((task, index) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                colors={colors}
+                style={getCardStyle(
+                  index,
+                  currentCardIndex,
+                  dragOffset,
+                  dragState.isDragging && index === currentCardIndex,
+                )}
+                isActive={index === currentCardIndex}
+                onPointerDown={
+                  index === currentCardIndex ? handlePointerDown : undefined
+                }
+              />
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Card navigation indicator */}
+      {filteredTasks.length > 1 && (
+        <div style={styles.navIndicator}>
+          <span style={{ ...styles.navText, color: colors.muted }}>
+            {currentCardIndex + 1} / {filteredTasks.length}
+          </span>
+          <div style={styles.navDots}>
+            {filteredTasks.slice(0, 5).map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentCardIndex(index)}
+                style={{
+                  ...styles.navDot,
+                  backgroundColor:
+                    index === currentCardIndex ? colors.accent : colors.border,
+                  width: index === currentCardIndex ? "16px" : "6px",
+                }}
+                aria-label={`Go to task ${index + 1}`}
+              />
+            ))}
+            {filteredTasks.length > 5 && (
+              <span style={{ ...styles.navText, color: colors.muted }}>
+                +{filteredTasks.length - 5}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Show completed toggle */}
+      {hiddenCompletedCount > 0 && (
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          style={{
+            ...styles.toggleCompleted,
+            color: colors.muted,
+            borderColor: colors.border,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="6" fill={colors.done} />
+            <path
+              d="M4 7L6 9L10 5"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {showCompleted ? "Hide" : "Show"} {hiddenCompletedCount} completed
+        </button>
+      )}
+
+      {/* Keyboard hints */}
+      {currentTask && (
+        <div style={{ ...styles.keyboardHint, color: colors.muted }}>
+          ← → Navigate • / Search • 1-{Math.min(9, filteredTasks.length)} Jump
+        </div>
+      )}
     </div>
   );
 }
@@ -453,74 +655,104 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     marginTop: "12px",
     width: "100%",
-    maxWidth: "280px",
+    maxWidth: "300px",
+    gap: "10px",
   },
-  card: {
+  searchBar: {
     width: "100%",
-    borderRadius: "14px",
-    border: "1px solid",
-    overflow: "hidden",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
   },
-  activeSection: {
-    padding: "16px 18px",
-  },
-  activeHeader: {
+  searchInputWrapper: {
+    flex: 1,
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "8px",
+    gap: "6px",
+    padding: "4px 8px",
+    borderRadius: "6px",
+    border: "0.5px solid",
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
   },
-  statusLabel: {
-    fontSize: "10px",
-    fontWeight: 700,
-    letterSpacing: "0.8px",
-    textTransform: "uppercase",
-  },
-  activeText: {
-    fontSize: "15px",
-    fontWeight: 600,
-    lineHeight: 1.5,
-  },
-  noActiveText: {
-    fontSize: "13px",
-    fontStyle: "italic",
-    textAlign: "center",
-    padding: "8px 0",
-  },
-  progressBar: {
-    height: "3px",
-    borderRadius: "2px",
-    overflow: "hidden",
-  },
-  handle: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: "8px",
-    width: "100%",
-    padding: "10px 18px",
-    background: "transparent",
+  searchInput: {
+    flex: 1,
+    background: "none",
     border: "none",
-    borderTop: "1px solid",
-    cursor: "pointer",
-    transition: "background 0.2s ease, opacity 0.2s ease",
-  },
-  handleText: {
+    outline: "none",
     fontSize: "11px",
-    fontWeight: 600,
-    letterSpacing: "0.3px",
+    fontFamily: "inherit",
   },
-  expandedSection: {
-    overflow: "hidden",
-    transition: `
-      max-height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
-      opacity 0.3s ease
-    `,
-    borderTopStyle: "solid",
+  clearButton: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "2px 4px",
+    fontSize: "12px",
+    opacity: 0.7,
+    transition: "opacity 0.2s ease",
   },
-  taskList: {
-    padding: "6px 18px 12px",
+  cardStack: {
+    position: "relative",
+    width: "100%",
+    height: "120px",
+    touchAction: "none",
+  },
+  emptyState: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    textAlign: "center",
+    fontSize: "12px",
+    fontStyle: "italic",
+    padding: "16px",
+    border: "0.5px dashed",
+    borderRadius: "10px",
+    width: "80%",
+  },
+  navIndicator: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "4px 10px",
+    borderRadius: "10px",
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+  },
+  navText: {
+    fontSize: "10px",
+    fontWeight: 500,
+    letterSpacing: "0.2px",
+  },
+  navDots: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  navDot: {
+    width: "6px",
+    height: "6px",
+    borderRadius: "3px",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+    transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+  },
+  toggleCompleted: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    padding: "4px 10px",
+    fontSize: "10px",
+    background: "transparent",
+    border: "0.5px solid",
+    borderRadius: "6px",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    fontFamily: "inherit",
+  },
+  keyboardHint: {
+    fontSize: "9px",
+    textAlign: "center",
+    opacity: 0.4,
+    marginTop: "2px",
   },
 };

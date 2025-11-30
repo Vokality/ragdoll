@@ -270,3 +270,6 @@ describe("PomodoroPlugin", () => {
 - ✅ Better refactoring confidence
 - ✅ Documentation through tests
 - ✅ Easier debugging
+
+
+
