@@ -407,13 +407,15 @@ export function RagdollCharacter({
             cx={leftIris.cx - 2}
             cy={leftIris.cy - 2}
             r={leftIris.pupilR * 0.6}
-            fill="rgba(255,255,255,0.8)"
+            fill={currentTheme.colors.highlight}
+            opacity={0.8}
           />
           <circle
             cx={leftIris.cx + 3}
             cy={leftIris.cy + 1}
             r={leftIris.pupilR * 0.3}
-            fill="rgba(255,255,255,0.4)"
+            fill={currentTheme.colors.highlight}
+            opacity={0.4}
           />
 
           {/* Upper eyelid */}
@@ -462,13 +464,15 @@ export function RagdollCharacter({
             cx={rightIris.cx - 2}
             cy={rightIris.cy - 2}
             r={rightIris.pupilR * 0.6}
-            fill="rgba(255,255,255,0.8)"
+            fill={currentTheme.colors.highlight}
+            opacity={0.8}
           />
           <circle
             cx={rightIris.cx + 3}
             cy={rightIris.cy + 1}
             r={rightIris.pupilR * 0.3}
-            fill="rgba(255,255,255,0.4)"
+            fill={currentTheme.colors.highlight}
+            opacity={0.4}
           />
 
           {/* Upper eyelid */}
@@ -499,7 +503,7 @@ export function RagdollCharacter({
           <path
             d={nosePath}
             fill="none"
-            stroke={currentTheme.colors.shadow.color.replace("0.3", "0.5")}
+            stroke={adjustOpacity(currentTheme.colors.shadow.color, 0.5)}
             strokeWidth={1.5}
             strokeLinecap="round"
           />
@@ -509,7 +513,8 @@ export function RagdollCharacter({
             cy={dims.noseY + dims.noseHeight * 0.3}
             rx={4}
             ry={3}
-            fill="rgba(255,240,230,0.4)"
+            fill={currentTheme.colors.skin.light}
+            opacity={0.4}
           />
         </g>
 
@@ -519,27 +524,44 @@ export function RagdollCharacter({
           {mouthPaths.opening && (
             <path
               d={mouthPaths.opening}
-              fill={currentTheme.colors.shadow.color.replace("0.3", "0.8")}
+              fill={adjustOpacity(currentTheme.colors.shadow.color, 0.8)}
             />
           )}
 
           {/* Teeth hint when mouth is open */}
-          {expression.mouth.lowerLipTop - expression.mouth.upperLipBottom >
-            6 && (
-            <rect
-              x={-dims.mouthWidth * expression.mouth.width * 0.3}
-              y={dims.mouthY + expression.mouth.upperLipBottom + 2}
-              width={dims.mouthWidth * expression.mouth.width * 0.6}
-              height={Math.min(
-                8,
-                (expression.mouth.lowerLipTop -
-                  expression.mouth.upperLipBottom) *
-                  0.6,
-              )}
-              fill="#f8f8f0"
-              rx={2}
-            />
-          )}
+          {(() => {
+            const openingHeight =
+              expression.mouth.lowerLipTop - expression.mouth.upperLipBottom;
+            const minOpeningForTeeth = 6;
+
+            // Only show teeth if there's a significant opening
+            if (openingHeight <= minOpeningForTeeth) return null;
+
+            // Constrain teeth to mouth opening
+            const mouthWidth = dims.mouthWidth * expression.mouth.width;
+            const teethWidth = Math.min(
+              mouthWidth * 0.6,
+              mouthWidth * 0.75 * 2, // Match the opening path width
+            );
+            const teethHeight = Math.min(
+              8,
+              openingHeight * 0.5, // Use 50% of opening instead of 60% to stay well within
+            );
+
+            // Center teeth in the opening, with a small offset from the top
+            const teethY = dims.mouthY + expression.mouth.upperLipBottom + 2;
+
+            return (
+              <rect
+                x={-teethWidth / 2}
+                y={teethY}
+                width={teethWidth}
+                height={teethHeight}
+                fill={currentTheme.colors.teeth}
+                rx={2}
+              />
+            );
+          })()}
 
           {/* Upper lip */}
           <path d={mouthPaths.upperLip} fill={g("upperLipGradient")} />
@@ -553,7 +575,8 @@ export function RagdollCharacter({
             cy={dims.mouthY + expression.mouth.lowerLipBottom - 4}
             rx={dims.mouthWidth * expression.mouth.width * 0.25}
             ry={2}
-            fill="rgba(255,255,255,0.25)"
+            fill={currentTheme.colors.highlight}
+            opacity={0.25}
           />
         </g>
 
@@ -564,10 +587,11 @@ export function RagdollCharacter({
           {/* Hair highlight */}
           <ellipse
             cx={-20}
-            cy={-dims.headHeight / 2 - 5}
+            cy={-dims.headHeight / 2 + 15}
             rx={25}
             ry={10}
-            fill="rgba(100,70,50,0.3)"
+            fill={currentTheme.colors.hair.light}
+            opacity={0.3}
           />
         </g>
       </g>
@@ -603,4 +627,18 @@ function applyIdleToExpression(
       },
     },
   };
+}
+
+/**
+ * Adjust the opacity of an rgba color string
+ */
+function adjustOpacity(color: string, newOpacity: number): string {
+  // Match rgba format: rgba(r, g, b, a)
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),?\s*([\d.]+)?\)/);
+  if (match) {
+    const [, r, g, b] = match;
+    return `rgba(${r},${g},${b},${newOpacity})`;
+  }
+  // If not rgba, return as-is (shouldn't happen with shadow.color)
+  return color;
 }

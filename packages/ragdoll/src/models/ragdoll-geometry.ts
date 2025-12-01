@@ -205,10 +205,12 @@ export class RagdollGeometry {
           rightEyebrow: { ...base.rightEyebrow, arcY: 3, outerY: 2 },
           mouth: {
             ...base.mouth,
-            upperLipBottom: 4,
-            lowerLipTop: 8,
-            width: 1.2,
-            cornerPull: 0.7,
+            upperLipTop: -1, // Pull top up for better smile curve
+            upperLipBottom: 2, // Keep lips closed/barely open
+            lowerLipTop: 4, // Very small gap for natural closed smile
+            lowerLipBottom: 10,
+            width: 1.15,
+            cornerPull: 0.8, // Stronger corner pull for clear smile
           },
           cheekPuff: 0.15,
         };
@@ -248,7 +250,8 @@ export class RagdollGeometry {
           rightEyebrow: { ...base.rightEyebrow, arcY: 6, outerY: 4 },
           mouth: {
             ...base.mouth,
-            upperLipBottom: 8,
+            upperLipTop: 1, // Pull top down slightly to prevent overly thick upper lip
+            upperLipBottom: 5, // Reduced from 8 to keep upper lip thinner
             lowerLipTop: 18,
             lowerLipBottom: 22,
             width: 1.3,
@@ -558,44 +561,89 @@ export class RagdollGeometry {
 
     // Upper lip with cupid's bow
     const upperTop = cy - d.lipThickness + mouthState.upperLipTop;
-    const upperBottom = cy + mouthState.upperLipBottom;
+    let upperBottom = cy + mouthState.upperLipBottom;
+    let lowerTop = cy + mouthState.lowerLipTop;
+    let lowerBottom = cy + mouthState.lowerLipBottom;
+
+    // Validate and clamp lip positions to prevent overlap/inversion
+    // Ensure minimum lip thickness of 2 pixels
+    const minLipThickness = 2;
+
+    // Upper lip: top must be above bottom
+    if (upperBottom < upperTop + minLipThickness) {
+      upperBottom = upperTop + minLipThickness;
+    }
+
+    // Lower lip: bottom must be below top
+    if (lowerBottom < lowerTop + minLipThickness) {
+      lowerBottom = lowerTop + minLipThickness;
+    }
+
+    // Prevent lips from inverting: ensure gap between upper and lower lip edges
+    // If there's supposed to be a gap (mouth open), ensure minimum gap of 1px
+    // If lips should be touching or closed, allow them to be at same position
+    const minGap = 0.5;
+    if (lowerTop < upperBottom + minGap) {
+      // Push lips apart equally to maintain the intended mouth center
+      const overlap = upperBottom + minGap - lowerTop;
+      upperBottom -= overlap / 2;
+      lowerTop += overlap / 2;
+    }
+
     const bowDepth = mouthState.upperLipCurve * 3;
 
+    // Calculate connection points with validation
+    // Upper lip inner edge (bottom of upper lip where it meets opening)
+    const upperInnerY = upperBottom + pull * 2;
+
+    // Lower lip inner edge (top of lower lip where it meets opening)
+    const lowerInnerY = lowerTop - pull * 2;
+
+    // Validate corner connection points to prevent broken paths
+    // Upper lip: corner should be between top of lip and bottom of lip
+    const upperCornerY = Math.max(
+      Math.min(cornerY, upperInnerY - 1), // Don't go below inner edge
+      upperTop // Don't go above top of lip
+    );
+
+    // Lower lip: corner should be between top of lip and bottom of lip
+    const lowerCornerY = Math.min(
+      Math.max(cornerY + d.lipThickness * 0.5, lowerInnerY + 1), // Don't go above inner edge
+      lowerBottom - 1 // Don't go below bottom of lip
+    );
+
     const upperLip = `
-      M ${-w} ${cornerY}
+      M ${-w} ${upperCornerY}
       Q ${-w * 0.5} ${upperTop - 2} ${-w * 0.15} ${upperTop}
       Q 0 ${upperTop + bowDepth} ${w * 0.15} ${upperTop}
-      Q ${w * 0.5} ${upperTop - 2} ${w} ${cornerY}
-      L ${w * 0.8} ${upperBottom + pull * 2}
-      Q 0 ${upperBottom + 2} ${-w * 0.8} ${upperBottom + pull * 2}
+      Q ${w * 0.5} ${upperTop - 2} ${w} ${upperCornerY}
+      L ${w * 0.8} ${upperInnerY}
+      Q 0 ${upperBottom + 2} ${-w * 0.8} ${upperInnerY}
       Z
     `;
 
-    // Lower lip - fuller curve
-    const lowerTop = cy + mouthState.lowerLipTop;
-    const lowerBottom = cy + mouthState.lowerLipBottom;
-
+    // Lower lip - fuller curve (using validated values)
     const lowerLip = `
-      M ${-w * 0.8} ${lowerTop - pull * 2}
-      Q 0 ${lowerTop - 2} ${w * 0.8} ${lowerTop - pull * 2}
-      L ${w} ${cornerY + d.lipThickness * 0.5}
+      M ${-w * 0.8} ${lowerInnerY}
+      Q 0 ${lowerTop - 2} ${w * 0.8} ${lowerInnerY}
+      L ${w} ${lowerCornerY}
       Q ${w * 0.5} ${lowerBottom + 2} 0 ${lowerBottom}
-      Q ${-w * 0.5} ${lowerBottom + 2} ${-w} ${cornerY + d.lipThickness * 0.5}
+      Q ${-w * 0.5} ${lowerBottom + 2} ${-w} ${lowerCornerY}
       Z
     `;
 
-    // Mouth opening (dark inside)
+    // Mouth opening (dark inside) - use validated inner edge positions
     const openingTop = upperBottom;
     const openingBottom = lowerTop;
     const hasOpening = openingBottom > openingTop + 1;
 
     const opening = hasOpening
       ? `
-      M ${-w * 0.75} ${openingTop + pull * 2}
-      Q 0 ${openingTop + 1} ${w * 0.75} ${openingTop + pull * 2}
-      Q ${w * 0.6} ${(openingTop + openingBottom) / 2} ${w * 0.7} ${openingBottom - pull * 2}
-      Q 0 ${openingBottom - 1} ${-w * 0.7} ${openingBottom - pull * 2}
-      Q ${-w * 0.6} ${(openingTop + openingBottom) / 2} ${-w * 0.75} ${openingTop + pull * 2}
+      M ${-w * 0.75} ${upperInnerY}
+      Q 0 ${openingTop + 1} ${w * 0.75} ${upperInnerY}
+      Q ${w * 0.6} ${(openingTop + openingBottom) / 2} ${w * 0.7} ${lowerInnerY}
+      Q 0 ${openingBottom - 1} ${-w * 0.7} ${lowerInnerY}
+      Q ${-w * 0.6} ${(openingTop + openingBottom) / 2} ${-w * 0.75} ${upperInnerY}
       Z
     `
       : "";

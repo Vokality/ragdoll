@@ -45,6 +45,8 @@ export const defaultTheme: RagdollTheme = {
       transparent: "rgba(120,80,50,0)",
     },
     stroke: "#e0a080",
+    teeth: "#f8f8f0",
+    highlight: "#ffffff",
   },
   gradients: {
     skinGradient: {
@@ -205,6 +207,8 @@ export const robotTheme: RagdollTheme = {
       transparent: "rgba(0,0,0,0)",
     },
     stroke: "#606060",
+    teeth: "#e0e0e0",
+    highlight: "#ffffff",
   },
   gradients: {
     skinGradient: {
@@ -365,6 +369,8 @@ export const alienTheme: RagdollTheme = {
       transparent: "rgba(0,80,0,0)",
     },
     stroke: "#408040",
+    teeth: "#e8f0e8",
+    highlight: "#ffffff",
   },
   gradients: {
     skinGradient: {
@@ -525,6 +531,8 @@ export const monochromeTheme: RagdollTheme = {
       transparent: "rgba(0,0,0,0)",
     },
     stroke: "#808080",
+    teeth: "#f0f0f0",
+    highlight: "#ffffff",
   },
   gradients: {
     skinGradient: {

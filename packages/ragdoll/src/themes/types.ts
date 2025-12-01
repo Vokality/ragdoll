@@ -72,6 +72,8 @@ export interface ThemeColors {
     transparent: string;
   };
   stroke: string;
+  teeth: string;
+  highlight: string;
 }
 
 /**
