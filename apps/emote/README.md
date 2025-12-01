@@ -1,4 +1,4 @@
-![Emote hero](media/banner-dark.png)
+![Emote hero](https://raw.githubusercontent.com/vokality/ragdoll/main/apps/emote/media/banner-dark.png)
 
 # Emote
 
@@ -8,7 +8,7 @@ Emote lets AI assistants step out of the chat window and into a lively character
 
 - **Expressive companion** – Smooth facial animation, idle motion, and speech bubbles that feel alive.
 - **MCP-native control** – Every expression change is a tool call away. Works with Cursor, Claude, and any MCP-compatible client.
-- **Themeable** – Ship-ready looks: Default, Robot, Alien, and Monochrome. Themes sync between VS Code settings and MCP commands.
+- **Customizable** – Choose between Human and Einstein character variants, each with unique proportions and features. Combine with themes (Default, Robot, Alien, Monochrome) for different looks.
 - **Self-contained** – Builds to a single VSIX. No background daemons, no network sockets, only file-based IPC.
 
 ## Installation
@@ -73,6 +73,7 @@ The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activat
 | `Emote: Set Head Pose`          | Tilt the head using yaw/pitch degrees.                       |
 | `Emote: Set Speech Bubble`      | Show retro terminal text with tones (default/whisper/shout). |
 | `Emote: Set Theme`              | Swap between Default, Robot, Alien, or Monochrome.           |
+| `Emote: Set Character Variant`  | Choose between Human or Einstein character variants.          |
 | `Emote: Copy MCP Configuration` | Copy the JSON block shown above.                             |
 
 ### MCP Tools
@@ -104,8 +105,8 @@ The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activat
 
 ## Screenshots
 
-![Default theme](media/screenshot-default.png)
-![Theme gallery](media/screenshot-themes.png)
+![Default theme](https://raw.githubusercontent.com/vokality/ragdoll/main/apps/emote/media/screenshot-default.png)
+![Theme gallery](https://raw.githubusercontent.com/vokality/ragdoll/main/apps/emote/media/screenshot-themes.png)
 
 ## License
 
