@@ -48,7 +48,7 @@ code --install-extension emote-*.vsix
   "mcpServers": {
     "emote": {
       "command": "node",
-      "args": ["/Users/you/.emote/mcp-server.js"]
+      "args": ["~/.emote/mcp-server.js"]
     }
   }
 }
