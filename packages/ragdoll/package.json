@@ -42,7 +42,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "test": "bun test src/**/*.test.ts"
+    "test": "bun test tests/**/*.test.ts"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
