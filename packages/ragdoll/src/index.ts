@@ -44,6 +44,24 @@ export type {
   GradientStop,
 } from "./themes/types";
 
+// Variants
+export {
+  getVariant,
+  getDefaultVariant,
+  getAllVariants,
+  getVariantIds,
+  registerVariant,
+} from "./variants";
+export { humanVariant } from "./variants/human";
+export { einsteinVariant } from "./variants/einstein";
+export type {
+  CharacterVariant,
+  DimensionOverrides,
+  ColorOverrides,
+  HairStyle,
+  MustacheStyle,
+} from "./variants/types";
+
 // Types
 export type {
   CharacterState,

@@ -28,7 +28,9 @@ const VALID_MOODS: readonly FacialMood[] = [
 const VALID_ACTIONS = ["wink", "talk", "shake"] as const;
 const VALID_TONES: readonly BubbleTone[] = ["default", "whisper", "shout"];
 const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
+const VALID_VARIANTS = ["human", "einstein"] as const;
 type ThemeId = (typeof VALID_THEMES)[number];
+type VariantId = (typeof VALID_VARIANTS)[number];
 type ActionId = (typeof VALID_ACTIONS)[number];
 
 let outputChannel: vscode.OutputChannel | null = null;
@@ -124,6 +126,19 @@ function setThemeSetting(themeId: ThemeId): Thenable<void> {
   return config.update("theme", themeId, vscode.ConfigurationTarget.Global);
 }
 
+function getVariantSetting(): VariantId {
+  const config = vscode.workspace.getConfiguration("emote");
+  const variant = config.get<string>("variant", "human");
+  return VALID_VARIANTS.includes(variant as VariantId)
+    ? (variant as VariantId)
+    : "human";
+}
+
+function setVariantSetting(variantId: VariantId): Thenable<void> {
+  const config = vscode.workspace.getConfiguration("emote");
+  return config.update("variant", variantId, vscode.ConfigurationTarget.Global);
+}
+
 type MCPCommand = {
   type?: string;
   mood?: unknown;
@@ -155,28 +170,28 @@ type ValidatedCommand =
   | { type: "setMood"; mood: FacialMood; duration?: number }
   | { type: "triggerAction"; action: ActionId; duration?: number }
   | {
-      type: "setHeadPose";
-      yawDegrees?: number;
-      pitchDegrees?: number;
-      duration?: number;
-    }
+    type: "setHeadPose";
+    yawDegrees?: number;
+    pitchDegrees?: number;
+    duration?: number;
+  }
   | { type: "setSpeechBubble"; text: string | null; tone?: BubbleTone }
   | { type: "setTheme"; themeId: ThemeId }
   | {
-      type: "startPomodoro";
-      sessionDuration?: PomodoroDuration;
-      breakDuration?: PomodoroDuration;
-    }
+    type: "startPomodoro";
+    sessionDuration?: PomodoroDuration;
+    breakDuration?: PomodoroDuration;
+  }
   | { type: "pausePomodoro" }
   | { type: "resetPomodoro" }
   | { type: "getPomodoroState" }
   | { type: "addTask"; text: string; status?: TaskStatus }
   | {
-      type: "updateTaskStatus";
-      taskId: string;
-      status: TaskStatus;
-      blockedReason?: string;
-    }
+    type: "updateTaskStatus";
+    taskId: string;
+    status: TaskStatus;
+    blockedReason?: string;
+  }
   | { type: "setActiveTask"; taskId: string }
   | { type: "removeTask"; taskId: string }
   | { type: "completeActiveTask" }
@@ -249,6 +264,13 @@ function isTheme(value: unknown): value is ThemeId {
   return (
     typeof value === "string" &&
     (VALID_THEMES as readonly string[]).includes(value)
+  );
+}
+
+function isVariant(value: unknown): value is VariantId {
+  return (
+    typeof value === "string" &&
+    (VALID_VARIANTS as readonly string[]).includes(value)
   );
 }
 
@@ -372,7 +394,7 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       }
       const status =
         typeof raw.status === "string" &&
-        VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
+          VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
           ? (raw.status as TaskStatus)
           : undefined;
       return {
@@ -565,9 +587,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("emote.show", () => {
       const panel = RagdollPanel.createOrShow(context.extensionUri);
-      // Send current theme to webview
+      // Send current theme and variant to webview
       const theme = getThemeSetting();
+      const variant = getVariantSetting();
       panel.postMessage({ type: "setTheme", themeId: theme });
+      panel.postMessage({ type: "setVariant", variantId: variant });
     }),
   );
 
@@ -585,7 +609,9 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const panel = RagdollPanel.createOrShow(context.extensionUri);
       const theme = getThemeSetting();
+      const variant = getVariantSetting();
       panel.postMessage({ type: "setTheme", themeId: theme });
+      panel.postMessage({ type: "setVariant", variantId: variant });
     }),
   );
 
@@ -694,27 +720,27 @@ export function activate(context: vscode.ExtensionContext): void {
           description: string;
           id: ThemeId;
         }> = [
-          {
-            label: "Default",
-            description: "Warm, human-like appearance",
-            id: "default",
-          },
-          {
-            label: "Robot",
-            description: "Metallic, futuristic robot",
-            id: "robot",
-          },
-          {
-            label: "Alien",
-            description: "Green, otherworldly alien",
-            id: "alien",
-          },
-          {
-            label: "Monochrome",
-            description: "Classic black and white",
-            id: "monochrome",
-          },
-        ];
+            {
+              label: "Default",
+              description: "Warm, human-like appearance",
+              id: "default",
+            },
+            {
+              label: "Robot",
+              description: "Metallic, futuristic robot",
+              id: "robot",
+            },
+            {
+              label: "Alien",
+              description: "Green, otherworldly alien",
+              id: "alien",
+            },
+            {
+              label: "Monochrome",
+              description: "Classic black and white",
+              id: "monochrome",
+            },
+          ];
 
         const currentTheme = getThemeSetting();
         const selected = await vscode.window.showQuickPick(themeOptions, {
@@ -727,6 +753,59 @@ export function activate(context: vscode.ExtensionContext): void {
             RagdollPanel.currentPanel.postMessage({
               type: "setTheme",
               themeId: selected.id,
+            });
+          }
+        }
+      },
+    ),
+  );
+
+  // Variant command
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "emote.setVariant",
+      async (variantId?: string) => {
+        // If variantId is provided, use it directly
+        if (variantId && isVariant(variantId)) {
+          void setVariantSetting(variantId);
+          if (RagdollPanel.currentPanel) {
+            RagdollPanel.currentPanel.postMessage({
+              type: "setVariant",
+              variantId,
+            });
+          }
+          return;
+        }
+
+        // Otherwise, show quick pick dialog for user selection
+        const variantOptions: Array<{
+          label: string;
+          description: string;
+          id: VariantId;
+        }> = [
+            {
+              label: "Human",
+              description: "Standard human character with balanced proportions",
+              id: "human",
+            },
+            {
+              label: "Einstein",
+              description: "Einstein caricature with wild hair and bushy mustache",
+              id: "einstein",
+            },
+          ];
+
+        const currentVariant = getVariantSetting();
+        const selected = await vscode.window.showQuickPick(variantOptions, {
+          placeHolder: `Select character variant (current: ${currentVariant})`,
+        });
+
+        if (selected) {
+          void setVariantSetting(selected.id);
+          if (RagdollPanel.currentPanel) {
+            RagdollPanel.currentPanel.postMessage({
+              type: "setVariant",
+              variantId: selected.id,
             });
           }
         }
@@ -897,6 +976,16 @@ export function activate(context: vscode.ExtensionContext): void {
           });
         }
       }
+      if (e.affectsConfiguration("emote.variant")) {
+        const variant = getVariantSetting();
+        logMessage("info", "Variant setting changed", { variant });
+        if (RagdollPanel.currentPanel) {
+          RagdollPanel.currentPanel.postMessage({
+            type: "setVariant",
+            variantId: variant,
+          });
+        }
+      }
     }),
   );
 
@@ -944,7 +1033,7 @@ function startSocketServer(context: vscode.ExtensionContext): void {
               });
               socket.write(
                 JSON.stringify({ ok: true, type: result.command.type, tasks }) +
-                  "\n",
+                "\n",
               );
             } else if (result.command.type === "getPomodoroState") {
               // Request fresh pomodoro state from webview
@@ -960,7 +1049,7 @@ function startSocketServer(context: vscode.ExtensionContext): void {
               });
               socket.write(
                 JSON.stringify({ ok: true, type: result.command.type, state }) +
-                  "\n",
+                "\n",
               );
             } else {
               handleValidatedCommand(result.command);

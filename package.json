@@ -22,6 +22,10 @@
     "dev": "cd apps/demo && bun run dev",
     "dev:emote": "cd apps/emote && bun run dev",
     "lint": "eslint .",
+    "typecheck": "bun run typecheck:ragdoll && bun run typecheck:demo && bun run typecheck:emote",
+    "typecheck:ragdoll": "cd packages/ragdoll && bunx tsc --noEmit",
+    "typecheck:demo": "cd apps/demo && bunx tsc --noEmit",
+    "typecheck:emote": "cd apps/emote && bun run typecheck",
     "format": "bunx prettier --write .",
     "clean": "rm -rf packages/*/dist apps/*/dist"
   },

@@ -98,6 +98,12 @@
         "category": "Emote"
       },
       {
+        "command": "emote.setVariant",
+        "title": "Emote: Set Character Variant",
+        "shortTitle": "Set Variant",
+        "category": "Emote"
+      },
+      {
         "command": "emote.copyMcpConfig",
         "title": "Emote: Copy MCP Configuration",
         "shortTitle": "Copy MCP Config",
@@ -124,6 +130,20 @@
           ],
           "description": "Character theme",
           "markdownDescription": "Select the default Emote appearance. You can still override it via the `Emote: Set Theme` command or MCP tools."
+        },
+        "emote.variant": {
+          "type": "string",
+          "default": "human",
+          "enum": [
+            "human",
+            "einstein"
+          ],
+          "enumDescriptions": [
+            "Standard human character with balanced proportions",
+            "Einstein caricature with wild hair and bushy mustache"
+          ],
+          "description": "Character variant",
+          "markdownDescription": "Select the character variant (proportions and features). Combine with themes for different looks!"
         }
       }
     }

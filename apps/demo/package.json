@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "server": "bun run server/index.ts",
     "mcp-server": "bun run src/mcp/ragdoll-mcp-server.ts"

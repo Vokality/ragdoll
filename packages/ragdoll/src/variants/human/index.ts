@@ -1,0 +1,2 @@
+export { humanVariant } from "./variant";
+

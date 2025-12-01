@@ -7,6 +7,7 @@ import type { GradientDef } from "../themes/types";
 interface RagdollCharacterProps {
   onControllerReady?: (controller: CharacterController) => void;
   theme?: RagdollTheme;
+  variant?: string; // Variant ID (e.g., "human", "einstein", "child")
   destroyOnUnmount?: boolean;
 }
 
@@ -135,6 +136,7 @@ interface RenderData {
   facePath: string;
   hairPath: string;
   nosePath: string;
+  mustachePath: string;
   leftEarPath: string;
   rightEarPath: string;
   leftEyePaths: ReturnType<
@@ -162,7 +164,6 @@ interface RenderData {
 
 function computeRenderData(
   controller: CharacterController,
-  theme?: RagdollTheme,
 ): RenderData {
   const geometry = controller.getGeometry();
   const dims = geometry.dimensions;
@@ -194,6 +195,7 @@ function computeRenderData(
     facePath: geometry.getFacePath(),
     hairPath: geometry.getHairPath(),
     nosePath: geometry.getNosePath(expression.noseScrunch),
+    mustachePath: geometry.getMustachePath(),
     leftEarPath: geometry.getEarPath(true),
     rightEarPath: geometry.getEarPath(false),
     leftEyePaths: geometry.getEyePath(true, expression.leftEye),
@@ -203,7 +205,7 @@ function computeRenderData(
     leftEyebrowPath: geometry.getEyebrowPath(true, expression.leftEyebrow),
     rightEyebrowPath: geometry.getEyebrowPath(false, expression.rightEyebrow),
     mouthPaths: geometry.getMouthPath(expression.mouth),
-    currentTheme: theme || controller.getTheme(),
+    currentTheme: controller.getTheme(),
     breathingOffsetY,
     breathingScale,
     headRollDeg,
@@ -213,22 +215,25 @@ function computeRenderData(
 export function RagdollCharacter({
   onControllerReady,
   theme,
+  variant,
   destroyOnUnmount = true,
 }: RagdollCharacterProps) {
   // Create controller once and store in state (not ref) so it's safe to read during render
-  const [controller] = useState(() => new CharacterController(theme?.id));
+  const [controller] = useState(() => new CharacterController(theme?.id, variant));
   const lastTimeRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
   // Store all render data in state to avoid accessing refs during render
   const [renderData, setRenderData] = useState<RenderData>(() =>
-    computeRenderData(controller, theme),
+    computeRenderData(controller),
   );
 
   // Update theme if it changes
   useEffect(() => {
     if (theme) {
       controller.setTheme(theme.id);
+      // Re-compute render data to pick up new theme with variant overrides
+      setRenderData(computeRenderData(controller));
     }
   }, [theme, controller]);
 
@@ -250,7 +255,7 @@ export function RagdollCharacter({
       lastTimeRef.current = now;
 
       controller.update(deltaTime);
-      setRenderData(computeRenderData(controller, theme));
+      setRenderData(computeRenderData(controller));
 
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -283,6 +288,7 @@ export function RagdollCharacter({
     facePath,
     hairPath,
     nosePath,
+    mustachePath,
     leftEarPath,
     rightEarPath,
     leftEyePaths,
@@ -578,6 +584,11 @@ export function RagdollCharacter({
             fill={currentTheme.colors.highlight}
             opacity={0.25}
           />
+
+          {/* Mustache (if variant has one) */}
+          {mustachePath && (
+            <path d={mustachePath} fill={g("hairGradient")} />
+          )}
         </g>
 
         {/* Hair (on top) - slight shift */}

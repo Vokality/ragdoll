@@ -1,4 +1,5 @@
 import type { FacialMood } from "../types";
+import type { CharacterVariant } from "../variants";
 
 /**
  * Point interface for 2D coordinates
@@ -106,9 +107,11 @@ export interface FaceDimensions {
  */
 export class RagdollGeometry {
   public currentExpression: ExpressionConfig;
+  public readonly variant: CharacterVariant;
+  public readonly dimensions: FaceDimensions;
 
-  // Human-like facial proportions
-  public readonly dimensions: FaceDimensions = {
+  // Base human-like facial proportions
+  private readonly baseDimensions: FaceDimensions = {
     // Head - slightly taller than wide for natural look
     headWidth: 140,
     headHeight: 170,
@@ -147,7 +150,21 @@ export class RagdollGeometry {
     neckHeight: 55,
   };
 
-  constructor() {
+  constructor(variant?: CharacterVariant) {
+    // Use provided variant or default to human
+    this.variant = variant || {
+      id: "human",
+      name: "Human",
+      hairStyle: "default",
+      mustacheStyle: "none",
+    };
+
+    // Merge variant dimension overrides with base dimensions
+    this.dimensions = {
+      ...this.baseDimensions,
+      ...this.variant.dimensions,
+    };
+
     this.currentExpression = this.createNeutralExpression();
   }
 
@@ -694,13 +711,49 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate hair path
+   * Generate hair path based on variant hair style
    */
   public getHairPath(): string {
     const d = this.dimensions;
     const hw = d.headWidth / 2;
     const hh = d.headHeight / 2;
+    const hairStyle = this.variant.hairStyle || "default";
 
+    if (hairStyle === "wild") {
+      // Wild Einstein-style hair - bushy and extends outward
+      return `
+        M ${-hw * 0.85} ${-hh * 0.4}
+        Q ${-hw * 1.1} ${-hh * 0.95} ${-hw * 0.7} ${-hh * 1.2}
+        Q ${-hw * 0.4} ${-hh * 1.25} 0 ${-hh * 1.15}
+        Q ${hw * 0.4} ${-hh * 1.25} ${hw * 0.7} ${-hh * 1.2}
+        Q ${hw * 1.1} ${-hh * 0.95} ${hw * 0.85} ${-hh * 0.4}
+        Q ${hw * 0.7} ${-hh * 0.6} ${hw * 0.4} ${-hh * 0.55}
+        Q 0 ${-hh * 0.5} ${-hw * 0.4} ${-hh * 0.55}
+        Q ${-hw * 0.7} ${-hh * 0.6} ${-hw * 0.85} ${-hh * 0.4}
+        Z
+      `;
+    }
+
+    if (hairStyle === "short") {
+      // Short cropped hair - stays close to head
+      return `
+        M ${-hw * 0.85} ${-hh * 0.4}
+        Q ${-hw * 0.88} ${-hh * 0.85} ${-hw * 0.5} ${-hh * 0.95}
+        Q 0 ${-hh * 1.0} ${hw * 0.5} ${-hh * 0.95}
+        Q ${hw * 0.88} ${-hh * 0.85} ${hw * 0.85} ${-hh * 0.4}
+        Q ${hw * 0.7} ${-hh * 0.55} ${hw * 0.4} ${-hh * 0.5}
+        Q 0 ${-hh * 0.45} ${-hw * 0.4} ${-hh * 0.5}
+        Q ${-hw * 0.7} ${-hh * 0.55} ${-hw * 0.85} ${-hh * 0.4}
+        Z
+      `;
+    }
+
+    if (hairStyle === "bald") {
+      // No hair - empty path
+      return "";
+    }
+
+    // Default hair style
     return `
       M ${-hw * 0.85} ${-hh * 0.4}
       Q ${-hw * 0.9} ${-hh * 0.9} ${-hw * 0.5} ${-hh * 1.05}
@@ -711,6 +764,65 @@ export class RagdollGeometry {
       Q ${-hw * 0.7} ${-hh * 0.6} ${-hw * 0.85} ${-hh * 0.4}
       Z
     `;
+  }
+
+  /**
+   * Generate mustache path based on variant mustache style
+   */
+  public getMustachePath(): string {
+    const mustacheStyle = this.variant.mustacheStyle || "none";
+
+    if (mustacheStyle === "none") {
+      return "";
+    }
+
+    const d = this.dimensions;
+    const w = d.mouthWidth * 0.7;
+    const y = d.mouthY - 8; // Just above upper lip
+
+    if (mustacheStyle === "bushy") {
+      // Bushy Einstein-style mustache
+      return `
+        M ${-w} ${y + 2}
+        Q ${-w * 0.5} ${y - 3} 0 ${y - 2}
+        Q ${w * 0.5} ${y - 3} ${w} ${y + 2}
+        Q ${w * 0.7} ${y + 6} ${w * 0.3} ${y + 5}
+        Q 0 ${y + 6} ${-w * 0.3} ${y + 5}
+        Q ${-w * 0.7} ${y + 6} ${-w} ${y + 2}
+        Z
+      `;
+    }
+
+    if (mustacheStyle === "thin") {
+      // Thin pencil mustache
+      return `
+        M ${-w * 0.6} ${y + 1}
+        Q ${-w * 0.3} ${y} 0 ${y}
+        Q ${w * 0.3} ${y} ${w * 0.6} ${y + 1}
+        L ${w * 0.6} ${y + 2}
+        Q ${w * 0.3} ${y + 1} 0 ${y + 1}
+        Q ${-w * 0.3} ${y + 1} ${-w * 0.6} ${y + 2}
+        Z
+      `;
+    }
+
+    if (mustacheStyle === "handlebar") {
+      // Handlebar mustache with curled ends
+      return `
+        M ${-w} ${y - 2}
+        Q ${-w * 0.9} ${y - 5} ${-w * 0.7} ${y - 3}
+        Q ${-w * 0.4} ${y + 1} 0 ${y}
+        Q ${w * 0.4} ${y + 1} ${w * 0.7} ${y - 3}
+        Q ${w * 0.9} ${y - 5} ${w} ${y - 2}
+        Q ${w * 0.85} ${y + 2} ${w * 0.6} ${y + 3}
+        Q ${w * 0.3} ${y + 4} 0 ${y + 3}
+        Q ${-w * 0.3} ${y + 4} ${-w * 0.6} ${y + 3}
+        Q ${-w * 0.85} ${y + 2} ${-w} ${y - 2}
+        Z
+      `;
+    }
+
+    return "";
   }
 
   public setExpression(expression: ExpressionConfig): void {

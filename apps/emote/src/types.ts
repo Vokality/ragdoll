@@ -65,6 +65,10 @@ export type ExtensionMessage =
       themeId: string;
     }
   | {
+      type: "setVariant";
+      variantId: string;
+    }
+  | {
       type: "startPomodoro";
       sessionDuration?: PomodoroDuration;
       breakDuration?: PomodoroDuration;

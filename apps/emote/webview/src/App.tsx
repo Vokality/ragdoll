@@ -23,6 +23,7 @@ try {
 
 type PersistedState = {
   themeId: string;
+  variantId: string;
   bubble: SpeechBubbleState;
 };
 
@@ -61,6 +62,8 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
       return "text" in payload || "tone" in payload;
     case "setTheme":
       return typeof payload.themeId === "string";
+    case "setVariant":
+      return typeof payload.variantId === "string";
     case "startPomodoro":
     case "pausePomodoro":
     case "resetPomodoro":
@@ -96,6 +99,9 @@ export function App() {
   );
   const [theme, setTheme] = useState<RagdollTheme>(() =>
     getThemeSafe(persistedState?.themeId),
+  );
+  const [variant, setVariant] = useState<string>(
+    () => persistedState?.variantId ?? "human",
   );
   const [bubbleState, setBubbleState] = useState<SpeechBubbleState>(
     () => persistedState?.bubble ?? FALLBACK_BUBBLE,
@@ -160,6 +166,9 @@ export function App() {
           ctrl.setTheme(newTheme.id);
           break;
         }
+        case "setVariant":
+          setVariant(message.variantId);
+          break;
         case "startPomodoro":
           ctrl.startPomodoro(message.sessionDuration, message.breakDuration);
           break;
@@ -297,8 +306,12 @@ export function App() {
   }, [controller, theme]);
 
   useEffect(() => {
-    vscode?.setState({ themeId: theme.id, bubble: bubbleState });
-  }, [theme, bubbleState]);
+    vscode?.setState({
+      themeId: theme.id,
+      variantId: variant,
+      bubble: bubbleState,
+    });
+  }, [theme, variant, bubbleState]);
 
   const showOverlay = !hasReceivedMessage;
   const overlayVariant = controller ? "waiting" : "initial";
@@ -308,9 +321,10 @@ export function App() {
       {showOverlay && <StatusOverlay variant={overlayVariant} />}
       <div style={styles.characterContainer}>
         <RagdollCharacter
-          key={theme.id}
+          key={`${theme.id}-${variant}`}
           onControllerReady={handleControllerReady}
           theme={theme}
+          variant={variant}
         />
       </div>
       {controller && (
