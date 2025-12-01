@@ -9,6 +9,7 @@ A controllable animated character with facial expressions, head poses, and speec
 - **Actions & Speech**: Wink, talk, and live speech bubbles that sync with mouth motion
 - **Head Pose Control**: Yaw and pitch with guard rails so the face never leaves view
 - **Idle Animations**: Natural blinking, breathing, eye saccades, and subtle head movements
+- **Character Variants**: Switch between different character appearances (Human, Einstein, and more)
 - **Theming**: Multiple built-in themes with customizable colors and gradients
 - **Multiple Control Methods**:
   - Interactive Face Control Panel
@@ -71,11 +72,20 @@ This starts:
 cd apps/demo && npm run mcp-server
 ```
 
-### 4. (Optional) Docker
+### 4. Docker (Production)
+
+Run the application in production mode with a single container:
 
 ```bash
-docker compose up
+docker-compose up --build
 ```
+
+This starts:
+- Combined frontend + backend server at `http://localhost:3001`
+- Serves pre-built static files and API from the same server
+- Includes REST API, WebSocket, and all features
+
+**Note:** Docker runs in production mode (optimized build), not development mode. For hot-reload development, use Option A or B above instead.
 
 ## Architecture
 
@@ -89,7 +99,8 @@ ragdoll/
 │       │   ├── components/   # RagdollCharacter React component
 │       │   ├── controllers/  # CharacterController, ExpressionController, etc.
 │       │   ├── models/       # RagdollGeometry, RagdollSkeleton
-│       │   ├── themes/       # Theme system
+│       │   ├── themes/       # Theme system (Default, Robot, Alien, Monochrome)
+│       │   ├── variants/     # Character variants (Human, Einstein)
 │       │   ├── types/       # TypeScript type definitions
 │       │   └── animation/   # Easing functions
 │       └── tests/            # Test suite
@@ -129,7 +140,9 @@ The built-in control panel (right side of screen) provides:
 - Wink and talk triggers (with clear button)
 - Speech bubble editor with tone (default/whisper/shout)
 - Head pose sliders for yaw/pitch
-- Theme selector
+- Pomodoro timer with customizable session and break durations
+- Theme selector (top-left: Default, Robot, Alien, Monochrome)
+- Variant selector (top-left: Human, Einstein)
 - Live connection status
 
 ### 2. REST API
