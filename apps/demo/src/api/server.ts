@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import cors from "cors";
 import { randomUUID } from "crypto";
+import path from "path";
 import { CharacterController } from "@vokality/ragdoll";
 import type {
   JointCommand,
@@ -93,6 +94,19 @@ export class RagdollAPIServer {
   private setupMiddleware(): void {
     this.app.use(cors());
     this.app.use(express.json());
+  }
+
+  public serveStaticFiles(distPath: string): void {
+    // Serve static files (frontend build)
+    // This middleware will serve files if they exist, otherwise pass to next middleware
+    this.app.use(express.static(distPath));
+
+    // Handle SPA routing - serve index.html for all other routes
+    // This catches all routes that didn't match API endpoints or static files
+    // Use a catch-all middleware instead of route pattern
+    this.app.use((_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
   private setupRoutes(): void {

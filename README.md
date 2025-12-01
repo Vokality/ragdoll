@@ -54,9 +54,9 @@ npm run dev
 
 ```bash
 # Terminal 1: Start the API server
-npm run server
+cd apps/demo && npm run server
 
-# Terminal 2: Start the frontend
+# Terminal 2: Start the frontend (from root)
 npm run dev
 ```
 
@@ -68,7 +68,7 @@ This starts:
 ### 3. (Optional) Run MCP Server
 
 ```bash
-npm run mcp-server
+cd apps/demo && npm run mcp-server
 ```
 
 ### 4. (Optional) Docker
@@ -79,24 +79,33 @@ docker compose up
 
 ## Architecture
 
-### Domain-Driven Design
+### Monorepo Structure
 
 ```
-src/packages/
-├── character/          # Character domain
-│   ├── models/        # Skeleton & geometry
-│   ├── controllers/   # Animation controllers
-│   ├── components/    # React components
-│   ├── themes/        # Theme definitions
-│   └── types/         # TypeScript types
-├── api/               # API domain
-│   ├── server.ts      # Express + WebSocket server
-│   └── routes/        # API routes
-├── mcp/               # MCP integration
-│   └── ragdoll-mcp-server.ts
-└── ui/                # UI domain
-    ├── components/    # React UI components
-    └── hooks/         # Custom React hooks
+ragdoll/
+├── packages/
+│   └── ragdoll/              # @vokality/ragdoll - core character framework
+│       ├── src/
+│       │   ├── components/   # RagdollCharacter React component
+│       │   ├── controllers/  # CharacterController, ExpressionController, etc.
+│       │   ├── models/       # RagdollGeometry, RagdollSkeleton
+│       │   ├── themes/       # Theme system
+│       │   ├── types/       # TypeScript type definitions
+│       │   └── animation/   # Easing functions
+│       └── tests/            # Test suite
+│
+├── apps/
+│   ├── demo/                 # Browser demo with control panel
+│   │   └── src/
+│   │       ├── ui/           # UI components (Scene, ControlPanel, etc.)
+│   │       ├── api/          # Express server with WebSocket
+│   │       └── mcp/          # MCP server for browser version
+│   │
+│   └── emote/                # VS Code extension
+│       ├── src/              # Extension host code
+│       └── webview/          # Webview React app
+│
+└── package.json              # Workspace root (bun workspaces)
 ```
 
 ### Character System
@@ -263,7 +272,7 @@ Add to your MCP client configuration (e.g., Claude Desktop or Cursor):
     "ragdoll": {
       "command": "bun",
       "args": ["run", "mcp-server"],
-      "cwd": "/path/to/ragdoll"
+      "cwd": "/path/to/ragdoll/apps/demo"
     }
   }
 }
@@ -327,11 +336,13 @@ The head-only rig exposes two joints:
 
 ### Project Structure
 
-Following domain-driven design principles:
+This is a monorepo using Bun workspaces:
 
-- Each package represents a domain (character, api, mcp, ui)
-- Clear separation of concerns
-- Type-safe interfaces between domains
+- **`packages/ragdoll`** - Core character framework (`@vokality/ragdoll`)
+- **`apps/demo`** - Browser demo application with API, WebSocket, and MCP server
+- **`apps/emote`** - VS Code extension
+
+Clear separation of concerns with type-safe interfaces between packages.
 
 ### Tech Stack
 
@@ -347,22 +358,22 @@ Following domain-driven design principles:
 ### Building
 
 ```bash
-# Development
+# Development (from root)
 npm run dev
 
-# Production build
+# Production build (from root - builds all packages and apps)
 npm run build
 
-# Preview production build
-npm run preview
+# Preview production build (from apps/demo)
+cd apps/demo && npm run preview
 
-# Type check
-npm run type-check
+# Type check (from root)
+npm run typecheck
 
-# Lint
+# Lint (from root)
 npm run lint
 
-# Format
+# Format (from root)
 npm run format
 ```
 
@@ -422,8 +433,8 @@ lsof -i :3001
 
 ### MCP server not connecting
 
-1. Verify MCP configuration path is correct
-2. Check that `npm run mcp-server` works standalone
+1. Verify MCP configuration path is correct (should point to `apps/demo` directory)
+2. Check that `cd apps/demo && npm run mcp-server` works standalone
 3. Restart your MCP client
 
 ## License

@@ -1,32 +1,19 @@
 services:
-  ragdoll:
+  demo:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: ragdoll-demo
     ports:
-      - "${RAGDOLL_API_PORT:-3001}:3001" # API server
-      - "${VITE_PORT:-5173}:5173" # Vite dev server
+      - "3001:3001"
     environment:
-      - NODE_ENV=development
-      - RAGDOLL_API_PORT=3001
-      - VITE_PORT=5173
-      - VITE_API_URL=http://localhost:${RAGDOLL_API_PORT:-3001}
-    volumes:
-      # Mount source code for hot reload
-      - ./src:/app/src
-      - ./server:/app/server
-      - ./public:/app/public
-      - ./index.html:/app/index.html
-      - ./vite.config.ts:/app/vite.config.ts
-      - ./tsconfig.json:/app/tsconfig.json
-      - ./tsconfig.app.json:/app/tsconfig.app.json
-      - ./tsconfig.node.json:/app/tsconfig.node.json
-      # Exclude node_modules to use container's dependencies
-      - /app/node_modules
+      - NODE_ENV=production
+      - PORT=3001
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     restart: unless-stopped
+

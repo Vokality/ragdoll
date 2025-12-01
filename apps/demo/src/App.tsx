@@ -3,10 +3,12 @@ import { Scene } from "./ui/components/scene";
 import { ControlPanel } from "./ui/components/control-panel";
 import { SpeechBubble } from "./ui/components/speech-bubble";
 import { ThemeSelector } from "./ui/components/theme-selector";
+import { VariantSelector } from "./ui/components/variant-selector";
 import {
   CharacterController,
   getTheme,
   getDefaultTheme,
+  getDefaultVariant,
 } from "@vokality/ragdoll";
 import { useServerSync } from "./ui/hooks/use-server-sync";
 import { useBubbleState } from "./ui/hooks/use-bubble-state";
@@ -34,12 +36,23 @@ function getOrCreateThemeId(): string {
   return getDefaultTheme().id;
 }
 
+function getOrCreateVariantId(): string {
+  const stored = localStorage.getItem("ragdoll-variant-id");
+  if (stored) {
+    return stored;
+  }
+  return getDefaultVariant().id;
+}
+
 function App() {
   const [controller, setController] = useState<CharacterController | null>(
     null,
   );
   const [sessionId] = useState<string>(() => getOrCreateSessionId());
   const [themeId, setThemeId] = useState<string>(() => getOrCreateThemeId());
+  const [variantId, setVariantId] = useState<string>(() =>
+    getOrCreateVariantId(),
+  );
 
   // Derive theme from themeId - no need for separate state
   const theme = useMemo(() => getTheme(themeId), [themeId]);
@@ -116,6 +129,13 @@ function App() {
     }
   }, [themeId, controller, isConnected, syncThemeToServer]);
 
+  // Handle side effects when variantId changes
+  useEffect(() => {
+    localStorage.setItem("ragdoll-variant-id", variantId);
+    // Note: Variant changes require recreating the controller
+    // The Scene component will handle this via the key prop
+  }, [variantId]);
+
   const bubbleState = useBubbleState(controller);
 
   const handleControllerReady = useCallback(
@@ -132,7 +152,12 @@ function App() {
       {/* Scanline overlay for CRT effect */}
       <div className="scanlines" />
 
-      <Scene onControllerReady={handleControllerReady} theme={theme} />
+      <Scene
+        key={`${themeId}-${variantId}`}
+        onControllerReady={handleControllerReady}
+        theme={theme}
+        variantId={variantId}
+      />
       <SpeechBubble
         text={bubbleState.text}
         tone={bubbleState.tone}
@@ -140,9 +165,13 @@ function App() {
       />
       <ControlPanel controller={controller} />
 
-      {/* Theme selector */}
-      <div style={styles.themeSelectorWrapper}>
+      {/* Theme and Variant selectors */}
+      <div style={styles.selectorWrapper}>
         <ThemeSelector currentThemeId={themeId} onThemeChange={setThemeId} />
+        <VariantSelector
+          currentVariantId={variantId}
+          onVariantChange={setVariantId}
+        />
       </div>
 
       {/* Connection status indicator */}
@@ -181,11 +210,14 @@ function App() {
 }
 
 const styles = {
-  themeSelectorWrapper: {
+  selectorWrapper: {
     position: "fixed" as const,
     top: "12px",
     left: "12px",
     zIndex: 1000,
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "8px",
   },
   statusIndicator: {
     position: "fixed" as const,

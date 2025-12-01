@@ -9,9 +9,10 @@ import type { RagdollTheme } from "@vokality/ragdoll";
 interface SceneProps {
   onControllerReady: (controller: CharacterController) => void;
   theme?: RagdollTheme;
+  variantId?: string;
 }
 
-export function Scene({ onControllerReady, theme }: SceneProps) {
+export function Scene({ onControllerReady, theme, variantId }: SceneProps) {
   const [controller, setController] = useState<CharacterController | null>(
     null,
   );
@@ -42,6 +43,7 @@ export function Scene({ onControllerReady, theme }: SceneProps) {
       <RagdollCharacter
         onControllerReady={handleControllerReady}
         theme={theme}
+        variant={variantId}
       />
       {controller && (
         <PomodoroTimer

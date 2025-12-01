@@ -1,5 +1,10 @@
-import { RagdollAPIServer } from "../src/packages/api/server";
-import { CharacterController } from "../src/packages/character/controllers/character-controller";
+import { RagdollAPIServer } from "../src/api/server";
+import { CharacterController } from "@vokality/ragdoll";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Read port from environment variables or default to 3001
 const port = Number.parseInt(
@@ -9,6 +14,13 @@ const port = Number.parseInt(
 
 // Create and start the API server
 const server = new RagdollAPIServer(port);
+
+// In production, serve static files from the built frontend
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(__dirname, "..", "dist");
+  server.serveStaticFiles(distPath);
+  console.log(`✓ Serving static files from: ${distPath}`);
+}
 
 // Create a character controller for the default session (backward compatibility)
 const characterController = new CharacterController();
