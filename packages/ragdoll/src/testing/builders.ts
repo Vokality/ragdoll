@@ -138,6 +138,3 @@ export class HeadPoseBuilder {
     return { ...this.pose };
   }
 }
-
-
-

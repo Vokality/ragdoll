@@ -140,6 +140,3 @@ describe("State Events", () => {
   - `emittedEvents`: Array of all emitted events
   - `clearHistory()`: Clear event history
   - `reset()`: Clear events and subscribers
-
-
-

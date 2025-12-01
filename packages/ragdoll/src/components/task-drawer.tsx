@@ -78,7 +78,9 @@ function getCardStyle(
       zIndex: 50,
       transform: `${dragTransform} scale(1) translateY(0px)`,
       opacity: 1,
-      transition: isDragging ? "none" : "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      transition: isDragging
+        ? "none"
+        : "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
       pointerEvents: "auto",
     };
   }
@@ -219,7 +221,8 @@ function TaskCard({
         ? `1px solid ${colors.accent}`
         : `0.5px solid ${colors.border}`;
 
-  const cardGlow = isInProgress && isActive ? `0 0 12px 0 ${colors.glow}15` : "none";
+  const cardGlow =
+    isInProgress && isActive ? `0 0 12px 0 ${colors.glow}15` : "none";
 
   const cardFilter = isDone ? "saturate(0.5)" : "none";
 
@@ -427,10 +430,7 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
       const velocity = Math.abs(deltaX) / deltaTime;
 
       // Determine if swipe occurred
-      if (
-        Math.abs(deltaX) > SWIPE_THRESHOLD ||
-        velocity > VELOCITY_THRESHOLD
-      ) {
+      if (Math.abs(deltaX) > SWIPE_THRESHOLD || velocity > VELOCITY_THRESHOLD) {
         if (deltaX < 0) {
           // Swipe left - next card
           setCurrentCardIndex((prev) =>
@@ -452,7 +452,6 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
     },
     [dragState, filteredTasks.length],
   );
-
 
   // Don't render if no tasks
   if (state.tasks.length === 0) {
