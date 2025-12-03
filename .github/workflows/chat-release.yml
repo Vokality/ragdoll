@@ -1,0 +1,81 @@
+name: Chat Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  package:
+    name: Package Chat App
+    runs-on: macos-14
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure main branch
+        run: |
+          git checkout main
+          git pull --ff-only origin main
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [ -z "${RELEASE_TAG}" ]; then
+            echo "Unable to determine release tag" >&2
+            exit 1
+          fi
+          VERSION="${RELEASE_TAG#v}"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Write signing environment
+        env:
+          CHAT_BUILD_ENV: ${{ secrets.CHAT_BUILD_ENV }}
+        run: |
+          if [ -z "$CHAT_BUILD_ENV" ]; then
+            echo "CHAT_BUILD_ENV secret is required" >&2
+            exit 1
+          fi
+          printf "%s\n" "$CHAT_BUILD_ENV" > .env
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Bump chat package version
+        run: |
+          bun -e "const fs=await import('node:fs/promises'); const pkg=JSON.parse(await fs.readFile('apps/chat/package.json','utf8')); pkg.version='${{ steps.version.outputs.version }}'; await fs.writeFile('apps/chat/package.json', JSON.stringify(pkg,null,2)+'\n');"
+
+      - name: Commit version bump
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(chat): bump to ${{ steps.version.outputs.version }}"
+          branch: main
+          file_pattern: apps/chat/package.json
+
+      - name: Build macOS artifacts
+        run: ./apps/chat/scripts/build-mac.sh
+
+      - name: Clean up signing environment
+        run: rm -f .env
+
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Chat ${{ steps.version.outputs.version }}
+          files: |
+            apps/chat/release/Ragdoll Chat-*-arm64.dmg
+            apps/chat/release/Ragdoll Chat-*-arm64-mac.zip
