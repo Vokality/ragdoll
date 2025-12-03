@@ -59,6 +59,15 @@ jobs:
           node-version: "lts/*"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Remove npm auth token for trusted publishing
+        run: |
+          echo "NODE_AUTH_TOKEN=" >> "$GITHUB_ENV"
+          npm config delete //registry.npmjs.org/:_authToken || true
+          if [ -n "${NPM_CONFIG_USERCONFIG:-}" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
+            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+            sed -i '/always-auth/d' "$NPM_CONFIG_USERCONFIG"
+          fi
+
       - name: Verify npm version
         run: npm --version
 
