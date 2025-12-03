@@ -8,10 +8,15 @@ import {
   getDefaultTheme,
 } from "@vokality/ragdoll";
 import type { RagdollTheme } from "@vokality/ragdoll";
-import { SpeechBubble } from "./speech-bubble";
+import { ConversationBubbles } from "./conversation-bubbles";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
 
 interface CharacterViewProps {
-  speechText: string | null;
+  messages: Message[];
   isStreaming?: boolean;
   themeId?: string;
   variantId?: string;
@@ -19,7 +24,7 @@ interface CharacterViewProps {
 }
 
 export function CharacterView({
-  speechText,
+  messages,
   isStreaming,
   themeId = "default",
   variantId = "human",
@@ -57,8 +62,12 @@ export function CharacterView({
         />
       </div>
 
-      {/* Speech bubble - below the character */}
-      <SpeechBubble text={speechText} isStreaming={isStreaming} theme={theme} />
+      {/* Conversation bubbles - below the character */}
+      <ConversationBubbles
+        messages={messages}
+        isStreaming={isStreaming}
+        theme={theme}
+      />
 
       {/* Pomodoro timer */}
       {controller && (

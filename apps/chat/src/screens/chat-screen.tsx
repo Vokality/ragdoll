@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react";
 import type { CharacterController, FacialMood, PomodoroDuration } from "@vokality/ragdoll";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
@@ -17,12 +17,12 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
   const [settings, setSettings] = useState({ theme: "default", variant: "human" });
   const [conversation, setConversation] = useState<Message[]>([]);
-  const [speechText, setSpeechText] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const streamingTextRef = useRef("");
+  const [streamingContent, setStreamingContent] = useState<string>("");
 
   // Load settings on mount
   useEffect(() => {
@@ -40,7 +40,7 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   useEffect(() => {
     const unsubText = window.electronAPI.onStreamingText((text) => {
       streamingTextRef.current += text;
-      setSpeechText(streamingTextRef.current);
+      setStreamingContent(streamingTextRef.current);
     });
 
     const unsubFunctionCall = window.electronAPI.onFunctionCall((name, args) => {
@@ -90,8 +90,9 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     const updatedConversation = [...conversation, userMessage];
     setConversation(updatedConversation);
 
-    // Reset streaming state; keep previous text visible until new text arrives
+    // Reset streaming state
     streamingTextRef.current = "";
+    setStreamingContent("");
     setIsStreaming(true);
     setIsLoading(true);
 
@@ -106,15 +107,10 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     if (!result.success) {
       setIsStreaming(false);
       setIsLoading(false);
-      setSpeechText(result.error ?? "Something went wrong");
+      setStreamingContent("");
       if (controller) {
         controller.setMood("sad", 0.3);
       }
-
-      // Clear error after delay
-      setTimeout(() => {
-        setSpeechText(null);
-      }, 4000);
     }
   };
 
@@ -130,19 +126,31 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
 
   const handleClearConversation = async () => {
     setConversation([]);
+    setStreamingContent("");
     await window.electronAPI.clearConversation();
     setIsSettingsOpen(false);
-    setSpeechText("Conversation cleared!");
     if (controller) {
       controller.setMood("smile", 0.3);
     }
-    setTimeout(() => setSpeechText(null), 2000);
   };
 
   const handleChangeApiKey = async () => {
     await window.electronAPI.clearApiKey();
     onLogout();
   };
+
+  // Compute visible messages (last 2 from conversation + streaming if active)
+  const visibleMessages = useMemo(() => {
+    let messages = [...conversation];
+
+    // Add streaming message if active
+    if (isStreaming && streamingContent) {
+      messages = [...messages, { role: "assistant" as const, content: streamingContent }];
+    }
+
+    // Get last 2 messages
+    return messages.slice(-2);
+  }, [conversation, isStreaming, streamingContent]);
 
   return (
     <div style={styles.container}>
@@ -174,7 +182,7 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
 
       {/* Character View */}
       <CharacterView
-        speechText={speechText}
+        messages={visibleMessages}
         isStreaming={isStreaming}
         themeId={settings.theme}
         variantId={settings.variant}

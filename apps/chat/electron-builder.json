@@ -9,19 +9,21 @@
     "dist/**/*",
     "package.json"
   ],
+  "asar": false,
+  "nodeGypRebuild": false,
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
+  "afterPack": "./scripts/after-pack.js",
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
-    "icon": "build/icon.icns",
     "darkModeSupport": true
   },
   "win": {
-    "target": ["nsis", "portable"],
-    "icon": "build/icon.ico"
+    "target": ["nsis", "portable"]
   },
   "linux": {
     "target": ["AppImage", "deb"],
-    "icon": "build/icon.png",
     "category": "Utility"
   },
   "nsis": {

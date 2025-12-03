@@ -2,6 +2,25 @@
   "name": "ragdoll-chat",
   "version": "0.1.0",
   "private": true,
+  "author": "lemuel@vokality.com",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vokality/ragdoll"
+  },
+  "homepage": "https://github.com/vokality/ragdoll/tree/main/apps/chat",
+  "bugs": {
+    "url": "https://github.com/vokality/ragdoll/issues"
+  },
+  "keywords": [
+    "ragdoll",
+    "chat",
+    "ai",
+    "assistant",
+    "animated",
+    "character",
+    "gpt"
+  ],
   "description": "Chat with an animated AI character powered by GPT",
   "main": "dist/electron/main.js",
   "type": "module",
@@ -16,6 +35,7 @@
   },
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",
+    "node-fetch": "^2",
     "openai": "^4.73.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -32,4 +52,3 @@
     "wait-on": "^8.0.0"
   }
 }
-
