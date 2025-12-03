@@ -12,6 +12,17 @@ log() {
 
 log "Repository root: $ROOT_DIR"
 
+ENV_FILE="$ROOT_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+  log "Loading environment from $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+else
+  log "No .env file found at $ENV_FILE; skipping environment load"
+fi
+
 log "Installing workspace dependencies (bun install)"
 (cd "$ROOT_DIR" && bun install)
 
@@ -24,15 +35,13 @@ log "Installing chat dependencies for building"
 log "Building chat renderer & electron bundles"
 (cd "$CHAT_DIR" && bun run build)
 
-log "Replacing with production-only dependencies (npm for proper structure)"
+log "Preparing production-only dependencies with bun"
 (
   cd "$CHAT_DIR"
 
-  # Create temp directory for npm install
   TMP_DIR=$(mktemp -d)
   cd "$TMP_DIR"
 
-  # Create a clean package.json without workspace dependencies
   cat > package.json <<'EOF'
 {
   "name": "ragdoll-chat",
@@ -47,14 +56,13 @@ log "Replacing with production-only dependencies (npm for proper structure)"
 }
 EOF
 
-  # Install with npm to get proper flattened node_modules
-  npm install --omit=dev --legacy-peer-deps
+  log "Installing production dependencies with bun"
+  BUN_INSTALL_USE_SYMLINKS=0 bun install --production
 
   log "Copying node_modules to $CHAT_DIR"
   rm -rf "$CHAT_DIR/node_modules"
   mv node_modules "$CHAT_DIR/"
 
-  # Cleanup
   cd "$CHAT_DIR"
   rm -rf "$TMP_DIR"
 

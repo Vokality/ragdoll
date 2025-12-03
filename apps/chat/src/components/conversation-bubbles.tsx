@@ -53,7 +53,7 @@ export function ConversationBubbles({
       return {
         textColor: "#1e293b",
         borderColor: theme?.colors.hair.light ?? "#f1f5f9",
-        backgroundColor: theme?.colors.hair.transparent ?? "rgba(241, 245, 249, 0.9)",
+        backgroundColor: theme?.colors.blush.transparent ?? "rgba(241, 245, 249, 0.9)",
       };
     }
   };

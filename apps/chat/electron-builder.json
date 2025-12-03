@@ -2,14 +2,18 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.vokality.ragdoll-chat",
   "productName": "Ragdoll Chat",
+  "electronVersion": "33.0.0",
   "directories": {
     "output": "release"
   },
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/**"
+  ],
   "files": [
     "dist/**/*",
     "package.json"
   ],
-  "asar": false,
   "nodeGypRebuild": false,
   "npmRebuild": false,
   "buildDependenciesFromSource": false,
