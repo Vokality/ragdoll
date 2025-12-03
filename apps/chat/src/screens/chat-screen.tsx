@@ -1,9 +1,15 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react";
-import type { CharacterController, FacialMood, PomodoroDuration, TaskState } from "@vokality/ragdoll";
+import type { CharacterController, FacialMood, PomodoroDuration, TaskState, TaskController, PomodoroController } from "@vokality/ragdoll";
+import {
+  createDerivedSlotState,
+  type ExtensionUISlot,
+  type ListPanelSection,
+  type ItemStatus,
+  type PanelAction,
+} from "@vokality/ragdoll-extensions";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
-import { TaskSheet } from "../components/task-sheet";
 
 interface ChatScreenProps {
   onLogout: () => void;
@@ -20,6 +26,210 @@ const EMPTY_TASK_STATE: TaskState = {
   isExpanded: false,
 };
 
+/**
+ * Create a task UI slot from a CharacterController's TaskController
+ */
+function createTaskSlotFromController(taskController: TaskController): ExtensionUISlot {
+  const state = createDerivedSlotState({
+    getSourceState: () => taskController.getState(),
+    subscribeToSource: (callback) => taskController.onUpdate(() => callback()),
+    deriveState: (taskState) => {
+      const { tasks, activeTaskId } = taskState;
+
+      const activeTasks = tasks.filter((t) => t.status !== "done");
+      const completedTasks = tasks.filter((t) => t.status === "done");
+
+      const badge = activeTasks.length > 0 ? activeTasks.length : null;
+      const visible = tasks.length > 0;
+
+      const sections: ListPanelSection[] = [];
+
+      if (activeTasks.length > 0) {
+        sections.push({
+          id: "active",
+          title: "Active",
+          items: activeTasks.map((task) => {
+            const isDone = task.status === "done";
+            const isActive = task.id === activeTaskId;
+
+            let status: ItemStatus = "default";
+            if (isActive) status = "active";
+            else if (task.status === "blocked") status = "error";
+            else if (task.status === "in_progress") status = "active";
+
+            return {
+              id: task.id,
+              label: task.text,
+              sublabel: task.blockedReason,
+              status,
+              checkable: true,
+              checked: isDone,
+              onToggle: () => {
+                if (isDone) {
+                  taskController.updateTaskStatus(task.id, "todo");
+                } else {
+                  taskController.updateTaskStatus(task.id, "done");
+                }
+              },
+              onClick: !isDone
+                ? () => taskController.setActiveTask(task.id)
+                : undefined,
+            };
+          }),
+        });
+      }
+
+      if (completedTasks.length > 0) {
+        sections.push({
+          id: "completed",
+          title: "Completed",
+          items: completedTasks.map((task) => ({
+            id: task.id,
+            label: task.text,
+            status: "success" as ItemStatus,
+            checkable: true,
+            checked: true,
+            onToggle: () => taskController.updateTaskStatus(task.id, "todo"),
+          })),
+          collapsible: true,
+          defaultCollapsed: activeTasks.length > 3,
+          actions: [
+            {
+              id: "clear-completed",
+              label: "Clear all",
+              onClick: () => taskController.clearCompleted(),
+            },
+          ],
+        });
+      }
+
+      return {
+        badge,
+        visible,
+        panel: {
+          type: "list" as const,
+          title: "Tasks",
+          emptyMessage: "No tasks yet",
+          sections,
+        },
+      };
+    },
+  });
+
+  return {
+    id: "tasks.main",
+    label: "Tasks",
+    icon: "checklist",
+    priority: 100,
+    state,
+  };
+}
+
+/**
+ * Create a pomodoro UI slot from a CharacterController's PomodoroController
+ */
+function createPomodoroSlotFromController(pomodoroController: PomodoroController): ExtensionUISlot {
+  const formatTime = (seconds: number): string => {
+    const totalSeconds = Math.ceil(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const state = createDerivedSlotState({
+    getSourceState: () => pomodoroController.getState(),
+    subscribeToSource: (callback) => pomodoroController.onUpdate(() => callback()),
+    deriveState: (pomodoroState) => {
+      const { state: phase, remainingTime, isBreak } = pomodoroState;
+
+      // Badge shows time remaining when active
+      const badge = phase === "running" || phase === "paused"
+        ? formatTime(remainingTime)
+        : null;
+
+      // Only visible when timer is active
+      const visible = phase !== "idle";
+
+      // Build panel items
+      const items: Array<{
+        id: string;
+        label: string;
+        sublabel?: string;
+        status?: ItemStatus;
+      }> = [];
+
+      // Current status item
+      const phaseLabel = isBreak
+        ? (phase === "running" ? "Break time" : "Break paused")
+        : (phase === "running" ? "Focus time" : phase === "paused" ? "Paused" : "Ready");
+
+      items.push({
+        id: "status",
+        label: phaseLabel,
+        sublabel: phase !== "idle" ? `${formatTime(remainingTime)} remaining` : undefined,
+        status: phase === "running" ? (isBreak ? "success" : "active") : phase === "paused" ? "warning" : "default",
+      });
+
+      // Build actions based on state
+      const actions: PanelAction[] = [];
+
+      if (phase === "idle") {
+        actions.push({
+          id: "start",
+          label: "Start Focus",
+          variant: "primary",
+          onClick: () => pomodoroController.start(),
+        });
+      } else if (phase === "running") {
+        actions.push({
+          id: "pause",
+          label: "Pause",
+          variant: "secondary",
+          onClick: () => pomodoroController.pause(),
+        });
+        actions.push({
+          id: "reset",
+          label: "Reset",
+          variant: "danger",
+          onClick: () => pomodoroController.reset(),
+        });
+      } else if (phase === "paused") {
+        actions.push({
+          id: "resume",
+          label: "Resume",
+          variant: "primary",
+          onClick: () => pomodoroController.start(),
+        });
+        actions.push({
+          id: "reset",
+          label: "Reset",
+          variant: "danger",
+          onClick: () => pomodoroController.reset(),
+        });
+      }
+
+      return {
+        badge,
+        visible,
+        panel: {
+          type: "list" as const,
+          title: isBreak ? "Break Time" : "Focus Timer",
+          items,
+          actions,
+        },
+      };
+    },
+  });
+
+  return {
+    id: "pomodoro.main",
+    label: "Timer",
+    icon: "timer",
+    priority: 90,
+    state,
+  };
+}
+
 export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
   const [settings, setSettings] = useState({ theme: "default", variant: "human" });
@@ -27,12 +237,19 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [initialTaskState, setInitialTaskState] = useState<TaskState | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isTaskSheetOpen, setIsTaskSheetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [taskState, setTaskState] = useState<TaskState>(EMPTY_TASK_STATE);
 
   const streamingTextRef = useRef("");
   const [streamingContent, setStreamingContent] = useState<string>("");
+
+  // Create extension UI slots when controller is ready
+  const slots = useMemo<ExtensionUISlot[]>(() => {
+    if (!controller) return [];
+    return [
+      createTaskSlotFromController(controller.getTaskController()),
+      createPomodoroSlotFromController(controller.getPomodoroController()),
+    ];
+  }, [controller]);
 
   // Load settings on mount
   useEffect(() => {
@@ -52,29 +269,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         setInitialTaskState(EMPTY_TASK_STATE);
       });
   }, []);
-
-  // Subscribe to task state updates
-  useEffect(() => {
-    if (!controller) {
-      return;
-    }
-    const taskController = controller.getTaskController();
-    // Initialize with current state
-    setTaskState(taskController.getState());
-
-    const unsubscribe = taskController.onUpdate((state) => {
-      setTaskState(state);
-    });
-    return unsubscribe;
-  }, [controller]);
-
-  // Auto-close task sheet when no tasks remain
-  useEffect(() => {
-    const hasNoTasks = taskState.tasks.length === 0;
-    if (hasNoTasks && isTaskSheetOpen) {
-      setIsTaskSheetOpen(false);
-    }
-  }, [taskState.tasks.length, isTaskSheetOpen]);
 
   // Set up streaming event listeners
   useEffect(() => {
@@ -106,7 +300,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
           return updated;
         });
       }
-      // Speech bubble stays visible until next message
     });
 
     return () => {
@@ -192,11 +385,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     return messages.slice(-2);
   }, [conversation, isStreaming, streamingContent]);
 
-  // Count active (non-done) tasks for the badge
-  const activeTaskCount = useMemo(() => {
-    return taskState.tasks.filter((t) => t.status !== "done").length;
-  }, [taskState.tasks]);
-
   return (
     <div style={styles.container}>
       {/* Drag region for window */}
@@ -237,12 +425,11 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         />
       )}
 
-      {/* Chat Input */}
+      {/* Chat Input with extension slots */}
       <ChatInput
         onSend={handleSendMessage}
         disabled={isLoading}
-        activeTaskCount={activeTaskCount}
-        onTaskButtonClick={() => setIsTaskSheetOpen(true)}
+        slots={slots}
       />
 
       {/* Settings Modal */}
@@ -256,15 +443,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         onClearConversation={handleClearConversation}
         onChangeApiKey={handleChangeApiKey}
       />
-
-      {/* Task Sheet */}
-      {controller && (
-        <TaskSheet
-          isOpen={isTaskSheetOpen}
-          onClose={() => setIsTaskSheetOpen(false)}
-          controller={controller.getTaskController()}
-        />
-      )}
     </div>
   );
 }
@@ -355,6 +533,12 @@ function executeFunctionCall(
         break;
       case "toggleTasks":
         controller.toggleTasks();
+        break;
+
+      // Query-only tools (handled by main process, no UI action needed)
+      case "listTasks":
+      case "getPomodoroState":
+        // No-op: these return data to the AI, no renderer action needed
         break;
 
       default:

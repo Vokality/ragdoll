@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  Notification,
   safeStorage,
   shell,
 } from "electron";
@@ -136,6 +137,15 @@ async function createWindow(): Promise<void> {
       // Notify renderer of pomodoro state change
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("pomodoro:state-changed", event);
+      }
+    },
+    onNotification: (notification) => {
+      if (Notification.isSupported()) {
+        new Notification({
+          title: notification.title,
+          body: notification.body,
+          silent: notification.silent,
+        }).show();
       }
     },
   });

@@ -1,36 +1,24 @@
 /**
- * @vokality/ragdoll-extensions
+ * @vokality/ragdoll-extensions/core
  *
- * Extension framework for Ragdoll - register tools, handlers, and plugins
- * that integrate with AI agents.
+ * Core extension framework without React UI components.
+ * Use this entry point in environments where React is not available
+ * (e.g., Electron main process, Node.js scripts).
+ *
+ * For React UI components, use "@vokality/ragdoll-extensions/ui" or
+ * the main "@vokality/ragdoll-extensions" entry point.
  *
  * @example
  * ```ts
+ * // In Electron main process or Node.js
  * import {
- *   createExtension,
  *   createRegistry,
- *   createCharacterExtension,
- * } from "@vokality/ragdoll-extensions";
+ *   createStatefulTaskExtension,
+ * } from "@vokality/ragdoll-extensions/core";
  *
- * // Create a registry
  * const registry = createRegistry();
- *
- * // Register the character extension
- * const characterExtension = createCharacterExtension({
- *   handler: {
- *     setMood: async ({ mood }) => ({ success: true }),
- *     triggerAction: async ({ action }) => ({ success: true }),
- *     setHeadPose: async (args) => ({ success: true }),
- *     setSpeechBubble: async (args) => ({ success: true }),
- *   },
- * });
- * await registry.register(characterExtension);
- *
- * // Get all tools for OpenAI
- * const tools = registry.getAllTools();
- *
- * // Execute a tool
- * const result = await registry.executeTool("setMood", { mood: "smile" });
+ * const { extension, manager } = createStatefulTaskExtension();
+ * await registry.register(extension);
  * ```
  */
 
@@ -65,6 +53,10 @@ export type {
 
   // Factory types
   ExtensionConfig,
+
+  // Notification types
+  NotificationRequest,
+  NotificationCallback,
 } from "./types.js";
 
 // =============================================================================
@@ -139,7 +131,7 @@ export type {
   StatefulPomodoroExtensionOptions,
 } from "./extensions/pomodoro/index.js";
 
-// Tasks extension
+// Tasks extension (without UI)
 export {
   createTaskExtension,
   createStatefulTaskExtension,
@@ -165,81 +157,3 @@ export type {
   TaskExtensionOptions,
   StatefulTaskExtensionOptions,
 } from "./extensions/tasks/index.js";
-
-// =============================================================================
-// UI Components and Utilities
-// =============================================================================
-
-export {
-  // State management
-  createSlotState,
-  createDerivedSlotState,
-  createHiddenSlotState,
-  createListSlotState,
-
-  // React hooks
-  useSlotState,
-  useSlotStateStore,
-  useSlotBadge,
-  useSlotVisible,
-  useSlotRegistry,
-  useVisibleSlots,
-  useActiveSlot,
-
-  // React components
-  SlotButton,
-  SlotButtonStateless,
-  SlotPanel,
-  SlotPanelBase,
-  SlotBar,
-  ControlledSlotBar,
-
-  // Icons
-  presetIcons,
-  getSlotIcon,
-} from "./ui/index.js";
-
-// Task UI (requires React)
-export { createTaskUISlot } from "./extensions/tasks/ui.js";
-export type { TaskUISlotOptions } from "./extensions/tasks/ui.js";
-
-// Pomodoro UI (requires React)
-export { createPomodoroUISlot } from "./extensions/pomodoro/ui.js";
-export type { PomodoroUISlotOptions } from "./extensions/pomodoro/ui.js";
-
-export type {
-  // Icon types
-  PresetIconName,
-  SlotIcon,
-  IconProps,
-
-  // Panel types
-  ItemStatus,
-  ListPanelItem,
-  PanelAction,
-  ListPanelSection,
-  ListPanelConfig,
-  CustomPanelConfig,
-  CustomPanelProps,
-  PanelConfig,
-
-  // Slot types
-  SlotState,
-  SlotStateCallback,
-  SlotStateStore,
-  ExtensionUISlot,
-  MutableSlotStateStore,
-  DerivedSlotStateOptions,
-
-  // Registry types
-  SlotRegistryEventType,
-  SlotRegistryEvent,
-  SlotRegistryEventCallback,
-  SlotRegistry,
-
-  // Component prop types
-  SlotButtonProps,
-  SlotPanelProps,
-  SlotBarProps,
-  ControlledSlotBarProps,
-} from "./ui/index.js";

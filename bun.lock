@@ -100,8 +100,15 @@
       "name": "@vokality/ragdoll-extensions",
       "version": "0.1.0",
       "devDependencies": {
+        "@types/react": "^19.1.8",
         "typescript": "~5.9.3",
       },
+      "peerDependencies": {
+        "react": "^18.0.0 || ^19.0.0",
+      },
+      "optionalPeers": [
+        "react",
+      ],
     },
   },
   "packages": {

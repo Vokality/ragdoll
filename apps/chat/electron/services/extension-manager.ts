@@ -26,7 +26,8 @@ import {
   type TaskEvent,
   type PomodoroManager,
   type PomodoroEvent,
-} from "@vokality/ragdoll-extensions";
+  type NotificationCallback,
+} from "@vokality/ragdoll-extensions/core";
 
 // =============================================================================
 // Types
@@ -63,6 +64,9 @@ export interface ExtensionManagerConfig {
 
   /** Callback when pomodoro state changes (for sync to renderer) */
   onPomodoroStateChange?: PomodoroStateCallback;
+
+  /** Callback to show system notifications (provided by host environment) */
+  onNotification?: NotificationCallback;
 
   /** Initial task state to load */
   initialTaskState?: TaskState;
@@ -183,6 +187,7 @@ export class ExtensionManager {
             });
           }
         },
+        onNotification: this.config.onNotification,
       });
     this.pomodoroManager = pomodoroManager;
     await this.registry.register(pomodoroExtension);

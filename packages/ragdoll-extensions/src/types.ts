@@ -178,6 +178,31 @@ export interface RegisterOptions {
 // Factory Types
 // =============================================================================
 
+// =============================================================================
+// Notification Types
+// =============================================================================
+
+/**
+ * Request to show a system notification
+ */
+export interface NotificationRequest {
+  /** Notification title */
+  title: string;
+  /** Notification body text */
+  body?: string;
+  /** Whether to suppress the notification sound */
+  silent?: boolean;
+}
+
+/**
+ * Callback for showing system notifications
+ */
+export type NotificationCallback = (notification: NotificationRequest) => void;
+
+// =============================================================================
+// Factory Types
+// =============================================================================
+
 /**
  * Configuration for creating an extension via factory
  */

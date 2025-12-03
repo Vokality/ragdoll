@@ -1,20 +1,18 @@
 import { useState, useRef, useEffect, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
-import { TaskButton } from "./task-button";
+import { SlotBar, type ExtensionUISlot } from "@vokality/ragdoll-extensions";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  activeTaskCount?: number;
-  onTaskButtonClick?: () => void;
+  slots?: ExtensionUISlot[];
 }
 
 export function ChatInput({
   onSend,
   disabled,
   placeholder = "Type your message...",
-  activeTaskCount = 0,
-  onTaskButtonClick,
+  slots = [],
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -53,10 +51,6 @@ export function ChatInput({
     }
   };
 
-  const handleTaskClick = () => {
-    onTaskButtonClick?.();
-  };
-
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
       <style>{`
@@ -69,10 +63,10 @@ export function ChatInput({
         }
       `}</style>
 
-      {/* Task button row */}
-      {activeTaskCount > 0 && (
-        <div style={styles.taskButtonRow}>
-          <TaskButton activeCount={activeTaskCount} onClick={handleTaskClick} />
+      {/* Extension slot bar */}
+      {slots.length > 0 && (
+        <div style={styles.slotBarRow}>
+          <SlotBar slots={slots} />
         </div>
       )}
 
@@ -124,7 +118,7 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--bg-secondary)",
     borderTop: "1px solid var(--border)",
   },
-  taskButtonRow: {
+  slotBarRow: {
     display: "flex",
     justifyContent: "flex-start",
     paddingBottom: "8px",

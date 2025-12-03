@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef, type CSSProperties } from "re
 import {
   RagdollCharacter,
   CharacterController,
-  PomodoroTimer,
   getTheme,
   getDefaultTheme,
 } from "@vokality/ragdoll";
@@ -91,13 +90,6 @@ export function CharacterView({
         messages={messages}
         isStreaming={isStreaming}
       />
-
-      {/* Pomodoro timer */}
-      {controller && (
-        <div style={styles.pomodoroWrapper}>
-          <PomodoroTimer controller={controller.getPomodoroController()} />
-        </div>
-      )}
     </div>
   );
 }
@@ -119,10 +111,5 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-  },
-  pomodoroWrapper: {
-    marginTop: "8px",
-    width: "100%",
-    maxWidth: "260px",
   },
 };

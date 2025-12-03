@@ -14,6 +14,7 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
+  NotificationCallback,
 } from "../../types.js";
 import {
   PomodoroManager,
@@ -263,6 +264,8 @@ export interface StatefulPomodoroExtensionOptions {
   breakDuration?: BreakDuration;
   /** Callback when pomodoro state changes (for persistence/sync) */
   onStateChange?: PomodoroEventCallback;
+  /** Callback to show system notifications */
+  onNotification?: NotificationCallback;
 }
 
 /**
@@ -298,6 +301,7 @@ export function createStatefulPomodoroExtension(
     sessionDuration = 30,
     breakDuration = 5,
     onStateChange,
+    onNotification,
   } = options;
 
   // Create the manager
@@ -306,6 +310,23 @@ export function createStatefulPomodoroExtension(
   // Subscribe to state changes if callback provided
   if (onStateChange) {
     manager.onStateChange(onStateChange);
+  }
+
+  // Subscribe to state changes for notifications
+  if (onNotification) {
+    manager.onStateChange((event) => {
+      if (event.type === "pomodoro:session-complete") {
+        onNotification({
+          title: "🍅 Focus Session Complete!",
+          body: "Great work! Time for a break.",
+        });
+      } else if (event.type === "pomodoro:break-complete") {
+        onNotification({
+          title: "🍅 Break Over!",
+          body: "Ready to focus again?",
+        });
+      }
+    });
   }
 
   // Create handler that uses the manager

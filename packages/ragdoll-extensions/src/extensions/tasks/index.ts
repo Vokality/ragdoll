@@ -333,34 +333,7 @@ export interface TaskExtensionOptions {
  *       const task = taskController.addTask(text, status);
  *       return { success: true, data: task };
  *     },
- *     updateTaskStatus: async ({ taskId, status, blockedReason }) => {
- *       taskController.updateStatus(taskId, status, blockedReason);
- *       return { success: true };
- *     },
- *     setActiveTask: async ({ taskId }) => {
- *       taskController.setActive(taskId);
- *       return { success: true };
- *     },
- *     removeTask: async ({ taskId }) => {
- *       taskController.remove(taskId);
- *       return { success: true };
- *     },
- *     completeActiveTask: async () => {
- *       taskController.completeActive();
- *       return { success: true };
- *     },
- *     clearCompletedTasks: async () => {
- *       taskController.clearCompleted();
- *       return { success: true };
- *     },
- *     clearAllTasks: async () => {
- *       taskController.clearAll();
- *       return { success: true };
- *     },
- *     listTasks: async () => {
- *       const tasks = taskController.getTasks();
- *       return { success: true, data: tasks };
- *     },
+ *     // ... other handlers
  *   },
  * });
  *
@@ -404,10 +377,7 @@ export interface StatefulTaskExtensionOptions {
  * const { extension, manager } = createStatefulTaskExtension({
  *   initialState: await loadTasksFromStorage(),
  *   onStateChange: (event) => {
- *     // Persist to storage
  *     saveTasksToStorage(event.state);
- *     // Notify renderer
- *     mainWindow?.webContents.send("tasks:state-changed", event.state);
  *   },
  * });
  *
