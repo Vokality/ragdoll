@@ -10,6 +10,11 @@ export function ChatInput({ onSend, disabled, placeholder = "Type your message..
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-focus on mount
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
   // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -25,6 +30,10 @@ export function ChatInput({ onSend, disabled, placeholder = "Type your message..
     if (trimmed && !disabled) {
       onSend(trimmed);
       setMessage("");
+      // Refocus the textarea after sending
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -137,4 +146,3 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
 };
-

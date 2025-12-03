@@ -41,19 +41,22 @@ export function ConversationBubbles({
 
   if (messages.length === 0) return null;
 
-  // Helper to get bubble colors based on role with improved contrast
+  // Helper to get bubble colors based on role
   const getBubbleColors = (role: "user" | "assistant") => {
+    const borderColor = theme?.colors.accent ?? "#5a9bc4";
+
     if (role === "assistant") {
       return {
-        textColor: theme?.colors.hair.light ?? "#f1f5f9",
-        borderColor: theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.3)",
-        backgroundColor: theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.65)",
+        textColor: "#ffffff",
+        borderColor: borderColor,
+        backgroundColor: "#000000",
       };
     } else {
+      // User bubble - blue background with white text
       return {
-        textColor: "#0f172a",
-        borderColor: "rgba(148, 163, 184, 0.3)",
-        backgroundColor: "rgba(241, 245, 249, 0.95)",
+        textColor: "#ffffff",
+        borderColor: borderColor,
+        backgroundColor: "#6bb3dc",
       };
     }
   };
@@ -87,8 +90,8 @@ export function ConversationBubbles({
             transform: translateY(30px) scale(0.95);
           }
           to {
-            opacity: 0.85;
-            transform: translateY(0) scale(0.92);
+            opacity: 1;
+            transform: translateY(0) scale(1);
           }
         }
         @keyframes cursorBlink {
@@ -117,8 +120,8 @@ export function ConversationBubbles({
                 borderColor: colors.borderColor,
                 backgroundColor: colors.backgroundColor,
                 animation: animation,
-                opacity: isOlderMessage ? 0.85 : 1,
-                transform: isOlderMessage ? "scale(0.92)" : "scale(1)",
+                opacity: 1,
+                transform: "scale(1)",
               }}
             >
               <div style={{ ...styles.content, color: colors.textColor }}>
