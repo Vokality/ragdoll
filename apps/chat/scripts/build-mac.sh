@@ -79,6 +79,6 @@ EOF
 )
 
 log "Packaging macOS app with electron-builder"
-(cd "$CHAT_DIR" && bunx electron-builder --config electron-builder.json --mac)
+(cd "$CHAT_DIR" && bunx electron-builder --config electron-builder.json --mac --publish never)
 
 log "Build complete! Artifacts: $RELEASE_DIR"
