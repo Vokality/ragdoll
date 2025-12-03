@@ -41,19 +41,19 @@ export function ConversationBubbles({
 
   if (messages.length === 0) return null;
 
-  // Helper to get bubble colors based on role
+  // Helper to get bubble colors based on role with improved contrast
   const getBubbleColors = (role: "user" | "assistant") => {
     if (role === "assistant") {
       return {
         textColor: theme?.colors.hair.light ?? "#f1f5f9",
-        borderColor: theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)",
-        backgroundColor: theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.15)",
+        borderColor: theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.3)",
+        backgroundColor: theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.65)",
       };
     } else {
       return {
-        textColor: "#1e293b",
+        textColor: "#0f172a",
         borderColor: theme?.colors.hair.light ?? "#f1f5f9",
-        backgroundColor: theme?.colors.blush.transparent ?? "rgba(241, 245, 249, 0.9)",
+        backgroundColor: theme?.colors.blush.transparent ?? "rgba(241, 245, 249, 0.95)",
       };
     }
   };

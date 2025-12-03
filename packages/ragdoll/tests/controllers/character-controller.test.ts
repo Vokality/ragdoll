@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { CharacterController } from "../../src/controllers/character-controller";
-import { SpyEventBus } from "../../src/testing/mocks";
-import { CharacterStateBuilder } from "../../src/testing/builders";
 
 describe("CharacterController", () => {
   let controller: CharacterController;
@@ -216,19 +214,17 @@ describe("CharacterController", () => {
 
   describe("event bus integration", () => {
     it("should emit mood change events", () => {
-      const eventBus = new SpyEventBus();
-      const initialState = new CharacterStateBuilder().build();
       const customController = new CharacterController();
       // Access event bus through state manager
       const stateManager = (customController as any).stateManager;
       const bus = stateManager.getEventBus();
-      
+
       // Subscribe to events
       const events: any[] = [];
       bus.subscribe((event) => {
         events.push(event);
       });
-      
+
       customController.setMood("smile");
       expect(events.length).toBeGreaterThan(0);
     });
@@ -237,12 +233,12 @@ describe("CharacterController", () => {
       const customController = new CharacterController();
       const stateManager = (customController as any).stateManager;
       const bus = stateManager.getEventBus();
-      
+
       const events: any[] = [];
       bus.subscribe((event) => {
         events.push(event);
       });
-      
+
       customController.triggerAction("wink", 0.5);
       expect(events.length).toBeGreaterThan(0);
     });
@@ -349,4 +345,3 @@ describe("CharacterController", () => {
     });
   });
 });
-

@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { PomodoroController } from "../../src/controllers/pomodoro-controller";
-import { MockClock } from "../../src/testing/clock";
 
 describe("PomodoroController", () => {
-  let clock: MockClock;
   let controller: PomodoroController;
 
   beforeEach(() => {
-    clock = new MockClock();
     // Create controller with clock injection
     // Note: PomodoroController uses Date.now() directly, so we'll need to mock it
     // For now, we'll test the public API and update logic
@@ -52,7 +49,7 @@ describe("PomodoroController", () => {
       controller.pause();
       const pausedState = controller.getState();
       expect(pausedState.state).toBe("paused");
-      
+
       controller.start();
       const resumedState = controller.getState();
       expect(resumedState.state).toBe("running");
@@ -187,9 +184,8 @@ describe("PomodoroController", () => {
     });
 
     it("should unregister update callback", () => {
-      let callbackCalled = false;
       const unsubscribe = controller.onUpdate(() => {
-        callbackCalled = true;
+        // Callback
       });
       unsubscribe();
       controller.start();
@@ -308,4 +304,3 @@ describe("PomodoroController", () => {
     });
   });
 });
-

@@ -458,15 +458,15 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
     return null;
   }
 
-  // Theme-aware colors
+  // Theme-aware colors with improved contrast
   const colors: TaskColors = {
     text: theme?.colors.hair.light ?? "#f1f5f9",
-    muted: theme?.colors.skin.dark ?? "#94a3b8",
+    muted: theme?.colors.skin.dark ?? "#cbd5e1",
     accent: theme?.colors.eyes.iris ?? "#5a9bc4",
-    blocked: theme?.colors.lips.lower ?? "#e07882",
+    blocked: theme?.colors.lips.lower ?? "#f87171",
     done: "#4ade80",
-    border: theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)",
-    background: theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.15)",
+    border: theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.3)",
+    background: theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.65)",
     glow: theme?.colors.eyes.iris ?? "#5a9bc4",
   };
 
@@ -668,7 +668,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "4px 8px",
     borderRadius: "6px",
     border: "0.5px solid",
-    backgroundColor: "rgba(0, 0, 0, 0.15)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
   },
