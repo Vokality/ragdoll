@@ -67,7 +67,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       setTimeout(() => {
         onComplete();
       }, 800);
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
       if (controller) {
         controller.setMood("sad", 0.3);
@@ -222,4 +222,3 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 1,
   },
 };
-

@@ -68,24 +68,24 @@ describe("IdleController", () => {
       // Update once to start the blink animation
       controller.update(0.01);
       expect(controller.getState().blinkAmount).toBeGreaterThanOrEqual(0);
-      
+
       // Closing phase
       controller.update(0.05);
       const closingState = controller.getState();
       expect(closingState.blinkAmount).toBeGreaterThan(0);
       expect(closingState.blinkAmount).toBeLessThanOrEqual(1);
-      
+
       // Closed phase
       controller.update(0.05);
       const closedState = controller.getState();
       expect(closedState.blinkAmount).toBe(1);
-      
+
       // Opening phase
       controller.update(0.1);
       const openingState = controller.getState();
       expect(openingState.blinkAmount).toBeLessThan(1);
       expect(openingState.blinkAmount).toBeGreaterThanOrEqual(0);
-      
+
       // Back to idle
       controller.update(0.1);
       const idleState = controller.getState();
@@ -95,7 +95,6 @@ describe("IdleController", () => {
 
     it("should not trigger blink if already blinking", () => {
       controller.triggerBlink();
-      const firstState = controller.getState();
       controller.triggerBlink(); // Try to trigger again
       const secondState = controller.getState();
       // Should still be in same blink cycle
@@ -298,4 +297,3 @@ describe("IdleController", () => {
     });
   });
 });
-

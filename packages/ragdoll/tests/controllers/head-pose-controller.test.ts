@@ -110,8 +110,7 @@ describe("HeadPoseController", () => {
       controller.update(0.25); // Halfway through transition
       const halfwayPose = controller.getPose();
       controller.update(0.5); // Complete transition
-      const finalPose = controller.getPose();
-      
+
       expect(Math.abs(halfwayPose.yaw - initialPose.yaw)).toBeGreaterThan(0);
       // Update more to allow spring to settle
       for (let i = 0; i < 30; i++) {
@@ -256,8 +255,6 @@ describe("HeadPoseController", () => {
         controller.update(0.1);
         skeleton.update(0.1); // Also update skeleton
       }
-      const headRotation = skeleton.getJointRotation("headPivot");
-      const neckRotation = skeleton.getJointRotation("neck");
       // HeadPoseController applies pose directly, skeleton may lag behind
       const pose = controller.getPose();
       expect(Math.abs(pose.yaw - 0.3)).toBeLessThan(0.15);
@@ -265,4 +262,3 @@ describe("HeadPoseController", () => {
     });
   });
 });
-
