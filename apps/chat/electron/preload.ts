@@ -65,6 +65,43 @@ export interface PomodoroStateSnapshot {
   sessionsCompleted: number;
 }
 
+// Spotify types (local definitions to avoid importing from Node-only module)
+export interface SpotifyPlaybackState {
+  isPlaying: boolean;
+  track: {
+    id: string;
+    name: string;
+    uri: string;
+    durationMs: number;
+    artists: Array<{ id: string; name: string; uri: string }>;
+    album: {
+      id: string;
+      name: string;
+      uri: string;
+      images: Array<{ url: string; height: number | null; width: number | null }>;
+    };
+    artworkUrl: string | null;
+  } | null;
+  progressMs: number;
+  device: {
+    id: string;
+    name: string;
+    type: string;
+    isActive: boolean;
+    volumePercent: number;
+  } | null;
+  shuffleState: boolean;
+  repeatState: "off" | "track" | "context";
+  timestamp: number;
+}
+
+export interface SpotifyTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  scope: string;
+}
+
 // Types for the API
 export interface ElectronAPI {
   // Auth
@@ -111,6 +148,22 @@ export interface ElectronAPI {
   onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
   onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
   getPomodoroState: () => Promise<PomodoroStateSnapshot | null>;
+
+  // Spotify
+  spotifyIsEnabled: () => Promise<boolean>;
+  spotifyIsAuthenticated: () => Promise<boolean>;
+  spotifyGetAuthUrl: (state?: string) => Promise<string | null>;
+  spotifyExchangeCode: (code: string) => Promise<{ success: boolean; tokens?: SpotifyTokens; error?: string }>;
+  spotifyGetAccessToken: () => Promise<string | null>;
+  spotifyGetPlaybackState: () => Promise<SpotifyPlaybackState | null>;
+  spotifyUpdatePlaybackState: (playback: SpotifyPlaybackState) => Promise<{ success: boolean }>;
+  spotifyDisconnect: () => Promise<{ success: boolean }>;
+  spotifyGetClientId: () => Promise<string | null>;
+  spotifySetClientId: (clientId: string) => Promise<{ success: boolean }>;
+  spotifyPlay: () => Promise<{ success: boolean; error?: string }>;
+  spotifyPause: () => Promise<{ success: boolean; error?: string }>;
+  spotifyNext: () => Promise<{ success: boolean; error?: string }>;
+  spotifyPrevious: () => Promise<{ success: boolean; error?: string }>;
 
   // Platform
   platform: string;
@@ -195,6 +248,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   getPomodoroState: () => ipcRenderer.invoke("pomodoro:get-state"),
+
+  // Spotify
+  spotifyIsEnabled: () => ipcRenderer.invoke("spotify:is-enabled"),
+  spotifyIsAuthenticated: () => ipcRenderer.invoke("spotify:is-authenticated"),
+  spotifyGetAuthUrl: (state?: string) => ipcRenderer.invoke("spotify:get-auth-url", state),
+  spotifyExchangeCode: (code: string) => ipcRenderer.invoke("spotify:exchange-code", code),
+  spotifyGetAccessToken: () => ipcRenderer.invoke("spotify:get-access-token"),
+  spotifyGetPlaybackState: () => ipcRenderer.invoke("spotify:get-playback-state"),
+  spotifyUpdatePlaybackState: (playback: SpotifyPlaybackState) =>
+    ipcRenderer.invoke("spotify:update-playback-state", playback),
+  spotifyDisconnect: () => ipcRenderer.invoke("spotify:disconnect"),
+  spotifyGetClientId: () => ipcRenderer.invoke("spotify:get-client-id"),
+  spotifySetClientId: (clientId: string) => ipcRenderer.invoke("spotify:set-client-id", clientId),
+  spotifyPlay: () => ipcRenderer.invoke("spotify:play"),
+  spotifyPause: () => ipcRenderer.invoke("spotify:pause"),
+  spotifyNext: () => ipcRenderer.invoke("spotify:next"),
+  spotifyPrevious: () => ipcRenderer.invoke("spotify:previous"),
 
   // Platform
   platform: process.platform,

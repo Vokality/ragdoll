@@ -15,6 +15,7 @@ import {
   createCharacterExtension,
   createStatefulPomodoroExtension,
   createStatefulTaskExtension,
+  createStatefulSpotifyExtension,
   type ExtensionRegistry,
   type ExtensionLoader,
   type ToolDefinition,
@@ -27,6 +28,10 @@ import {
   type PomodoroManager,
   type PomodoroEvent,
   type NotificationCallback,
+  type SpotifyManager,
+  type SpotifyEvent,
+  type SpotifyTokens,
+  type SpotifyPlaybackState,
 } from "@vokality/ragdoll-extensions/core";
 
 // =============================================================================
@@ -53,6 +58,21 @@ export type TaskStateCallback = (event: TaskEvent) => void;
 export type PomodoroStateCallback = (event: PomodoroEvent) => void;
 
 /**
+ * Callback for Spotify state changes
+ */
+export type SpotifyStateCallback = (event: SpotifyEvent) => void;
+
+/**
+ * Spotify configuration
+ */
+export interface SpotifyConfig {
+  clientId: string;
+  redirectUri: string;
+  /** Initial tokens if already authenticated */
+  initialTokens?: SpotifyTokens;
+}
+
+/**
  * Configuration for the extension manager
  */
 export interface ExtensionManagerConfig {
@@ -65,11 +85,17 @@ export interface ExtensionManagerConfig {
   /** Callback when pomodoro state changes (for sync to renderer) */
   onPomodoroStateChange?: PomodoroStateCallback;
 
+  /** Callback when Spotify state changes (for sync to renderer) */
+  onSpotifyStateChange?: SpotifyStateCallback;
+
   /** Callback to show system notifications (provided by host environment) */
   onNotification?: NotificationCallback;
 
   /** Initial task state to load */
   initialTaskState?: TaskState;
+
+  /** Spotify configuration (optional - Spotify extension only enabled if provided) */
+  spotify?: SpotifyConfig;
 
   /**
    * Paths to search for node_modules directories containing extensions.
@@ -125,6 +151,7 @@ export class ExtensionManager {
   // Stateful managers
   private taskManager: TaskManager | null = null;
   private pomodoroManager: PomodoroManager | null = null;
+  private spotifyManager: SpotifyManager | null = null;
 
   constructor(config: ExtensionManagerConfig = {}) {
     this.config = config;
@@ -213,6 +240,28 @@ export class ExtensionManager {
       });
     this.taskManager = taskManager;
     await this.registry.register(taskExtension);
+
+    // Spotify extension - optional, only if configured
+    if (this.config.spotify) {
+      const { extension: spotifyExtension, manager: spotifyManager } =
+        createStatefulSpotifyExtension({
+          clientId: this.config.spotify.clientId,
+          redirectUri: this.config.spotify.redirectUri,
+          onStateChange: (event) => {
+            if (this.config.onSpotifyStateChange) {
+              this.config.onSpotifyStateChange(event);
+            }
+          },
+        });
+      this.spotifyManager = spotifyManager;
+
+      // Load initial tokens if provided
+      if (this.config.spotify.initialTokens) {
+        spotifyManager.loadTokens(this.config.spotify.initialTokens);
+      }
+
+      await this.registry.register(spotifyExtension);
+    }
   }
 
   /**
@@ -350,6 +399,128 @@ export class ExtensionManager {
   }
 
   // ===========================================================================
+  // Public API - Spotify Manager
+  // ===========================================================================
+
+  /**
+   * Get the Spotify manager instance.
+   */
+  getSpotifyManager(): SpotifyManager | null {
+    return this.spotifyManager;
+  }
+
+  /**
+   * Check if Spotify is enabled.
+   */
+  isSpotifyEnabled(): boolean {
+    return this.spotifyManager !== null;
+  }
+
+  /**
+   * Get Spotify authorization URL for OAuth flow (PKCE).
+   */
+  async getSpotifyAuthUrl(state?: string): Promise<string | null> {
+    if (!this.spotifyManager) return null;
+    return this.spotifyManager.getAuthorizationUrl(state);
+  }
+
+  /**
+   * Exchange authorization code for Spotify tokens.
+   */
+  async exchangeSpotifyCode(code: string): Promise<SpotifyTokens | null> {
+    if (!this.spotifyManager) return null;
+    return this.spotifyManager.exchangeCode(code);
+  }
+
+  /**
+   * Get Spotify access token for Web Playback SDK.
+   */
+  getSpotifyAccessToken(): string | null {
+    return this.spotifyManager?.getAccessToken() ?? null;
+  }
+
+  /**
+   * Get Spotify tokens for persistence.
+   */
+  getSpotifyTokens(): SpotifyTokens | null {
+    return this.spotifyManager?.getTokens() ?? null;
+  }
+
+  /**
+   * Load Spotify tokens (e.g., from storage on startup).
+   */
+  loadSpotifyTokens(tokens: SpotifyTokens): void {
+    this.spotifyManager?.loadTokens(tokens);
+  }
+
+  /**
+   * Check if Spotify is authenticated.
+   */
+  isSpotifyAuthenticated(): boolean {
+    return this.spotifyManager?.isAuthenticated() ?? false;
+  }
+
+  /**
+   * Update Spotify playback state from Web Playback SDK.
+   * Called by renderer via IPC when SDK state changes.
+   */
+  updateSpotifyPlaybackState(playback: SpotifyPlaybackState): void {
+    this.spotifyManager?.updatePlaybackState(playback);
+  }
+
+  /**
+   * Fetch current playback state from Spotify REST API.
+   * Use this to get playback from any device, not just SDK-connected device.
+   */
+  async getSpotifyPlaybackState(): Promise<SpotifyPlaybackState | null> {
+    if (!this.spotifyManager || !this.spotifyManager.isAuthenticated()) {
+      return null;
+    }
+    
+    try {
+      return await this.spotifyManager.getPlaybackState();
+    } catch (error) {
+      console.error("[ExtensionManager] Failed to get playback state:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Disconnect Spotify.
+   */
+  disconnectSpotify(): void {
+    this.spotifyManager?.disconnect();
+  }
+
+  /**
+   * Resume or start Spotify playback.
+   */
+  async spotifyPlay(): Promise<void> {
+    await this.spotifyManager?.play();
+  }
+
+  /**
+   * Pause Spotify playback.
+   */
+  async spotifyPause(): Promise<void> {
+    await this.spotifyManager?.pause();
+  }
+
+  /**
+   * Skip to next track.
+   */
+  async spotifyNext(): Promise<void> {
+    await this.spotifyManager?.skipToNext();
+  }
+
+  /**
+   * Skip to previous track.
+   */
+  async spotifyPrevious(): Promise<void> {
+    await this.spotifyManager?.skipToPrevious();
+  }
+
+  // ===========================================================================
   // Public API - Registry & Stats
   // ===========================================================================
 
@@ -451,6 +622,7 @@ export class ExtensionManager {
     await this.registry.destroy();
     this.taskManager = null;
     this.pomodoroManager = null;
+    this.spotifyManager = null;
     this.initialized = false;
   }
 }

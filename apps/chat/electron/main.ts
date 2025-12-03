@@ -48,8 +48,16 @@ const conversationMessageSchema = z.object({
   content: z.string(),
 });
 
+const spotifyTokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+  expiresAt: z.number(),
+  scope: z.string(),
+});
+
 const storageSchema = z
   .object({
+    apiKey: z.string().optional(),
     apiKeyEncrypted: z.string().optional(),
     settings: z
       .object({
@@ -59,6 +67,8 @@ const storageSchema = z
       .optional(),
     conversation: z.array(conversationMessageSchema).optional(),
     tasks: taskStateSchema.optional(),
+    spotifyClientId: z.string().optional(),
+    spotifyTokens: spotifyTokensSchema.optional(),
   })
   .passthrough();
 
@@ -113,6 +123,11 @@ async function createWindow(): Promise<void> {
   // Load initial task state from storage
   const initialTaskState = getStoredTaskState();
 
+  // Load Spotify config from storage
+  const storage = loadStorage();
+  const spotifyClientId = storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID;
+  const spotifyTokens = storage.spotifyTokens;
+
   // Initialize extension manager with state management
   extensionManager = getExtensionManager({
     initialTaskState,
@@ -139,6 +154,12 @@ async function createWindow(): Promise<void> {
         mainWindow.webContents.send("pomodoro:state-changed", event);
       }
     },
+    onSpotifyStateChange: (event) => {
+      // Notify renderer of Spotify state change
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("spotify:state-changed", event);
+      }
+    },
     onNotification: (notification) => {
       if (Notification.isSupported()) {
         new Notification({
@@ -148,6 +169,12 @@ async function createWindow(): Promise<void> {
         }).show();
       }
     },
+    // Spotify config - only enabled if client ID is configured
+    spotify: spotifyClientId ? {
+      clientId: spotifyClientId,
+      redirectUri: "ragdoll://spotify-callback",
+      initialTokens: spotifyTokens,
+    } : undefined,
   });
   await extensionManager.initialize();
 
@@ -184,6 +211,91 @@ async function createWindow(): Promise<void> {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+// Register custom protocol for OAuth callbacks
+if (process.defaultApp) {
+  // Development: register with path to electron
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("ragdoll", process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  // Production
+  app.setAsDefaultProtocolClient("ragdoll");
+}
+
+// Handle protocol URLs on macOS
+app.on("open-url", async (event, url) => {
+  event.preventDefault();
+  await handleProtocolUrl(url);
+});
+
+// Handle protocol URLs on Windows/Linux (single instance)
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    // Handle the protocol URL from command line (Windows/Linux)
+    const url = commandLine.find((arg) => arg.startsWith("ragdoll://"));
+    if (url) {
+      await handleProtocolUrl(url);
+    }
+  });
+}
+
+/**
+ * Handle ragdoll:// protocol URLs
+ */
+async function handleProtocolUrl(url: string): Promise<void> {
+  console.log("[Protocol] Received URL:", url);
+
+  try {
+    const parsed = new URL(url);
+
+    // Handle Spotify OAuth callback: ragdoll://spotify-callback?code=...
+    if (parsed.hostname === "spotify-callback" || parsed.pathname === "//spotify-callback") {
+      const code = parsed.searchParams.get("code");
+      const error = parsed.searchParams.get("error");
+
+      if (error) {
+        console.error("[Protocol] Spotify auth error:", error);
+        mainWindow?.webContents.send("spotify:auth-error", error);
+        return;
+      }
+
+      if (code) {
+        console.log("[Protocol] Exchanging Spotify code...");
+        const tokens = await extensionManager?.exchangeSpotifyCode(code);
+
+        if (tokens) {
+          // Persist tokens
+          const storage = loadStorage();
+          storage.spotifyTokens = tokens;
+          saveStorage(storage);
+
+          console.log("[Protocol] Spotify tokens saved, notifying renderer...");
+          mainWindow?.webContents.send("spotify:auth-success");
+
+          // Focus the window
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+          }
+        } else {
+          console.error("[Protocol] Failed to exchange code");
+          mainWindow?.webContents.send("spotify:auth-error", "Failed to exchange authorization code");
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Protocol] Error handling URL:", err);
+  }
 }
 
 // App lifecycle
@@ -371,6 +483,108 @@ ipcMain.handle("pomodoro:get-state", async () => {
     return null;
   }
   return extensionManager.getPomodoroState();
+});
+
+// ============================================
+// IPC Handlers - Spotify
+// ============================================
+
+ipcMain.handle("spotify:is-enabled", async () => {
+  return extensionManager?.isSpotifyEnabled() ?? false;
+});
+
+ipcMain.handle("spotify:is-authenticated", async () => {
+  return extensionManager?.isSpotifyAuthenticated() ?? false;
+});
+
+ipcMain.handle("spotify:get-auth-url", async (_, state?: string) => {
+  return extensionManager?.getSpotifyAuthUrl(state) ?? null;
+});
+
+ipcMain.handle("spotify:exchange-code", async (_, code: string) => {
+  try {
+    const tokens = await extensionManager?.exchangeSpotifyCode(code);
+    if (tokens) {
+      // Persist tokens to storage
+      const storage = loadStorage();
+      (storage as Record<string, unknown>).spotifyTokens = tokens;
+      saveStorage(storage);
+      return { success: true, tokens };
+    }
+    return { success: false, error: "Failed to exchange code" };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+});
+
+ipcMain.handle("spotify:get-access-token", async () => {
+  return extensionManager?.getSpotifyAccessToken() ?? null;
+});
+
+ipcMain.handle("spotify:get-playback-state", async () => {
+  return extensionManager?.getSpotifyPlaybackState() ?? null;
+});
+
+ipcMain.handle("spotify:update-playback-state", async (_, playback) => {
+  extensionManager?.updateSpotifyPlaybackState(playback);
+  return { success: true };
+});
+
+ipcMain.handle("spotify:disconnect", async () => {
+  extensionManager?.disconnectSpotify();
+  // Clear persisted tokens
+  const storage = loadStorage();
+  delete storage.spotifyTokens;
+  saveStorage(storage);
+  return { success: true };
+});
+
+ipcMain.handle("spotify:get-client-id", async () => {
+  const storage = loadStorage();
+  return storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID || null;
+});
+
+ipcMain.handle("spotify:set-client-id", async (_, clientId: string) => {
+  const storage = loadStorage();
+  storage.spotifyClientId = clientId;
+  saveStorage(storage);
+  return { success: true };
+});
+
+ipcMain.handle("spotify:play", async () => {
+  try {
+    await extensionManager?.spotifyPlay();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+});
+
+ipcMain.handle("spotify:pause", async () => {
+  try {
+    await extensionManager?.spotifyPause();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+});
+
+ipcMain.handle("spotify:next", async () => {
+  try {
+    await extensionManager?.spotifyNext();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+});
+
+ipcMain.handle("spotify:previous", async () => {
+  try {
+    await extensionManager?.spotifyPrevious();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
 });
 
 // ============================================

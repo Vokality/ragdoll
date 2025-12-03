@@ -166,6 +166,42 @@ export type {
   StatefulTaskExtensionOptions,
 } from "./extensions/tasks/index.js";
 
+// Spotify extension
+export {
+  createSpotifyExtension,
+  createStatefulSpotifyExtension,
+  SpotifyManager,
+  createSpotifyManager,
+  EMPTY_PLAYBACK_STATE,
+  INITIAL_SPOTIFY_STATE,
+} from "./extensions/spotify/index.js";
+export type {
+  SpotifyImage,
+  SpotifyArtist,
+  SpotifyAlbum,
+  SpotifyTrack,
+  SpotifyDevice,
+  SpotifyPlaybackState,
+  SpotifyPlaylist,
+  SpotifySearchResults,
+  SpotifyTokens,
+  SpotifyConnectionStatus,
+  SpotifyState,
+  SpotifyEventType,
+  SpotifyEvent,
+  SpotifyEventCallback,
+  PlaySpotifyArgs,
+  PauseSpotifyArgs,
+  SearchSpotifyArgs,
+  GetSpotifyPlaybackArgs,
+  SkipSpotifyArgs,
+  SpotifyToolHandler,
+  SpotifyToolResult,
+  SpotifyExtensionOptions,
+  StatefulSpotifyExtensionOptions,
+  SpotifyManagerConfig,
+} from "./extensions/spotify/index.js";
+
 // =============================================================================
 // UI Components and Utilities
 // =============================================================================
@@ -206,6 +242,14 @@ export type { TaskUISlotOptions } from "./extensions/tasks/ui.js";
 // Pomodoro UI (requires React)
 export { createPomodoroUISlot } from "./extensions/pomodoro/ui.js";
 export type { PomodoroUISlotOptions } from "./extensions/pomodoro/ui.js";
+
+// Spotify UI (requires React)
+export { createSpotifyUISlot, SpotifyPanelComponent } from "./extensions/spotify/ui.js";
+export type {
+  SpotifyUISlotOptions,
+  SpotifyPlaybackControls,
+  SpotifySetupActions,
+} from "./extensions/spotify/ui.js";
 
 export type {
   // Icon types

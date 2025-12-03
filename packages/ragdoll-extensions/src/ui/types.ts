@@ -22,7 +22,8 @@ export type PresetIconName =
   | "settings"
   | "bookmark"
   | "flag"
-  | "star";
+  | "star"
+  | "music";
 
 /**
  * Icon specification - either a preset name or a custom React component
@@ -60,6 +61,10 @@ export interface ListPanelItem {
   onToggle?: () => void;
   /** Called when item is clicked (not the checkbox) */
   onClick?: () => void;
+  /** Media/thumbnail image URL (e.g., album artwork) */
+  mediaUrl?: string;
+  /** Alt text for media image */
+  mediaAlt?: string;
   /** Additional metadata for rendering */
   meta?: Record<string, unknown>;
 }

@@ -14,6 +14,7 @@ import {
   BookmarkIcon,
   FlagIcon,
   StarIcon,
+  MusicIcon,
 } from "./icons.js";
 
 type CustomIcon = { type: "component"; component: ComponentType<IconProps> };
@@ -27,6 +28,7 @@ export const presetIcons: Record<PresetIconName, ComponentType<IconProps>> = {
   bookmark: BookmarkIcon,
   flag: FlagIcon,
   star: StarIcon,
+  music: MusicIcon,
 };
 
 export function getSlotIcon(icon: PresetIconName | CustomIcon): ComponentType<IconProps> {

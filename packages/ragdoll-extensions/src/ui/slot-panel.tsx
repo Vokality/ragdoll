@@ -328,6 +328,14 @@ function PanelItem({ item, index }: PanelItemProps) {
         </button>
       )}
 
+      {item.mediaUrl && (
+        <img
+          src={item.mediaUrl}
+          alt={item.mediaAlt ?? ""}
+          style={styles.itemMedia}
+        />
+      )}
+
       <div
         style={styles.itemContent}
         className={item.onClick ? "slot-panel-item-clickable" : undefined}
@@ -684,6 +692,13 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "var(--radius-md, 10px)",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
     transition: "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease",
+  },
+  itemMedia: {
+    width: "48px",
+    height: "48px",
+    borderRadius: "var(--radius-sm, 6px)",
+    objectFit: "cover",
+    flexShrink: 0,
   },
   checkbox: {
     display: "flex",

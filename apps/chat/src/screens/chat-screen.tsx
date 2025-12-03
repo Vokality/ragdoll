@@ -2,14 +2,18 @@ import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties }
 import type { CharacterController, FacialMood, PomodoroDuration, TaskState, TaskController, PomodoroController } from "@vokality/ragdoll";
 import {
   createDerivedSlotState,
+  createSpotifyUISlot,
+  SpotifyPanelComponent,
   type ExtensionUISlot,
   type ListPanelSection,
   type ItemStatus,
   type PanelAction,
+  type SpotifySetupActions,
 } from "@vokality/ragdoll-extensions";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
+import { useSpotifyPlayback } from "../hooks/use-spotify-playback";
 
 interface ChatScreenProps {
   onLogout: () => void;
@@ -242,14 +246,107 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   const streamingTextRef = useRef("");
   const [streamingContent, setStreamingContent] = useState<string>("");
 
+  // Spotify Web Playback SDK integration
+  const { state: spotifyState, controls: spotifyControls } = useSpotifyPlayback();
+
+  // Setup actions for Spotify extension UI
+  const spotifySetupActions = useMemo<SpotifySetupActions>(() => ({
+    getClientId: () => window.electronAPI.spotifyGetClientId(),
+    saveClientId: async (clientId: string) => {
+      await window.electronAPI.spotifySetClientId(clientId);
+      window.location.reload();
+    },
+    isEnabled: () => window.electronAPI.spotifyIsEnabled(),
+    isAuthenticated: () => window.electronAPI.spotifyIsAuthenticated(),
+    getAuthUrl: () => window.electronAPI.spotifyGetAuthUrl(),
+    disconnect: async () => {
+      await window.electronAPI.spotifyDisconnect();
+      window.location.reload();
+    },
+    getPlaybackState: () => window.electronAPI.spotifyGetPlaybackState(),
+  }), []);
+
+  // Create Spotify slot ONCE (stable reference) - state updates handled via useEffect
+  const spotifySlotRef = useRef<{
+    slot: ExtensionUISlot;
+    stateStore: ReturnType<typeof createSpotifyUISlot>["stateStore"];
+  } | null>(null);
+
+  // Initialize slot on first render
+  if (!spotifySlotRef.current) {
+    const { slot, stateStore } = createSpotifyUISlot({
+      controls: spotifyControls,
+      setupActions: spotifySetupActions,
+      playback: spotifyState.playback,
+      hasConnected: spotifyState.hasConnected,
+      error: spotifyState.error,
+    });
+    spotifySlotRef.current = { slot, stateStore };
+  }
+
+  const spotifyTrackId = spotifyState.playback.track?.id ?? null;
+  const spotifyIsPlaying = spotifyState.playback.isPlaying;
+  const spotifyHasTrack = spotifyTrackId !== null;
+  const playbackSnapshot = useMemo(
+    () => spotifyState.playback,
+    [spotifyTrackId, spotifyIsPlaying],
+  );
+
+  // Update slot state only when connection or track/play state meaningfully changes
+  useEffect(() => {
+    if (!spotifySlotRef.current) return;
+
+    const { stateStore } = spotifySlotRef.current;
+
+    // Badge shows play state indicator
+    const badge = spotifyHasTrack ? (spotifyIsPlaying ? "▶" : "❚❚") : null;
+
+    // Visibility: always show until connected, then only when playing
+    const visible = !spotifyState.hasConnected || spotifyHasTrack;
+
+    stateStore.setState({
+      badge,
+      visible,
+      panel: {
+        type: "custom" as const,
+        title: "Spotify",
+        component: ({ onClose }) => (
+          <SpotifyPanelComponent
+            onClose={onClose}
+            controls={spotifyControls}
+            setupActions={spotifySetupActions}
+            playback={playbackSnapshot}
+            error={spotifyState.error}
+          />
+        ),
+      },
+    });
+  }, [
+    spotifyHasTrack,
+    spotifyIsPlaying,
+    spotifyState.hasConnected,
+    spotifyState.error,
+    spotifyControls,
+    spotifySetupActions,
+    playbackSnapshot,
+  ]);
+
+  const spotifySlot = spotifySlotRef.current!.slot;
+
   // Create extension UI slots when controller is ready
   const slots = useMemo<ExtensionUISlot[]>(() => {
-    if (!controller) return [];
-    return [
-      createTaskSlotFromController(controller.getTaskController()),
-      createPomodoroSlotFromController(controller.getPomodoroController()),
-    ];
-  }, [controller]);
+    const result: ExtensionUISlot[] = [];
+
+    if (controller) {
+      result.push(createTaskSlotFromController(controller.getTaskController()));
+      result.push(createPomodoroSlotFromController(controller.getPomodoroController()));
+    }
+
+    // Always include Spotify slot
+    result.push(spotifySlot);
+
+    return result;
+  }, [controller, spotifySlot]);
 
   // Load settings on mount
   useEffect(() => {
