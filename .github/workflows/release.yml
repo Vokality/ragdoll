@@ -39,6 +39,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git stash
+          git fetch --depth=1 origin main:main || git fetch --depth=1 origin master:master || true
           git checkout main || git checkout master || git checkout -b main
           git stash pop || true
           git add packages/ragdoll/package.json
