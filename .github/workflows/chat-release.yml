@@ -11,9 +11,10 @@ permissions:
 jobs:
   package:
     name: Package Chat App
+    if: github.event_name == 'release' && startsWith(github.event.release.tag_name, 'chat-')
     runs-on: macos-14
     env:
-      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,7 +33,12 @@ jobs:
             echo "Unable to determine release tag" >&2
             exit 1
           fi
-          VERSION="${RELEASE_TAG#v}"
+          STRIPPED_PREFIX="${RELEASE_TAG#chat-}"
+          VERSION="${STRIPPED_PREFIX#v}"
+          if [ "$VERSION" = "$RELEASE_TAG" ]; then
+            echo "Release tag must start with chat- and optionally v (e.g. chat-v0.2.0)" >&2
+            exit 1
+          fi
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
