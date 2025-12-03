@@ -224,6 +224,53 @@ export class TaskController {
   }
 
   /**
+   * Hydrate controller with a saved state
+   */
+  public loadState(state: TaskState): void {
+    const incomingTasks = state.tasks?.map((task) => ({ ...task })) ?? [];
+
+    this.tasks = incomingTasks;
+    this.isExpanded = Boolean(state.isExpanded);
+
+    if (this.tasks.length === 0) {
+      this.activeTaskId = null;
+      this.notifyCallbacks();
+      return;
+    }
+
+    const hasActive = this.tasks.some((task) => task.id === state.activeTaskId);
+    this.activeTaskId = hasActive ? state.activeTaskId : null;
+
+    if (this.activeTaskId) {
+      this.tasks.forEach((task) => {
+        if (task.id === this.activeTaskId) {
+          if (task.status === "blocked" || task.status === "done") {
+            this.activeTaskId = null;
+          } else if (task.status !== "in_progress") {
+            task.status = "in_progress";
+          }
+        } else if (task.status === "in_progress") {
+          task.status = "todo";
+        }
+      });
+    } else {
+      let hasInProgress = false;
+      this.tasks.forEach((task) => {
+        if (task.status === "in_progress") {
+          if (!hasInProgress) {
+            this.activeTaskId = task.id;
+            hasInProgress = true;
+          } else {
+            task.status = "todo";
+          }
+        }
+      });
+    }
+
+    this.notifyCallbacks();
+  }
+
+  /**
    * Get the active task
    */
   public getActiveTask(): Task | null {

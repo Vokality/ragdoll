@@ -31,14 +31,17 @@
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently -n VITE,ELECTRON -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",
+    "@vokality/ragdoll-extensions": "workspace:*",
     "node-fetch": "^2",
     "openai": "^4.73.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

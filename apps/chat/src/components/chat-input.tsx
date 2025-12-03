@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { TaskButton } from "./task-button";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  activeTaskCount?: number;
+  onTaskButtonClick?: () => void;
 }
 
-export function ChatInput({ onSend, disabled, placeholder = "Type your message..." }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  placeholder = "Type your message...",
+  activeTaskCount = 0,
+  onTaskButtonClick,
+}: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,6 +53,10 @@ export function ChatInput({ onSend, disabled, placeholder = "Type your message..
     }
   };
 
+  const handleTaskClick = () => {
+    onTaskButtonClick?.();
+  };
+
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
       <style>{`
@@ -55,6 +68,14 @@ export function ChatInput({ onSend, disabled, placeholder = "Type your message..
           color: var(--text-dim);
         }
       `}</style>
+
+      {/* Task button row */}
+      {activeTaskCount > 0 && (
+        <div style={styles.taskButtonRow}>
+          <TaskButton activeCount={activeTaskCount} onClick={handleTaskClick} />
+        </div>
+      )}
+
       <div style={styles.inputContainer}>
         <textarea
           ref={textareaRef}
@@ -102,6 +123,11 @@ const styles: Record<string, CSSProperties> = {
     padding: "16px 20px 20px",
     background: "var(--bg-secondary)",
     borderTop: "1px solid var(--border)",
+  },
+  taskButtonRow: {
+    display: "flex",
+    justifyContent: "flex-start",
+    paddingBottom: "8px",
   },
   inputContainer: {
     display: "flex",

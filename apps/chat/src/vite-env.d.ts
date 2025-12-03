@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { TaskState } from "@vokality/ragdoll";
 
 // ElectronAPI type definition
 interface ElectronAPI {
@@ -27,6 +28,10 @@ interface ElectronAPI {
   // Settings
   getSettings: () => Promise<{ theme?: string; variant?: string }>;
   setSettings: (settings: { theme?: string; variant?: string }) => Promise<{ success: boolean }>;
+
+  // Tasks
+  getTaskState: () => Promise<TaskState>;
+  saveTaskState: (state: TaskState) => Promise<{ success: boolean; error?: string }>;
 
   // Platform
   platform: string;

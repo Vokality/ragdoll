@@ -1,13 +1,12 @@
-import { useState, useCallback, useEffect, type CSSProperties } from "react";
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   RagdollCharacter,
   CharacterController,
   PomodoroTimer,
-  TaskDrawer,
   getTheme,
   getDefaultTheme,
 } from "@vokality/ragdoll";
-import type { RagdollTheme } from "@vokality/ragdoll";
+import type { RagdollTheme, TaskState } from "@vokality/ragdoll";
 import { ConversationBubbles } from "./conversation-bubbles";
 
 interface Message {
@@ -21,6 +20,7 @@ interface CharacterViewProps {
   themeId?: string;
   variantId?: string;
   onControllerReady?: (controller: CharacterController) => void;
+  initialTaskState?: TaskState | null;
 }
 
 export function CharacterView({
@@ -29,9 +29,11 @@ export function CharacterView({
   themeId = "default",
   variantId = "human",
   onControllerReady,
+  initialTaskState = null,
 }: CharacterViewProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
   const [theme, setTheme] = useState<RagdollTheme>(() => getTheme(themeId) ?? getDefaultTheme());
+  const hasHydratedTasks = useRef(false);
 
   // Update theme when themeId changes
   useEffect(() => {
@@ -41,6 +43,28 @@ export function CharacterView({
       controller.setTheme(themeId);
     }
   }, [themeId, controller]);
+
+  useEffect(() => {
+    if (!controller || !initialTaskState || hasHydratedTasks.current) {
+      return;
+    }
+    controller.loadTaskState(initialTaskState);
+    hasHydratedTasks.current = true;
+  }, [controller, initialTaskState]);
+
+  useEffect(() => {
+    if (!controller) {
+      return;
+    }
+    const taskController = controller.getTaskController();
+    const handleUpdate = (state: TaskState) => {
+      window.electronAPI.saveTaskState(state).catch((error) => {
+        console.error("Failed to persist tasks", error);
+      });
+    };
+    const unsubscribe = taskController.onUpdate(handleUpdate);
+    return unsubscribe;
+  }, [controller]);
 
   const handleControllerReady = useCallback(
     (ctrl: CharacterController) => {
@@ -66,20 +90,12 @@ export function CharacterView({
       <ConversationBubbles
         messages={messages}
         isStreaming={isStreaming}
-        theme={theme}
       />
 
       {/* Pomodoro timer */}
       {controller && (
         <div style={styles.pomodoroWrapper}>
-          <PomodoroTimer controller={controller.getPomodoroController()} theme={theme} />
-        </div>
-      )}
-
-      {/* Task drawer */}
-      {controller && (
-        <div style={styles.taskWrapper}>
-          <TaskDrawer controller={controller.getTaskController()} theme={theme} />
+          <PomodoroTimer controller={controller.getPomodoroController()} />
         </div>
       )}
     </div>
@@ -109,10 +125,4 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     maxWidth: "260px",
   },
-  taskWrapper: {
-    marginTop: "12px",
-    width: "100%",
-    maxWidth: "280px",
-  },
 };
-

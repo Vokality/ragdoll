@@ -16,6 +16,7 @@ import type {
   PomodoroDuration,
   TaskStatus,
   Task,
+  TaskState,
 } from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
@@ -532,6 +533,13 @@ export class CharacterController {
 
   public getTaskController(): TaskController {
     return this.taskController;
+  }
+
+  /**
+   * Replace the current task state
+   */
+  public loadTaskState(state: TaskState): void {
+    this.taskController.loadState(state);
   }
 
   /**

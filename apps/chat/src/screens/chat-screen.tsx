@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react";
-import type { CharacterController, FacialMood, PomodoroDuration } from "@vokality/ragdoll";
+import type { CharacterController, FacialMood, PomodoroDuration, TaskState } from "@vokality/ragdoll";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
+import { TaskSheet } from "../components/task-sheet";
 
 interface ChatScreenProps {
   onLogout: () => void;
@@ -13,13 +14,22 @@ interface Message {
   content: string;
 }
 
+const EMPTY_TASK_STATE: TaskState = {
+  tasks: [],
+  activeTaskId: null,
+  isExpanded: false,
+};
+
 export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
   const [settings, setSettings] = useState({ theme: "default", variant: "human" });
   const [conversation, setConversation] = useState<Message[]>([]);
+  const [initialTaskState, setInitialTaskState] = useState<TaskState | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTaskSheetOpen, setIsTaskSheetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [taskState, setTaskState] = useState<TaskState>(EMPTY_TASK_STATE);
 
   const streamingTextRef = useRef("");
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -34,7 +44,37 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         setConversation(conv);
       }
     });
+    window.electronAPI
+      .getTaskState()
+      .then((state) => setInitialTaskState(state ?? EMPTY_TASK_STATE))
+      .catch((error) => {
+        console.error("Failed to load task state", error);
+        setInitialTaskState(EMPTY_TASK_STATE);
+      });
   }, []);
+
+  // Subscribe to task state updates
+  useEffect(() => {
+    if (!controller) {
+      return;
+    }
+    const taskController = controller.getTaskController();
+    // Initialize with current state
+    setTaskState(taskController.getState());
+
+    const unsubscribe = taskController.onUpdate((state) => {
+      setTaskState(state);
+    });
+    return unsubscribe;
+  }, [controller]);
+
+  // Auto-close task sheet when no tasks remain
+  useEffect(() => {
+    const hasNoTasks = taskState.tasks.length === 0;
+    if (hasNoTasks && isTaskSheetOpen) {
+      setIsTaskSheetOpen(false);
+    }
+  }, [taskState.tasks.length, isTaskSheetOpen]);
 
   // Set up streaming event listeners
   useEffect(() => {
@@ -152,6 +192,11 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     return messages.slice(-2);
   }, [conversation, isStreaming, streamingContent]);
 
+  // Count active (non-done) tasks for the badge
+  const activeTaskCount = useMemo(() => {
+    return taskState.tasks.filter((t) => t.status !== "done").length;
+  }, [taskState.tasks]);
+
   return (
     <div style={styles.container}>
       {/* Drag region for window */}
@@ -180,17 +225,25 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         </div>
       </header>
 
-      {/* Character View */}
-      <CharacterView
-        messages={visibleMessages}
-        isStreaming={isStreaming}
-        themeId={settings.theme}
-        variantId={settings.variant}
-        onControllerReady={handleControllerReady}
-      />
+      {/* Character View - wait for initial state to load */}
+      {initialTaskState !== null && (
+        <CharacterView
+          messages={visibleMessages}
+          isStreaming={isStreaming}
+          themeId={settings.theme}
+          variantId={settings.variant}
+          onControllerReady={handleControllerReady}
+          initialTaskState={initialTaskState}
+        />
+      )}
 
       {/* Chat Input */}
-      <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+      <ChatInput
+        onSend={handleSendMessage}
+        disabled={isLoading}
+        activeTaskCount={activeTaskCount}
+        onTaskButtonClick={() => setIsTaskSheetOpen(true)}
+      />
 
       {/* Settings Modal */}
       <SettingsModal
@@ -203,6 +256,15 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         onClearConversation={handleClearConversation}
         onChangeApiKey={handleChangeApiKey}
       />
+
+      {/* Task Sheet */}
+      {controller && (
+        <TaskSheet
+          isOpen={isTaskSheetOpen}
+          onClose={() => setIsTaskSheetOpen(false)}
+          controller={controller.getTaskController()}
+        />
+      )}
     </div>
   );
 }
@@ -369,4 +431,3 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-muted)",
   },
 };
-

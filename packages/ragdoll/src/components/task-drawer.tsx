@@ -453,11 +453,6 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
     [dragState, filteredTasks.length],
   );
 
-  // Don't render if no tasks
-  if (state.tasks.length === 0) {
-    return null;
-  }
-
   // Theme-aware colors with improved contrast
   const colors: TaskColors = {
     text: theme?.colors.hair.light ?? "#f1f5f9",
@@ -498,8 +493,8 @@ export function TaskDrawer({ controller, theme }: TaskDrawerProps) {
       <div style={styles.searchBar}>
         <div style={styles.searchInputWrapper}>
           <svg
-            width="14"
-            height="14"
+            width="12"
+            height="12"
             viewBox="0 0 14 14"
             fill="none"
             style={{ flexShrink: 0 }}
@@ -659,16 +654,18 @@ const styles: Record<string, React.CSSProperties> = {
   },
   searchBar: {
     width: "100%",
+    marginBottom: "4px",
   },
   searchInputWrapper: {
     flex: 1,
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    padding: "4px 8px",
-    borderRadius: "6px",
+    gap: "4px",
+    padding: "2px 8px",
+    minHeight: "28px",
+    borderRadius: "5px",
     border: "0.5px solid",
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
   },
@@ -677,7 +674,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "none",
     border: "none",
     outline: "none",
-    fontSize: "11px",
+    fontSize: "10px",
     fontFamily: "inherit",
   },
   clearButton: {
@@ -752,6 +749,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "9px",
     textAlign: "center",
     opacity: 0.4,
-    marginTop: "2px",
+    marginTop: "-6px",
   },
 };

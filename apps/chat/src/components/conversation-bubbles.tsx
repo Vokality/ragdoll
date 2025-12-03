@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties } from "react";
-import type { RagdollTheme } from "@vokality/ragdoll";
+import { chatUiTheme } from "../styles/chat-ui-theme";
 
 interface Message {
   role: "user" | "assistant";
@@ -9,13 +9,20 @@ interface Message {
 interface ConversationBubblesProps {
   messages: Message[];
   isStreaming?: boolean;
-  theme?: RagdollTheme;
 }
+
+const {
+  bubble: {
+    text: bubbleTextColor,
+    border: bubbleBorderColor,
+    assistantBackground,
+    userBackground,
+  },
+} = chatUiTheme;
 
 export function ConversationBubbles({
   messages,
   isStreaming,
-  theme,
 }: ConversationBubblesProps) {
   const [slideUpTrigger, setSlideUpTrigger] = useState(0);
   const prevMessagesRef = useRef<Message[]>([]);
@@ -43,23 +50,21 @@ export function ConversationBubbles({
 
   // Helper to get bubble colors based on role
   const getBubbleColors = (role: "user" | "assistant") => {
-    const borderColor = theme?.colors.accent ?? "#5a9bc4";
-
     if (role === "assistant") {
       return {
-        textColor: "#ffffff",
-        borderColor: borderColor,
-        backgroundColor: "#000000",
-      };
-    } else {
-      // User bubble - blue background with white text
-      return {
-        textColor: "#ffffff",
-        borderColor: borderColor,
-        backgroundColor: "#6bb3dc",
+        textColor: bubbleTextColor,
+        borderColor: bubbleBorderColor,
+        backgroundColor: assistantBackground,
       };
     }
+
+    return {
+      textColor: bubbleTextColor,
+      borderColor: bubbleBorderColor,
+      backgroundColor: userBackground,
+    };
   };
+
 
   return (
     <>
@@ -103,7 +108,6 @@ export function ConversationBubbles({
         {messages.map((message, index) => {
           const colors = getBubbleColors(message.role);
           const isLastMessage = index === messages.length - 1;
-          const isOlderMessage = index < messages.length - 1;
 
           // Animation - all messages animate when slideUpTrigger changes
           const animation = slideUpTrigger > 0

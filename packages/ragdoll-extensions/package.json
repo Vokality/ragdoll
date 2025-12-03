@@ -1,0 +1,44 @@
+{
+  "name": "@vokality/ragdoll-extensions",
+  "version": "0.1.0",
+  "description": "Extension framework for Ragdoll - register tools, handlers, and plugins that integrate with AI agents",
+  "type": "module",
+  "license": "MIT",
+  "author": "Vokality",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vokality/ragdoll.git",
+    "directory": "packages/ragdoll-extensions"
+  },
+  "keywords": [
+    "ragdoll",
+    "extensions",
+    "plugins",
+    "mcp",
+    "ai",
+    "tools",
+    "function-calling"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

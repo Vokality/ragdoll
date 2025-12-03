@@ -1,4 +1,69 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { TaskState } from "@vokality/ragdoll";
+
+// Types for extension management
+export interface LoadResult {
+  packageName: string;
+  extensionId: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface ExtensionStats {
+  extensionCount: number;
+  toolCount: number;
+}
+
+export interface LoadedPackage {
+  packageName: string;
+  extensionId: string;
+}
+
+export interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export interface TaskEvent {
+  type: string;
+  task?: unknown;
+  taskId?: string;
+  state: {
+    tasks: Array<{
+      id: string;
+      text: string;
+      status: string;
+      createdAt: number;
+      blockedReason?: string;
+    }>;
+    activeTaskId: string | null;
+  };
+  timestamp: number;
+}
+
+export interface PomodoroEvent {
+  type: string;
+  state: {
+    phase: string;
+    remainingMs: number;
+    sessionDurationMs: number;
+    breakDurationMs: number;
+    isBreak: boolean;
+    sessionsCompleted: number;
+  };
+  timestamp: number;
+}
+
+export interface PomodoroStateSnapshot {
+  phase: string;
+  remainingSeconds: number;
+  isBreak: boolean;
+  sessionsCompleted: number;
+}
 
 // Types for the API
 export interface ElectronAPI {
@@ -27,6 +92,25 @@ export interface ElectronAPI {
   // Settings
   getSettings: () => Promise<{ theme?: string; variant?: string }>;
   setSettings: (settings: { theme?: string; variant?: string }) => Promise<{ success: boolean }>;
+
+  // Tasks
+  getTaskState: () => Promise<TaskState>;
+  saveTaskState: (state: TaskState) => Promise<{ success: boolean; error?: string }>;
+
+  // Extensions
+  getExtensionStats: () => Promise<ExtensionStats>;
+  getExtensionTools: () => Promise<ToolDefinition[]>;
+  discoverPackages: () => Promise<string[]>;
+  getLoadedPackages: () => Promise<LoadedPackage[]>;
+  loadPackage: (packageName: string, config?: Record<string, unknown>) => Promise<LoadResult>;
+  unloadPackage: (packageName: string) => Promise<boolean>;
+  reloadPackage: (packageName: string, config?: Record<string, unknown>) => Promise<LoadResult>;
+  discoverAndLoadPackages: () => Promise<LoadResult[]>;
+
+  // State sync events
+  onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
+  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
+  getPomodoroState: () => Promise<PomodoroStateSnapshot | null>;
 
   // Platform
   platform: string;
@@ -78,6 +162,40 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setSettings: (settings: { theme?: string; variant?: string }) =>
     ipcRenderer.invoke("settings:set", settings),
 
+  // Tasks
+  getTaskState: () => ipcRenderer.invoke("tasks:get-state"),
+  saveTaskState: (state: TaskState) => ipcRenderer.invoke("tasks:save-state", state),
+
+  // Extensions
+  getExtensionStats: () => ipcRenderer.invoke("extensions:get-stats"),
+  getExtensionTools: () => ipcRenderer.invoke("extensions:get-tools"),
+  discoverPackages: () => ipcRenderer.invoke("extensions:discover-packages"),
+  getLoadedPackages: () => ipcRenderer.invoke("extensions:get-loaded-packages"),
+  loadPackage: (packageName: string, config?: Record<string, unknown>) =>
+    ipcRenderer.invoke("extensions:load-package", packageName, config),
+  unloadPackage: (packageName: string) =>
+    ipcRenderer.invoke("extensions:unload-package", packageName),
+  reloadPackage: (packageName: string, config?: Record<string, unknown>) =>
+    ipcRenderer.invoke("extensions:reload-package", packageName, config),
+  discoverAndLoadPackages: () => ipcRenderer.invoke("extensions:discover-and-load"),
+
+  // State sync events
+  onTaskStateChanged: (callback: (event: TaskEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: TaskEvent) => callback(event);
+    ipcRenderer.on("tasks:state-changed", handler);
+    return () => {
+      ipcRenderer.removeListener("tasks:state-changed", handler);
+    };
+  },
+  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: PomodoroEvent) => callback(event);
+    ipcRenderer.on("pomodoro:state-changed", handler);
+    return () => {
+      ipcRenderer.removeListener("pomodoro:state-changed", handler);
+    };
+  },
+  getPomodoroState: () => ipcRenderer.invoke("pomodoro:get-state"),
+
   // Platform
   platform: process.platform,
 } satisfies ElectronAPI);
@@ -88,4 +206,3 @@ declare global {
     electronAPI: ElectronAPI;
   }
 }
-

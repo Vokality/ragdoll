@@ -1,11 +1,17 @@
 /**
- * OpenAI service for chat with streaming and function calling
+ * OpenAI service for chat with streaming and function calling.
+ *
+ * Uses the ExtensionManager to get tools dynamically, allowing
+ * extensions to be added/removed at runtime.
  */
 
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
 import { randomUUID } from "node:crypto";
-import { mcpTools, validateFunctionCall } from "./mcp-tools.js";
+import type { ExtensionManager } from "./extension-manager.js";
 
 function extractTextFromDeltaContent(content: unknown): string {
   if (!content) return "";
@@ -98,16 +104,20 @@ Help users focus with timed work sessions:
 10. You don't give any insights into your internal processes - that's not for the user to know and proprietary information.
 `;
 
-
 export async function sendChatMessage(
   apiKey: string,
   userMessage: string,
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
+  extensionManager: ExtensionManager,
   onStreamingText: (text: string) => void,
   onFunctionCall: (name: string, args: Record<string, unknown>) => void,
   onStreamEnd: () => void
 ): Promise<void> {
   const openai = new OpenAI({ apiKey });
+
+  // Get tools dynamically from the extension manager
+  // Cast to OpenAI's ChatCompletionTool type (structurally compatible)
+  const tools = extensionManager.getTools() as unknown as ChatCompletionTool[];
 
   // Build messages array
   const messages: ChatCompletionMessageParam[] = [
@@ -126,7 +136,7 @@ export async function sendChatMessage(
       const stream = await openai.chat.completions.create({
         model: "gpt-5.1",
         messages,
-        tools: mcpTools,
+        tools,
         tool_choice: "auto",
         stream: true,
         max_completion_tokens: 140,
@@ -196,15 +206,18 @@ export async function sendChatMessage(
           completedToolCalls.push({ ...currentToolCall });
           try {
             const args = JSON.parse(currentToolCall.arguments) as Record<string, unknown>;
-            const validation = validateFunctionCall(currentToolCall.name, args);
 
-            if (validation.valid) {
+            // Execute through extension manager (handles state + forwarding)
+            const result = await extensionManager.executeTool(currentToolCall.name, args);
+
+            if (result.success) {
+              // Also forward to renderer for UI updates (character tools need this)
               onFunctionCall(currentToolCall.name, args);
             } else {
-              console.warn("Invalid function call:", validation.error);
+              console.warn("Tool execution failed:", result.error);
             }
           } catch (error) {
-            console.error("Failed to parse tool call arguments:", error);
+            console.error("Failed to parse/execute tool call:", error);
           }
           currentToolCall = null;
         }
@@ -254,4 +267,3 @@ export async function sendChatMessage(
     throw error;
   }
 }
-

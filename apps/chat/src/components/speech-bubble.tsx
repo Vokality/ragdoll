@@ -1,13 +1,12 @@
 import { useState, useEffect, type CSSProperties } from "react";
-import type { RagdollTheme } from "@vokality/ragdoll";
+import { chatUiTheme } from "../styles/chat-ui-theme";
 
 interface SpeechBubbleProps {
   text: string | null;
   isStreaming?: boolean;
-  theme?: RagdollTheme;
 }
 
-export function SpeechBubble({ text, isStreaming, theme }: SpeechBubbleProps) {
+export function SpeechBubble({ text, isStreaming }: SpeechBubbleProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -22,10 +21,10 @@ export function SpeechBubble({ text, isStreaming, theme }: SpeechBubbleProps) {
 
   if (!visible && !text) return null;
 
-  // Theme-aware colors with improved contrast
-  const textColor = theme?.colors.hair.light ?? "#f1f5f9";
-  const border = theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.3)";
-  const background = theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.65)";
+  const { speech } = chatUiTheme;
+  const textColor = speech.text;
+  const border = speech.border;
+  const background = speech.background;
 
   return (
     <>

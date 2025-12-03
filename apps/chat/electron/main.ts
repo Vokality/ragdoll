@@ -8,6 +8,9 @@ import {
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
+import type { Task, TaskState } from "@vokality/ragdoll";
+import { z } from "zod";
+import { getExtensionManager, type ExtensionManager } from "./services/extension-manager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,25 +23,70 @@ const STORAGE_FILE = path.join(USER_DATA_PATH, "chat-storage.json");
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
+let extensionManager: ExtensionManager | null = null;
 
 // Storage helpers
-interface StorageData {
-  apiKeyEncrypted?: string;
-  settings?: {
-    theme?: string;
-    variant?: string;
+const TASK_STATUS_VALUES = ["todo", "in_progress", "blocked", "done"] as const;
+
+const taskSchema: z.ZodType<Task> = z.object({
+  id: z.string(),
+  text: z.string(),
+  status: z.enum(TASK_STATUS_VALUES),
+  createdAt: z.number().int().nonnegative(),
+  blockedReason: z.string().optional(),
+});
+
+const taskStateSchema: z.ZodType<TaskState> = z.object({
+  tasks: z.array(taskSchema),
+  activeTaskId: z.string().nullable(),
+  isExpanded: z.boolean().default(false),
+});
+
+const conversationMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+
+const storageSchema = z
+  .object({
+    apiKeyEncrypted: z.string().optional(),
+    settings: z
+      .object({
+        theme: z.string().optional(),
+        variant: z.string().optional(),
+      })
+      .optional(),
+    conversation: z.array(conversationMessageSchema).optional(),
+    tasks: taskStateSchema.optional(),
+  })
+  .passthrough();
+
+type StorageData = z.infer<typeof storageSchema>;
+
+const DEFAULT_TASK_STATE: TaskState = {
+  tasks: [],
+  activeTaskId: null,
+  isExpanded: false,
+};
+
+function cloneTaskState(state: TaskState): TaskState {
+  return {
+    tasks: state.tasks.map((task: Task) => ({ ...task })),
+    activeTaskId: state.activeTaskId,
+    isExpanded: state.isExpanded,
   };
-  conversation?: Array<{
-    role: "user" | "assistant";
-    content: string;
-  }>;
 }
 
 function loadStorage(): StorageData {
   try {
     if (fs.existsSync(STORAGE_FILE)) {
       const data = fs.readFileSync(STORAGE_FILE, "utf-8");
-      return JSON.parse(data) as StorageData;
+      const parsed = JSON.parse(data);
+      const result = storageSchema.safeParse(parsed);
+      if (result.success) {
+        return result.data;
+      }
+      console.warn("Invalid chat storage detected, falling back to defaults", result.error.flatten());
     }
   } catch (error) {
     console.error("Failed to load storage:", error);
@@ -48,13 +96,51 @@ function loadStorage(): StorageData {
 
 function saveStorage(data: StorageData): void {
   try {
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2));
+    const validated = storageSchema.parse(data);
+    fs.writeFileSync(STORAGE_FILE, JSON.stringify(validated, null, 2));
   } catch (error) {
     console.error("Failed to save storage:", error);
   }
 }
 
-function createWindow(): void {
+function getStoredTaskState(): TaskState {
+  const storage = loadStorage();
+  return storage.tasks ? cloneTaskState(storage.tasks) : cloneTaskState(DEFAULT_TASK_STATE);
+}
+
+async function createWindow(): Promise<void> {
+  // Load initial task state from storage
+  const initialTaskState = getStoredTaskState();
+
+  // Initialize extension manager with state management
+  extensionManager = getExtensionManager({
+    initialTaskState,
+    onToolExecution: (name, args) => {
+      // Forward character tools to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("chat:function-call", name, args);
+      }
+    },
+    onTaskStateChange: (event) => {
+      // Persist task state to storage
+      const storage = loadStorage();
+      storage.tasks = event.state;
+      saveStorage(storage);
+
+      // Notify renderer of state change
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("tasks:state-changed", event);
+      }
+    },
+    onPomodoroStateChange: (event) => {
+      // Notify renderer of pomodoro state change
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("pomodoro:state-changed", event);
+      }
+    },
+  });
+  await extensionManager.initialize();
+
   mainWindow = new BrowserWindow({
     width: 480,
     height: 800,
@@ -91,12 +177,12 @@ function createWindow(): void {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
-  createWindow();
+app.whenReady().then(async () => {
+  await createWindow();
 
-  app.on("activate", () => {
+  app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      await createWindow();
     }
   });
 });
@@ -183,7 +269,7 @@ ipcMain.handle("auth:validate-key", async (_, key: string): Promise<{ valid: boo
     // Import OpenAI dynamically to avoid issues if not installed
     const { default: OpenAI } = await import("openai");
     const openai = new OpenAI({ apiKey: key });
-    
+
     // Make a simple API call to validate
     await openai.models.list();
     return { valid: true };
@@ -239,10 +325,114 @@ ipcMain.handle("chat:save-conversation", async (_, conversation: Array<{ role: "
 });
 
 // ============================================
+// IPC Handlers - Tasks
+// ============================================
+
+ipcMain.handle("tasks:get-state", async (): Promise<TaskState> => {
+  // Get state from extension manager if available, otherwise from storage
+  if (extensionManager) {
+    const state = extensionManager.getTaskState();
+    if (state) return state;
+  }
+  return getStoredTaskState();
+});
+
+ipcMain.handle("tasks:save-state", async (_, state: TaskState): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const parsed = taskStateSchema.parse(state);
+    // Load state into extension manager
+    if (extensionManager) {
+      extensionManager.loadTaskState(parsed);
+    }
+    // Also persist to storage
+    const storage = loadStorage();
+    storage.tasks = cloneTaskState(parsed);
+    saveStorage(storage);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to persist tasks:", error);
+    return { success: false, error: "Invalid task payload" };
+  }
+});
+
+// Pomodoro state handler
+ipcMain.handle("pomodoro:get-state", async () => {
+  if (!extensionManager) {
+    return null;
+  }
+  return extensionManager.getPomodoroState();
+});
+
+// ============================================
+// IPC Handlers - Extensions
+// ============================================
+
+ipcMain.handle("extensions:get-stats", async () => {
+  if (!extensionManager) {
+    return { extensionCount: 0, toolCount: 0 };
+  }
+  return extensionManager.getStats();
+});
+
+ipcMain.handle("extensions:get-tools", async () => {
+  if (!extensionManager) {
+    return [];
+  }
+  return extensionManager.getTools();
+});
+
+ipcMain.handle("extensions:discover-packages", async () => {
+  if (!extensionManager) {
+    return [];
+  }
+  return extensionManager.discoverPackages();
+});
+
+ipcMain.handle("extensions:get-loaded-packages", async () => {
+  if (!extensionManager) {
+    return [];
+  }
+  return extensionManager.getLoadedPackages();
+});
+
+ipcMain.handle(
+  "extensions:load-package",
+  async (_, packageName: string, config?: Record<string, unknown>) => {
+    if (!extensionManager) {
+      return { packageName, extensionId: "", success: false, error: "Extension manager not initialized" };
+    }
+    return extensionManager.loadPackage(packageName, config);
+  }
+);
+
+ipcMain.handle("extensions:unload-package", async (_, packageName: string) => {
+  if (!extensionManager) {
+    return false;
+  }
+  return extensionManager.unloadPackage(packageName);
+});
+
+ipcMain.handle(
+  "extensions:reload-package",
+  async (_, packageName: string, config?: Record<string, unknown>) => {
+    if (!extensionManager) {
+      return { packageName, extensionId: "", success: false, error: "Extension manager not initialized" };
+    }
+    return extensionManager.reloadPackage(packageName, config);
+  }
+);
+
+ipcMain.handle("extensions:discover-and-load", async () => {
+  if (!extensionManager) {
+    return [];
+  }
+  return extensionManager.discoverAndLoadPackages();
+});
+
+// ============================================
 // IPC Handlers - Chat (OpenAI)
 // ============================================
 
-// Import the OpenAI service and MCP tools
 import { sendChatMessage } from "./services/openai-service.js";
 
 ipcMain.handle("chat:send-message", async (event, message: string, conversationHistory: Array<{ role: "user" | "assistant"; content: string }>) => {
@@ -261,18 +451,24 @@ ipcMain.handle("chat:send-message", async (event, message: string, conversationH
       apiKey = Buffer.from(storage.apiKeyEncrypted, "base64").toString();
     }
 
+    // Ensure extension manager is initialized
+    if (!extensionManager) {
+      return { success: false, error: "Extension manager not initialized" };
+    }
+
     // Send message and stream response
     await sendChatMessage(
       apiKey,
       message,
       conversationHistory,
+      extensionManager,
       // Streaming text callback
       (text: string) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("chat:streaming-text", text);
         }
       },
-      // Function call callback
+      // Function call callback (already handled by extension manager, but keep for compatibility)
       (name: string, args: Record<string, unknown>) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("chat:function-call", name, args);
@@ -293,4 +489,3 @@ ipcMain.handle("chat:send-message", async (event, message: string, conversationH
     return { success: false, error: errorMessage };
   }
 });
-
