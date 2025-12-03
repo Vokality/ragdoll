@@ -52,8 +52,8 @@ export function ConversationBubbles({
     } else {
       return {
         textColor: "#0f172a",
-        borderColor: theme?.colors.hair.light ?? "#f1f5f9",
-        backgroundColor: theme?.colors.blush.transparent ?? "rgba(241, 245, 249, 0.95)",
+        borderColor: "rgba(148, 163, 184, 0.3)",
+        backgroundColor: "rgba(241, 245, 249, 0.95)",
       };
     }
   };
