@@ -221,6 +221,7 @@ export {
   useSlotRegistry,
   useVisibleSlots,
   useActiveSlot,
+  useExtensionSlots,
 
   // React components
   SlotButton,
@@ -234,6 +235,9 @@ export {
   presetIcons,
   getSlotIcon,
 } from "./ui/index.js";
+
+export { createElectronHostBridge } from "./ui/index.js";
+export type { ExtensionHostBridge, ElectronHostAPI } from "./ui/index.js";
 
 // Task UI (requires React)
 export { createTaskUISlot } from "./extensions/tasks/ui.js";

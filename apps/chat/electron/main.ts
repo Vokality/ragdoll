@@ -24,6 +24,12 @@ const storageRepo = createStorageRepository(USER_DATA_PATH);
 
 // Development mode check
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+const extensionsDebugEnabled = process.env.RAGDOLL_DEBUG_EXTENSIONS !== "false";
+const logExtensions = (...args: unknown[]): void => {
+  if (extensionsDebugEnabled) {
+    console.info("[Main][Extensions]", ...args);
+  }
+};
 
 let mainWindow: BrowserWindow | null = null;
 let extensionManager: ExtensionManager | null = null;
@@ -39,11 +45,16 @@ async function createWindow(): Promise<void> {
     initialTaskState,
     disabledExtensions,
     onToolExecution: (name, args) => {
+      logExtensions("Tool executed", { name, args });
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("chat:function-call", name, args);
       }
     },
     onTaskStateChange: (event) => {
+      logExtensions("Task state event", {
+        type: event.type,
+        taskCount: event.state.tasks?.length ?? 0,
+      });
       storageRepo.update((draft) => {
         draft.tasks = cloneTaskState(event.state);
       });
@@ -53,18 +64,27 @@ async function createWindow(): Promise<void> {
       }
     },
     onPomodoroStateChange: (event) => {
+      logExtensions("Pomodoro state event", {
+        type: event.type,
+        phase: event.state.phase,
+        remainingMs: event.state.remainingMs,
+      });
       // Notify renderer of pomodoro state change
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("pomodoro:state-changed", event);
       }
     },
     onSpotifyStateChange: (event) => {
+      logExtensions("Spotify state event", {
+        type: event.type,
+      });
       // Notify renderer of Spotify state change
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("spotify:state-changed", event);
       }
     },
     onNotification: (notification) => {
+      logExtensions("Notification", notification.title ?? notification.body);
       if (Notification.isSupported()) {
         new Notification({
           title: notification.title,
@@ -74,13 +94,16 @@ async function createWindow(): Promise<void> {
       }
     },
     // Spotify config - only enabled if client ID is configured
-    spotify: spotifyClientId ? {
-      clientId: spotifyClientId,
-      redirectUri: "lumen://spotify-callback",
-      initialTokens: spotifyTokens,
-    } : undefined,
+    spotify: spotifyClientId
+      ? {
+          clientId: spotifyClientId,
+          redirectUri: "lumen://spotify-callback",
+          initialTokens: spotifyTokens,
+        }
+      : undefined,
   });
   await extensionManager.initialize();
+  logExtensions("Extension manager initialized", extensionManager.getStats());
 
   mainWindow = new BrowserWindow({
     width: 480,
@@ -368,20 +391,31 @@ ipcMain.handle("chat:save-conversation", async (_, conversation: Array<{ role: "
 // ============================================
 
 ipcMain.handle("tasks:get-state", async (): Promise<TaskState> => {
+  let state: TaskState | null = null;
   if (extensionManager) {
-    const state = extensionManager.getTaskState();
-    if (state) return state;
+    state = extensionManager.getTaskState();
   }
-  return storageRepo.getTaskState();
+  const result = state ?? storageRepo.getTaskState();
+  logExtensions("IPC tasks:get-state", {
+    usedManager: !!state,
+    taskCount: result.tasks.length,
+  });
+  return result;
 });
 
 
 // Pomodoro state handler
 ipcMain.handle("pomodoro:get-state", async () => {
   if (!extensionManager) {
+    logExtensions("IPC pomodoro:get-state", { available: false });
     return null;
   }
-  return extensionManager.getPomodoroState();
+  const state = extensionManager.getPomodoroState();
+  logExtensions("IPC pomodoro:get-state", {
+    available: !!state,
+    phase: state?.phase,
+  });
+  return state;
 });
 
 // ============================================
@@ -553,11 +587,15 @@ ipcMain.handle("extensions:discover-and-load", async () => {
 ipcMain.handle(
   "extensions:execute-tool",
   async (_event, toolName: string, args?: Record<string, unknown>) => {
+    logExtensions("IPC execute-tool", { toolName, args });
     if (!extensionManager) {
+      logExtensions("Extension manager missing for tool execution", toolName);
       return { success: false, error: "Extension manager not initialized" };
     }
     try {
-      return await extensionManager.executeTool(toolName, args ?? {});
+      const result = await extensionManager.executeTool(toolName, args ?? {});
+      logExtensions("Tool execution result", { toolName, success: result.success });
+      return result;
     } catch (error) {
       console.error("Failed to execute tool", toolName, error);
       return {

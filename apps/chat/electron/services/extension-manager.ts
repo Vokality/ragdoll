@@ -281,13 +281,6 @@ export class ExtensionManager {
             if (this.config.onPomodoroStateChange) {
               this.config.onPomodoroStateChange(event);
             }
-            // Also forward as tool execution for backward compatibility
-            if (this.config.onToolExecution) {
-              this.config.onToolExecution("_pomodoroStateChanged", {
-                type: event.type,
-                state: event.state,
-              });
-            }
           },
           onNotification: this.config.onNotification,
         });
@@ -304,14 +297,6 @@ export class ExtensionManager {
             // Forward state changes to renderer
             if (this.config.onTaskStateChange) {
               this.config.onTaskStateChange(event);
-            }
-            // Also forward as tool execution for backward compatibility
-            if (this.config.onToolExecution) {
-              this.config.onToolExecution("_taskStateChanged", {
-                type: event.type,
-                state: event.state,
-                task: event.task,
-              });
             }
           },
         });

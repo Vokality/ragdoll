@@ -56,6 +56,10 @@ function extractTextFromDeltaContent(content: unknown): string {
   return collect(content);
 }
 
+function isRendererForwardedResult(data: unknown): data is { handledInRenderer?: boolean } {
+  return typeof data === "object" && data !== null && "handledInRenderer" in data;
+}
+
 // System prompt that instructs the AI about its capabilities
 const SYSTEM_PROMPT = `
 You are Lumen, a friendly AI companion from Vokality. You can express emotions and help users manage their tasks and time.
@@ -210,11 +214,15 @@ export async function sendChatMessage(
             // Execute through extension manager (handles state + forwarding)
             const result = await extensionManager.executeTool(currentToolCall.name, args);
 
-            if (result.success) {
-              // Also forward to renderer for UI updates (character tools need this)
-              onFunctionCall(currentToolCall.name, args);
-            } else {
+            const handledInRenderer =
+              result.success &&
+              isRendererForwardedResult(result.data) &&
+              !!result.data.handledInRenderer;
+
+            if (!result.success) {
               console.warn("Tool execution failed:", result.error);
+            } else if (handledInRenderer) {
+              onFunctionCall(currentToolCall.name, args);
             }
           } catch (error) {
             console.error("Failed to parse/execute tool call:", error);

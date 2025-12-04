@@ -142,6 +142,30 @@ const extension = createTaskExtension({
 - `clearAllTasks` - Remove all tasks
 - `listTasks` - Get all tasks
 
+## Renderer UI Slots
+
+The package also includes React helpers for rendering extension-contributed UI slots. These slots power the task checklist, pomodoro timer, Spotify panel, and any future extensions without touching your app code.
+
+```tsx
+import { createElectronHostBridge, useExtensionSlots } from "@vokality/ragdoll-extensions";
+import { SlotBar } from "@vokality/ragdoll-extensions/ui";
+
+function ExtensionBar() {
+  const host = useMemo(
+    () => createElectronHostBridge({
+      api: window.electronAPI,
+      reload: () => window.location.reload(),
+    }),
+    []
+  );
+
+  const slots = useExtensionSlots(host);
+  return <SlotBar slots={slots} />;
+}
+```
+
+Extensions manage their own slot state (tasks, pomodoro, Spotify, etc.). Your renderer just provides the host API and renders whatever slots are available, making it easy to add or remove extensions in isolation.
+
 ## Creating Custom Extensions
 
 Use the `createExtension` factory to create custom extensions:

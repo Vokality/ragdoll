@@ -1,18 +1,15 @@
 import { useState, useRef, useEffect, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
-import { SlotBar, type ExtensionUISlot } from "@vokality/ragdoll-extensions";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  slots?: ExtensionUISlot[];
 }
 
 export function ChatInput({
   onSend,
   disabled,
   placeholder = "Type your message...",
-  slots = [],
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,13 +60,6 @@ export function ChatInput({
         }
       `}</style>
 
-      {/* Extension slot bar */}
-      {slots.length > 0 && (
-        <div style={styles.slotBarRow}>
-          <SlotBar slots={slots} />
-        </div>
-      )}
-
       <div style={styles.inputContainer}>
         <textarea
           ref={textareaRef}
@@ -117,11 +107,6 @@ const styles: Record<string, CSSProperties> = {
     padding: "16px 20px 20px",
     background: "var(--bg-secondary)",
     borderTop: "1px solid var(--border)",
-  },
-  slotBarRow: {
-    display: "flex",
-    justifyContent: "flex-start",
-    paddingBottom: "8px",
   },
   inputContainer: {
     display: "flex",

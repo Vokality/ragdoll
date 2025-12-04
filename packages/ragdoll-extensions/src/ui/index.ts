@@ -110,6 +110,12 @@ export {
 export { SlotButton, SlotButtonStateless } from "./slot-button.js";
 export { SlotPanel, SlotPanelBase } from "./slot-panel.js";
 export { SlotBar, ControlledSlotBar, type SlotBarProps, type ControlledSlotBarProps } from "./slot-bar.js";
+export { useExtensionSlots } from "./bridge/use-extension-slots.js";
+export {
+  createElectronHostBridge,
+  type ExtensionHostBridge,
+  type ElectronHostAPI,
+} from "./bridge/extension-host.js";
 
 // =============================================================================
 // Icons

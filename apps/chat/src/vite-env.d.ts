@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { TaskState, PomodoroState } from "@vokality/ragdoll-extensions";
+import type { TaskState, PomodoroState, TaskEvent, PomodoroEvent } from "@vokality/ragdoll-extensions";
 
 // Extension types for renderer
 interface BuiltInExtensionInfo {
@@ -46,27 +46,6 @@ interface SpotifyTokens {
   scope: string;
 }
 
-interface TaskEvent {
-  type: string;
-  task?: unknown;
-  taskId?: string;
-  state: TaskState;
-  timestamp: number;
-}
-
-interface PomodoroEvent {
-  type: string;
-  state: PomodoroState;
-  timestamp: number;
-}
-
-interface PomodoroStateSnapshot {
-  phase: string;
-  remainingSeconds: number;
-  isBreak: boolean;
-  sessionsCompleted: number;
-}
-
 // ElectronAPI type definition
 interface ElectronAPI {
   // Auth
@@ -100,7 +79,7 @@ interface ElectronAPI {
   onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
 
   // Pomodoro
-  getPomodoroState: () => Promise<PomodoroStateSnapshot | null>;
+  getPomodoroState: () => Promise<PomodoroState | null>;
   onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
 
   // Extensions
