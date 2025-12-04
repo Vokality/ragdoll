@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { TaskState } from "@vokality/ragdoll";
 import type { ChatMessage } from "../domain/chat";
 import { appendMessage, getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
@@ -20,7 +19,6 @@ interface UseChatApplicationResult {
   visibleMessages: ChatMessage[];
   isStreaming: boolean;
   isLoading: boolean;
-  initialTaskState: TaskState | null;
   actions: ChatActions;
   subscribeToFunctionCalls: (
     handler: (name: string, args: Record<string, unknown>) => void
@@ -39,7 +37,6 @@ export function useChatApplication(): UseChatApplicationResult {
 
   const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [initialTaskState, setInitialTaskState] = useState<TaskState | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -52,13 +49,12 @@ export function useChatApplication(): UseChatApplicationResult {
     let mounted = true;
     (async () => {
       try {
-        const { messages: loadedMessages, settings: loadedSettings, initialTaskState } =
+        const { messages: loadedMessages, settings: loadedSettings } =
           await service.hydrate();
         if (!mounted) return;
         messagesRef.current = loadedMessages;
         setMessages(loadedMessages);
         setSettings(loadedSettings);
-        setInitialTaskState(initialTaskState);
       } catch (error) {
         console.error("Failed to hydrate chat state", error);
       }
@@ -183,7 +179,6 @@ export function useChatApplication(): UseChatApplicationResult {
     visibleMessages,
     isStreaming,
     isLoading,
-    initialTaskState,
     actions: {
       sendMessage,
       changeTheme,

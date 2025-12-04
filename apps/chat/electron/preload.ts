@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { TaskState } from "@vokality/ragdoll";
+import type { TaskState, PomodoroState } from "@vokality/ragdoll-extensions";
 
 // Types for extension management
 export interface LoadResult {
@@ -39,29 +39,13 @@ export interface TaskEvent {
   type: string;
   task?: unknown;
   taskId?: string;
-  state: {
-    tasks: Array<{
-      id: string;
-      text: string;
-      status: string;
-      createdAt: number;
-      blockedReason?: string;
-    }>;
-    activeTaskId: string | null;
-  };
+  state: TaskState;
   timestamp: number;
 }
 
 export interface PomodoroEvent {
   type: string;
-  state: {
-    phase: string;
-    remainingMs: number;
-    sessionDurationMs: number;
-    breakDurationMs: number;
-    isBreak: boolean;
-    sessionsCompleted: number;
-  };
+  state: PomodoroState;
   timestamp: number;
 }
 
@@ -139,7 +123,6 @@ export interface ElectronAPI {
 
   // Tasks
   getTaskState: () => Promise<TaskState>;
-  saveTaskState: (state: TaskState) => Promise<{ success: boolean; error?: string }>;
 
   // Extensions
   getExtensionStats: () => Promise<ExtensionStats>;
@@ -153,6 +136,10 @@ export interface ElectronAPI {
   unloadPackage: (packageName: string) => Promise<boolean>;
   reloadPackage: (packageName: string, config?: Record<string, unknown>) => Promise<LoadResult>;
   discoverAndLoadPackages: () => Promise<LoadResult[]>;
+  executeExtensionTool: (
+    toolName: string,
+    args?: Record<string, unknown>
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // State sync events
   onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
@@ -227,7 +214,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Tasks
   getTaskState: () => ipcRenderer.invoke("tasks:get-state"),
-  saveTaskState: (state: TaskState) => ipcRenderer.invoke("tasks:save-state", state),
 
   // Extensions
   getExtensionStats: () => ipcRenderer.invoke("extensions:get-stats"),
@@ -245,6 +231,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   reloadPackage: (packageName: string, config?: Record<string, unknown>) =>
     ipcRenderer.invoke("extensions:reload-package", packageName, config),
   discoverAndLoadPackages: () => ipcRenderer.invoke("extensions:discover-and-load"),
+  executeExtensionTool: (toolName: string, args?: Record<string, unknown>) =>
+    ipcRenderer.invoke("extensions:execute-tool", toolName, args ?? {}),
 
   // State sync events
   onTaskStateChanged: (callback: (event: TaskEvent) => void) => {

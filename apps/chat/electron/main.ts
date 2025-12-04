@@ -8,11 +8,10 @@ import {
 } from "electron";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import type { TaskState } from "@vokality/ragdoll";
+import type { TaskState } from "@vokality/ragdoll-extensions";
 import { getExtensionManager, BUILT_IN_EXTENSIONS, type ExtensionManager } from "./services/extension-manager.js";
 import {
   createStorageRepository,
-  taskStateSchema,
   cloneTaskState,
 } from "./infrastructure/storage-repository.js";
 
@@ -376,21 +375,6 @@ ipcMain.handle("tasks:get-state", async (): Promise<TaskState> => {
   return storageRepo.getTaskState();
 });
 
-ipcMain.handle("tasks:save-state", async (_, state: TaskState): Promise<{ success: boolean; error?: string }> => {
-  try {
-    const parsed = taskStateSchema.parse(state);
-    if (extensionManager) {
-      extensionManager.loadTaskState(parsed);
-    }
-    storageRepo.update((draft) => {
-      draft.tasks = cloneTaskState(parsed);
-    });
-    return { success: true };
-  } catch (error) {
-    console.error("Failed to persist tasks:", error);
-    return { success: false, error: "Invalid task payload" };
-  }
-});
 
 // Pomodoro state handler
 ipcMain.handle("pomodoro:get-state", async () => {
@@ -565,6 +549,24 @@ ipcMain.handle("extensions:discover-and-load", async () => {
   }
   return extensionManager.discoverAndLoadPackages();
 });
+
+ipcMain.handle(
+  "extensions:execute-tool",
+  async (_event, toolName: string, args?: Record<string, unknown>) => {
+    if (!extensionManager) {
+      return { success: false, error: "Extension manager not initialized" };
+    }
+    try {
+      return await extensionManager.executeTool(toolName, args ?? {});
+    } catch (error) {
+      console.error("Failed to execute tool", toolName, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+);
 
 // ============================================
 // IPC Handlers - Chat (OpenAI)

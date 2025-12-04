@@ -29,9 +29,6 @@ export function createElectronChatGateway(): ChatGateway {
     async clearConversation(): Promise<void> {
       await api.clearConversation();
     },
-    async fetchTaskState() {
-      return api.getTaskState();
-    },
     async sendMessage(message, conversationHistory) {
       return api.sendMessage(message, conversationHistory);
     },

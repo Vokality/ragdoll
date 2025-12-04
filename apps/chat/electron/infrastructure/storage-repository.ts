@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { z } from "zod";
-import type { Task, TaskState } from "@vokality/ragdoll";
+import type { Task, TaskState } from "@vokality/ragdoll-extensions";
 
 const TASK_STATUS_VALUES = ["todo", "in_progress", "blocked", "done"] as const;
 

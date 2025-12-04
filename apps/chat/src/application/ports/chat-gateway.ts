@@ -1,4 +1,3 @@
-import type { TaskState } from "@vokality/ragdoll";
 import type { ChatMessage } from "../../domain/chat";
 import type { ChatSettings } from "../../domain/settings";
 
@@ -13,7 +12,6 @@ export interface ChatGateway {
   fetchConversation(): Promise<ChatMessage[]>;
   persistConversation(messages: ChatMessage[]): Promise<void>;
   clearConversation(): Promise<void>;
-  fetchTaskState(): Promise<TaskState>;
   sendMessage(
     message: string,
     conversationHistory: ChatMessage[]

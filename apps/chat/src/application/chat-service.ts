@@ -1,4 +1,3 @@
-import type { TaskState } from "@vokality/ragdoll";
 import type { ChatMessage } from "../domain/chat";
 import { mergeSettings, type ChatSettings } from "../domain/settings";
 import type { ChatGateway, StreamingHandlers } from "./ports/chat-gateway";
@@ -6,23 +5,20 @@ import type { ChatGateway, StreamingHandlers } from "./ports/chat-gateway";
 export interface HydratedChatState {
   messages: ChatMessage[];
   settings: ChatSettings;
-  initialTaskState: TaskState;
 }
 
 export class ChatService {
   constructor(private readonly gateway: ChatGateway) {}
 
   async hydrate(): Promise<HydratedChatState> {
-    const [settings, messages, initialTaskState] = await Promise.all([
+    const [settings, messages] = await Promise.all([
       this.gateway.fetchSettings(),
       this.gateway.fetchConversation(),
-      this.gateway.fetchTaskState(),
     ]);
 
     return {
       messages,
       settings: mergeSettings(settings),
-      initialTaskState,
     };
   }
 

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { TaskState } from "@vokality/ragdoll";
+import type { TaskState, PomodoroState } from "@vokality/ragdoll-extensions";
 
 // Extension types for renderer
 interface BuiltInExtensionInfo {
@@ -46,6 +46,27 @@ interface SpotifyTokens {
   scope: string;
 }
 
+interface TaskEvent {
+  type: string;
+  task?: unknown;
+  taskId?: string;
+  state: TaskState;
+  timestamp: number;
+}
+
+interface PomodoroEvent {
+  type: string;
+  state: PomodoroState;
+  timestamp: number;
+}
+
+interface PomodoroStateSnapshot {
+  phase: string;
+  remainingSeconds: number;
+  isBreak: boolean;
+  sessionsCompleted: number;
+}
+
 // ElectronAPI type definition
 interface ElectronAPI {
   // Auth
@@ -76,12 +97,20 @@ interface ElectronAPI {
 
   // Tasks
   getTaskState: () => Promise<TaskState>;
-  saveTaskState: (state: TaskState) => Promise<{ success: boolean; error?: string }>;
+  onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
+
+  // Pomodoro
+  getPomodoroState: () => Promise<PomodoroStateSnapshot | null>;
+  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
 
   // Extensions
   getAvailableExtensions: () => Promise<BuiltInExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
+  executeExtensionTool: (
+    toolName: string,
+    args?: Record<string, unknown>
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Spotify
   spotifyIsEnabled: () => Promise<boolean>;

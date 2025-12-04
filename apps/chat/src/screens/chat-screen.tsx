@@ -1,15 +1,17 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react";
-import type { CharacterController, FacialMood, PomodoroDuration, TaskController, PomodoroController } from "@vokality/ragdoll";
+import type { CharacterController, FacialMood } from "@vokality/ragdoll";
 import {
-  createDerivedSlotState,
+  createSlotState,
   createSpotifyUISlot,
   SpotifyPanelComponent,
   type ExtensionUISlot,
   type ListPanelSection,
   type ItemStatus,
   type PanelAction,
+  type SlotState,
   type SpotifySetupActions,
 } from "@vokality/ragdoll-extensions";
+import type { TaskState, PomodoroState } from "@vokality/ragdoll-extensions";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
@@ -21,208 +23,392 @@ interface ChatScreenProps {
 }
 
 
-/**
- * Create a task UI slot from a CharacterController's TaskController
- */
-function createTaskSlotFromController(taskController: TaskController): ExtensionUISlot {
-  const state = createDerivedSlotState({
-    getSourceState: () => taskController.getState(),
-    subscribeToSource: (callback) => taskController.onUpdate(() => callback()),
-    deriveState: (taskState) => {
-      const { tasks, activeTaskId } = taskState;
+const DEFAULT_TASK_SLOT_STATE: SlotState = {
+  badge: null,
+  visible: false,
+  panel: {
+    type: "list",
+    title: "Tasks",
+    emptyMessage: "No tasks yet",
+    sections: [],
+  },
+};
 
-      const activeTasks = tasks.filter((t) => t.status !== "done");
-      const completedTasks = tasks.filter((t) => t.status === "done");
+const DEFAULT_POMODORO_SLOT_STATE: SlotState = {
+  badge: null,
+  visible: false,
+  panel: {
+    type: "list",
+    title: "Focus Timer",
+    items: [],
+  },
+};
 
-      const badge = activeTasks.length > 0 ? activeTasks.length : null;
-      const visible = tasks.length > 0;
+interface PomodoroStateSnapshot {
+  phase: string;
+  remainingSeconds: number;
+  isBreak: boolean;
+  sessionsCompleted: number;
+}
 
-      const sections: ListPanelSection[] = [];
+interface RendererTaskEvent {
+  state: TaskState;
+}
 
-      if (activeTasks.length > 0) {
-        sections.push({
-          id: "active",
-          title: "Active",
-          items: activeTasks.map((task) => {
-            const isDone = task.status === "done";
-            const isActive = task.id === activeTaskId;
+interface RendererPomodoroEvent {
+  state: PomodoroState;
+}
 
-            let status: ItemStatus = "default";
-            if (isActive) status = "active";
-            else if (task.status === "blocked") status = "error";
-            else if (task.status === "in_progress") status = "active";
+function useTaskSlot(): ExtensionUISlot {
+  const slotRef = useRef<{
+    slot: ExtensionUISlot;
+    store: ReturnType<typeof createSlotState>;
+  } | null>(null);
 
-            return {
-              id: task.id,
-              label: task.text,
-              sublabel: task.blockedReason,
-              status,
-              checkable: true,
-              checked: isDone,
-              onToggle: () => {
-                if (isDone) {
-                  taskController.updateTaskStatus(task.id, "todo");
-                } else {
-                  taskController.updateTaskStatus(task.id, "done");
-                }
-              },
-              onClick: !isDone
-                ? () => taskController.setActiveTask(task.id)
-                : undefined,
-            };
+  if (!slotRef.current) {
+    const store = createSlotState(DEFAULT_TASK_SLOT_STATE);
+    slotRef.current = {
+      store,
+      slot: {
+        id: "tasks.main",
+        label: "Tasks",
+        icon: "checklist",
+        priority: 100,
+        state: store,
+      },
+    };
+  }
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.getTaskState || !api.onTaskStateChanged) {
+      return;
+    }
+
+    let isMounted = true;
+    const store = slotRef.current!.store;
+
+    const updateState = (state: TaskState | null) => {
+      if (!isMounted) return;
+      store.replaceState(mapTaskStateToSlotState(state));
+    };
+
+    api
+      .getTaskState()
+      .then((state) => updateState(state))
+      .catch((error) => {
+        console.error("[Chat] Failed to load task state", error);
+      });
+
+    const unsubscribe = api.onTaskStateChanged((event: RendererTaskEvent) => {
+      updateState(event.state);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+    };
+  }, []);
+
+  return slotRef.current!.slot;
+}
+
+function usePomodoroSlot(): ExtensionUISlot {
+  const slotRef = useRef<{
+    slot: ExtensionUISlot;
+    store: ReturnType<typeof createSlotState>;
+  } | null>(null);
+
+  if (!slotRef.current) {
+    const store = createSlotState(DEFAULT_POMODORO_SLOT_STATE);
+    slotRef.current = {
+      store,
+      slot: {
+        id: "pomodoro.main",
+        label: "Timer",
+        icon: "timer",
+        priority: 90,
+        state: store,
+      },
+    };
+  }
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.getPomodoroState || !api.onPomodoroStateChanged) {
+      return;
+    }
+
+    let isMounted = true;
+    const store = slotRef.current!.store;
+
+    const updateState = (state: PomodoroState | PomodoroStateSnapshot | null) => {
+      if (!isMounted) return;
+      store.replaceState(mapPomodoroStateToSlotState(state));
+    };
+
+    api
+      .getPomodoroState()
+      .then((state: PomodoroStateSnapshot | null) => updateState(state))
+      .catch((error: unknown) => {
+        console.error("[Chat] Failed to load pomodoro state", error);
+      });
+
+    const unsubscribe = api.onPomodoroStateChanged((event: RendererPomodoroEvent) => {
+      updateState(event.state);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+    };
+  }, []);
+
+  return slotRef.current!.slot;
+}
+
+function mapTaskStateToSlotState(taskState: TaskState | null): SlotState {
+  if (!taskState || taskState.tasks.length === 0) {
+    return {
+      badge: null,
+      visible: false,
+      panel: {
+        type: "list",
+        title: "Tasks",
+        emptyMessage: "No tasks yet",
+        sections: [],
+      },
+    };
+  }
+
+  const tasks = taskState.tasks;
+  const activeTaskId = taskState.activeTaskId;
+
+  const activeTasks = tasks.filter((task) => task.status !== "done");
+  const completedTasks = tasks.filter((task) => task.status === "done");
+
+  const runTool = (tool: string, args: Record<string, unknown> = {}) => () => {
+    void executeExtensionTool(tool, args);
+  };
+
+  const sections: ListPanelSection[] = [];
+
+  if (activeTasks.length > 0) {
+    sections.push({
+      id: "active",
+      title: "Active",
+      items: activeTasks.map((task) => {
+        const isDone = task.status === "done";
+        const isActive = task.id === activeTaskId;
+
+        let status: ItemStatus = "default";
+        if (isActive) status = "active";
+        else if (task.status === "blocked") status = "error";
+        else if (task.status === "in_progress") status = "active";
+
+        return {
+          id: task.id,
+          label: task.text,
+          sublabel: task.blockedReason,
+          status,
+          checkable: true,
+          checked: isDone,
+          onToggle: runTool("updateTaskStatus", {
+            taskId: task.id,
+            status: isDone ? "todo" : "done",
           }),
-        });
-      }
+          onClick: !isDone ? runTool("setActiveTask", { taskId: task.id }) : undefined,
+        };
+      }),
+    });
+  }
 
-      if (completedTasks.length > 0) {
-        sections.push({
-          id: "completed",
-          title: "Completed",
-          items: completedTasks.map((task) => ({
-            id: task.id,
-            label: task.text,
-            status: "success" as ItemStatus,
-            checkable: true,
-            checked: true,
-            onToggle: () => taskController.updateTaskStatus(task.id, "todo"),
-          })),
-          collapsible: true,
-          defaultCollapsed: activeTasks.length > 3,
-          actions: [
-            {
-              id: "clear-completed",
-              label: "Clear all",
-              onClick: () => taskController.clearCompleted(),
-            },
-          ],
-        });
-      }
-
-      return {
-        badge,
-        visible,
-        panel: {
-          type: "list" as const,
-          title: "Tasks",
-          emptyMessage: "No tasks yet",
-          sections,
+  if (completedTasks.length > 0) {
+    sections.push({
+      id: "completed",
+      title: "Completed",
+      items: completedTasks.map((task) => ({
+        id: task.id,
+        label: task.text,
+        status: "success" as ItemStatus,
+        checkable: true,
+        checked: true,
+        onToggle: runTool("updateTaskStatus", {
+          taskId: task.id,
+          status: "todo",
+        }),
+      })),
+      collapsible: true,
+      defaultCollapsed: activeTasks.length > 3,
+      actions: [
+        {
+          id: "clear-completed",
+          label: "Clear all",
+          onClick: runTool("clearCompletedTasks"),
         },
-      };
-    },
-  });
+      ],
+    });
+  }
 
   return {
-    id: "tasks.main",
-    label: "Tasks",
-    icon: "checklist",
-    priority: 100,
-    state,
+    badge: activeTasks.length > 0 ? activeTasks.length : null,
+    visible: tasks.length > 0,
+    panel: {
+      type: "list",
+      title: "Tasks",
+      emptyMessage: "No tasks yet",
+      sections,
+    },
   };
 }
 
-/**
- * Create a pomodoro UI slot from a CharacterController's PomodoroController
- */
-function createPomodoroSlotFromController(pomodoroController: PomodoroController): ExtensionUISlot {
-  const formatTime = (seconds: number): string => {
-    const totalSeconds = Math.ceil(seconds);
-    const minutes = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+function mapPomodoroStateToSlotState(
+  state: PomodoroState | PomodoroStateSnapshot | null
+): SlotState {
+  if (!state) {
+    return {
+      badge: null,
+      visible: false,
+      panel: {
+        type: "list",
+        title: "Focus Timer",
+        items: [],
+      },
+    };
+  }
 
-  const state = createDerivedSlotState({
-    getSourceState: () => pomodoroController.getState(),
-    subscribeToSource: (callback) => pomodoroController.onUpdate(() => callback()),
-    deriveState: (pomodoroState) => {
-      const { state: phase, remainingTime, isBreak } = pomodoroState;
+  const isEventState = (value: any): value is PomodoroState =>
+    value && typeof value.remainingMs === "number";
 
-      // Badge shows time remaining when active
-      const badge = phase === "running" || phase === "paused"
-        ? formatTime(remainingTime)
-        : null;
+  const remainingSeconds = isEventState(state)
+    ? Math.ceil(state.remainingMs / 1000)
+    : Math.max(0, Math.ceil(state.remainingSeconds));
 
-      // Only visible when timer is active
-      const visible = phase !== "idle";
+  const phase = state.phase ?? "idle";
+  const isBreak = state.isBreak ?? false;
+  const sessionsCompleted = state.sessionsCompleted ?? 0;
 
-      // Build panel items
-      const items: Array<{
-        id: string;
-        label: string;
-        sublabel?: string;
-        status?: ItemStatus;
-      }> = [];
+  const badge = phase === "running" || phase === "paused"
+    ? formatTime(remainingSeconds)
+    : null;
 
-      // Current status item
-      const phaseLabel = isBreak
-        ? (phase === "running" ? "Break time" : "Break paused")
-        : (phase === "running" ? "Focus time" : phase === "paused" ? "Paused" : "Ready");
+  const phaseLabel = isBreak
+    ? phase === "running"
+      ? "Break time"
+      : "Break paused"
+    : phase === "running"
+      ? "Focus time"
+      : phase === "paused"
+        ? "Paused"
+        : "Ready";
 
-      items.push({
-        id: "status",
-        label: phaseLabel,
-        sublabel: phase !== "idle" ? `${formatTime(remainingTime)} remaining` : undefined,
-        status: phase === "running" ? (isBreak ? "success" : "active") : phase === "paused" ? "warning" : "default",
-      });
-
-      // Build actions based on state
-      const actions: PanelAction[] = [];
-
-      if (phase === "idle") {
-        actions.push({
-          id: "start",
-          label: "Start Focus",
-          variant: "primary",
-          onClick: () => pomodoroController.start(),
-        });
-      } else if (phase === "running") {
-        actions.push({
-          id: "pause",
-          label: "Pause",
-          variant: "secondary",
-          onClick: () => pomodoroController.pause(),
-        });
-        actions.push({
-          id: "reset",
-          label: "Reset",
-          variant: "danger",
-          onClick: () => pomodoroController.reset(),
-        });
-      } else if (phase === "paused") {
-        actions.push({
-          id: "resume",
-          label: "Resume",
-          variant: "primary",
-          onClick: () => pomodoroController.start(),
-        });
-        actions.push({
-          id: "reset",
-          label: "Reset",
-          variant: "danger",
-          onClick: () => pomodoroController.reset(),
-        });
-      }
-
-      return {
-        badge,
-        visible,
-        panel: {
-          type: "list" as const,
-          title: isBreak ? "Break Time" : "Focus Timer",
-          items,
-          actions,
-        },
-      };
+  const items: Array<{ id: string; label: string; sublabel?: string; status?: ItemStatus }> = [
+    {
+      id: "status",
+      label: phaseLabel,
+      sublabel: phase !== "idle" ? `${formatTime(remainingSeconds)} remaining` : undefined,
+      status:
+        phase === "running"
+          ? isBreak
+            ? "success"
+            : "active"
+          : phase === "paused"
+            ? "warning"
+            : "default",
     },
-  });
+  ];
+
+  if (sessionsCompleted > 0) {
+    items.push({
+      id: "sessions",
+      label: `${sessionsCompleted} session${sessionsCompleted === 1 ? "" : "s"} completed`,
+      status: "success",
+    });
+  }
+
+  const actions: PanelAction[] = [];
+
+  if (phase === "idle") {
+    actions.push({
+      id: "start",
+      label: "Start Focus",
+      variant: "primary",
+      onClick: () => {
+        void executeExtensionTool("startPomodoro");
+      },
+    });
+  } else if (phase === "running") {
+    actions.push({
+      id: "pause",
+      label: "Pause",
+      variant: "secondary",
+      onClick: () => {
+        void executeExtensionTool("pausePomodoro");
+      },
+    });
+    actions.push({
+      id: "reset",
+      label: "Reset",
+      variant: "danger",
+      onClick: () => {
+        void executeExtensionTool("resetPomodoro");
+      },
+    });
+  } else if (phase === "paused") {
+    actions.push({
+      id: "resume",
+      label: "Resume",
+      variant: "primary",
+      onClick: () => {
+        void executeExtensionTool("startPomodoro");
+      },
+    });
+    actions.push({
+      id: "reset",
+      label: "Reset",
+      variant: "danger",
+      onClick: () => {
+        void executeExtensionTool("resetPomodoro");
+      },
+    });
+  }
 
   return {
-    id: "pomodoro.main",
-    label: "Timer",
-    icon: "timer",
-    priority: 90,
-    state,
+    badge,
+    visible: phase !== "idle",
+    panel: {
+      type: "list",
+      title: isBreak ? "Break Time" : "Focus Timer",
+      items,
+      actions,
+    },
   };
+}
+
+function formatTime(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+async function executeExtensionTool(
+  toolName: string,
+  args: Record<string, unknown> = {}
+): Promise<void> {
+  if (!window.electronAPI?.executeExtensionTool) {
+    console.warn(`[Extensions] executeExtensionTool unavailable for ${toolName}`);
+    return;
+  }
+
+  try {
+    const result = await window.electronAPI.executeExtensionTool(toolName, args);
+    if (result && !result.success) {
+      console.error(`[Extensions] Tool ${toolName} failed`, result.error);
+    }
+  } catch (error) {
+    console.error(`[Extensions] Tool ${toolName} threw`, error);
+  }
 }
 
 export function ChatScreen({ onLogout }: ChatScreenProps) {
@@ -232,7 +418,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   const {
     settings,
     visibleMessages,
-    initialTaskState,
     isStreaming,
     isLoading,
     actions: { sendMessage: sendChatMessage, changeTheme, changeVariant, clearConversation, clearApiKey },
@@ -318,19 +503,12 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
   ]);
 
   const spotifySlot = spotifySlotRef.current!.slot;
+  const taskSlot = useTaskSlot();
+  const pomodoroSlot = usePomodoroSlot();
 
   const slots = useMemo<ExtensionUISlot[]>(() => {
-    const result: ExtensionUISlot[] = [];
-
-    if (controller) {
-      result.push(createTaskSlotFromController(controller.getTaskController()));
-      result.push(createPomodoroSlotFromController(controller.getPomodoroController()));
-    }
-
-    result.push(spotifySlot);
-
-    return result;
-  }, [controller, spotifySlot]);
+    return [taskSlot, pomodoroSlot, spotifySlot];
+  }, [taskSlot, pomodoroSlot, spotifySlot]);
 
   useEffect(() => {
     if (!controller) return;
@@ -414,16 +592,13 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         </div>
       </header>
 
-      {initialTaskState !== null && (
-        <CharacterView
-          messages={visibleMessages}
-          isStreaming={isStreaming}
-          themeId={settings.theme}
-          variantId={settings.variant}
-          onControllerReady={handleControllerReady}
-          initialTaskState={initialTaskState}
-        />
-      )}
+      <CharacterView
+        messages={visibleMessages}
+        isStreaming={isStreaming}
+        themeId={settings.theme}
+        variantId={settings.variant}
+        onControllerReady={handleControllerReady}
+      />
 
       <ChatInput
         onSend={handleSendMessage}
@@ -454,7 +629,6 @@ function executeFunctionCall(
 ): void {
   try {
     switch (name) {
-      // Expression tools
       case "setMood":
         controller.setMood(
           args.mood as FacialMood,
@@ -480,68 +654,8 @@ function executeFunctionCall(
           args.duration as number | undefined
         );
         break;
-
-      // Pomodoro tools
-      case "startPomodoro":
-        controller.startPomodoro(
-          args.sessionDuration as PomodoroDuration | undefined,
-          args.breakDuration as PomodoroDuration | undefined
-        );
-        break;
-      case "pausePomodoro":
-        controller.pausePomodoro();
-        break;
-      case "resetPomodoro":
-        controller.resetPomodoro();
-        break;
-
-      // Task tools
-      case "addTask":
-        controller.addTask(
-          args.text as string,
-          args.status as "todo" | "in_progress" | "blocked" | "done" | undefined
-        );
-        break;
-      case "updateTaskStatus":
-        controller.updateTaskStatus(
-          args.taskId as string,
-          args.status as "todo" | "in_progress" | "blocked" | "done",
-          args.blockedReason as string | undefined
-        );
-        break;
-      case "setActiveTask":
-        controller.setActiveTask(args.taskId as string);
-        break;
-      case "removeTask":
-        controller.removeTask(args.taskId as string);
-        break;
-      case "completeActiveTask":
-        controller.completeActiveTask();
-        break;
-      case "clearCompletedTasks":
-        controller.clearCompletedTasks();
-        break;
-      case "clearAllTasks":
-        controller.clearAllTasks();
-        break;
-      case "expandTasks":
-        controller.expandTasks();
-        break;
-      case "collapseTasks":
-        controller.collapseTasks();
-        break;
-      case "toggleTasks":
-        controller.toggleTasks();
-        break;
-
-      // Query-only tools (handled by main process, no UI action needed)
-      case "listTasks":
-      case "getPomodoroState":
-        // No-op: these return data to the AI, no renderer action needed
-        break;
-
       default:
-        console.warn(`Unknown function call: ${name}`);
+        console.warn(`Renderer cannot handle function call: ${name}`);
     }
   } catch (error) {
     console.error(`Error executing function ${name}:`, error);
