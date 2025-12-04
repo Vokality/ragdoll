@@ -3,7 +3,6 @@ import type {
   FacialMood,
   FacialAction,
   HeadPose,
-  SpeechBubbleState,
 } from "../types";
 
 /**
@@ -18,7 +17,6 @@ export type StateEvent =
     }
   | { type: "actionCleared" }
   | { type: "headPoseChanged"; pose: HeadPose }
-  | { type: "speechBubbleChanged"; bubble: SpeechBubbleState }
   | { type: "themeChanged"; themeId: string };
 
 /**

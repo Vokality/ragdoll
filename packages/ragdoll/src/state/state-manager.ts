@@ -3,7 +3,6 @@ import type {
   FacialMood,
   FacialAction,
   HeadPose,
-  SpeechBubbleState,
 } from "../types";
 import { EventBus } from "./event-bus";
 
@@ -67,14 +66,6 @@ export class StateManager {
   public setHeadPose(pose: HeadPose): void {
     this.currentState.headPose = { ...pose };
     this.eventBus.emit({ type: "headPoseChanged", pose: { ...pose } });
-  }
-
-  /**
-   * Update speech bubble and emit event
-   */
-  public setSpeechBubble(bubble: SpeechBubbleState): void {
-    this.currentState.bubble = { ...bubble };
-    this.eventBus.emit({ type: "speechBubbleChanged", bubble: { ...bubble } });
   }
 
   /**

@@ -1,9 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-  CharacterStateBuilder,
-  HeadPoseBuilder,
-  SpeechBubbleBuilder,
-} from "../../src/testing/builders";
+import { CharacterStateBuilder, HeadPoseBuilder } from "../../src/testing/builders";
 
 describe("CharacterStateBuilder", () => {
   describe("default state", () => {
@@ -11,8 +7,6 @@ describe("CharacterStateBuilder", () => {
       const state = new CharacterStateBuilder().build();
       expect(state.mood).toBe("neutral");
       expect(state.action).toBeNull();
-      expect(state.bubble.text).toBeNull();
-      expect(state.bubble.tone).toBe("default");
       expect(state.headPose.yaw).toBe(0);
       expect(state.headPose.pitch).toBe(0);
     });
@@ -71,31 +65,6 @@ describe("CharacterStateBuilder", () => {
     });
   });
 
-  describe("withSpeechBubble", () => {
-    it("should set speech bubble text", () => {
-      const state = new CharacterStateBuilder()
-        .withSpeechBubble("Hello!")
-        .build();
-      expect(state.bubble.text).toBe("Hello!");
-      expect(state.bubble.tone).toBe("default");
-    });
-
-    it("should set speech bubble with tone", () => {
-      const state = new CharacterStateBuilder()
-        .withSpeechBubble("Hello!", "shout")
-        .build();
-      expect(state.bubble.text).toBe("Hello!");
-      expect(state.bubble.tone).toBe("shout");
-    });
-
-    it("should clear speech bubble", () => {
-      const state = new CharacterStateBuilder()
-        .withSpeechBubble(null)
-        .build();
-      expect(state.bubble.text).toBeNull();
-    });
-  });
-
   describe("withTalking", () => {
     it("should set talking flag", () => {
       const state = new CharacterStateBuilder().withTalking(true).build();
@@ -113,12 +82,10 @@ describe("CharacterStateBuilder", () => {
       const state = new CharacterStateBuilder()
         .withMood("smile")
         .withAction("wink", 0.5)
-        .withSpeechBubble("Hello!", "shout")
         .withTalking(true)
         .build();
       expect(state.mood).toBe("smile");
       expect(state.action).toBe("wink");
-      expect(state.bubble.text).toBe("Hello!");
       expect(state.animation.isTalking).toBe(true);
     });
   });
@@ -191,56 +158,4 @@ describe("HeadPoseBuilder", () => {
   });
 });
 
-describe("SpeechBubbleBuilder", () => {
-  describe("default bubble", () => {
-    it("should build default bubble", () => {
-      const bubble = new SpeechBubbleBuilder().build();
-      expect(bubble.text).toBeNull();
-      expect(bubble.tone).toBe("default");
-    });
-  });
-
-  describe("withText", () => {
-    it("should set text", () => {
-      const bubble = new SpeechBubbleBuilder().withText("Hello!").build();
-      expect(bubble.text).toBe("Hello!");
-    });
-  });
-
-  describe("withTone", () => {
-    it("should set tone", () => {
-      const bubble = new SpeechBubbleBuilder().withTone("shout").build();
-      expect(bubble.tone).toBe("shout");
-    });
-
-    it("should support all tones", () => {
-      const tones = ["default", "whisper", "shout"] as const;
-      tones.forEach((tone) => {
-        const bubble = new SpeechBubbleBuilder().withTone(tone).build();
-        expect(bubble.tone).toBe(tone);
-      });
-    });
-  });
-
-  describe("builder chaining", () => {
-    it("should chain methods", () => {
-      const bubble = new SpeechBubbleBuilder()
-        .withText("Hello!")
-        .withTone("shout")
-        .build();
-      expect(bubble.text).toBe("Hello!");
-      expect(bubble.tone).toBe("shout");
-    });
-  });
-
-  describe("build returns copy", () => {
-    it("should return independent copies", () => {
-      const builder = new SpeechBubbleBuilder().withText("Hello!");
-      const bubble1 = builder.build();
-      const bubble2 = builder.build();
-      expect(bubble1).not.toBe(bubble2);
-      expect(bubble1).toEqual(bubble2);
-    });
-  });
-});
 

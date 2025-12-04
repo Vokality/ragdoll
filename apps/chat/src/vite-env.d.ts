@@ -1,6 +1,14 @@
 /// <reference types="vite/client" />
 import type { TaskState } from "@vokality/ragdoll";
 
+// Extension types for renderer
+interface BuiltInExtensionInfo {
+  id: string;
+  name: string;
+  description: string;
+  canDisable: boolean;
+}
+
 // Spotify types for renderer
 interface SpotifyPlaybackState {
   isPlaying: boolean;
@@ -69,6 +77,11 @@ interface ElectronAPI {
   // Tasks
   getTaskState: () => Promise<TaskState>;
   saveTaskState: (state: TaskState) => Promise<{ success: boolean; error?: string }>;
+
+  // Extensions
+  getAvailableExtensions: () => Promise<BuiltInExtensionInfo[]>;
+  getDisabledExtensions: () => Promise<string[]>;
+  setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
 
   // Spotify
   spotifyIsEnabled: () => Promise<boolean>;

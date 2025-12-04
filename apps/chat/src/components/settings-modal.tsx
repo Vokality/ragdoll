@@ -1,4 +1,11 @@
-import { useState, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
+
+interface BuiltInExtensionInfo {
+  id: string;
+  name: string;
+  description: string;
+  canDisable: boolean;
+}
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -34,6 +41,50 @@ export function SettingsModal({
   onChangeApiKey,
 }: SettingsModalProps) {
   const [confirmClear, setConfirmClear] = useState(false);
+  const [availableExtensions, setAvailableExtensions] = useState<BuiltInExtensionInfo[]>([]);
+  const [disabledExtensions, setDisabledExtensions] = useState<string[]>([]);
+  const [pendingChanges, setPendingChanges] = useState(false);
+
+  // Load extension data when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadExtensionData();
+    }
+  }, [isOpen]);
+
+  const loadExtensionData = async () => {
+    try {
+      const [available, disabled] = await Promise.all([
+        window.electronAPI.getAvailableExtensions(),
+        window.electronAPI.getDisabledExtensions(),
+      ]);
+      setAvailableExtensions(available);
+      setDisabledExtensions(disabled);
+      setPendingChanges(false);
+    } catch (error) {
+      console.error("Failed to load extension data:", error);
+    }
+  };
+
+  const handleExtensionToggle = async (extensionId: string) => {
+    const isCurrentlyDisabled = disabledExtensions.includes(extensionId);
+    const newDisabled = isCurrentlyDisabled
+      ? disabledExtensions.filter((id) => id !== extensionId)
+      : [...disabledExtensions, extensionId];
+
+    setDisabledExtensions(newDisabled);
+
+    try {
+      const result = await window.electronAPI.setDisabledExtensions(newDisabled);
+      if (result.requiresRestart) {
+        setPendingChanges(true);
+      }
+    } catch (error) {
+      console.error("Failed to save extension settings:", error);
+      // Revert on error
+      setDisabledExtensions(disabledExtensions);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -46,6 +97,9 @@ export function SettingsModal({
       setTimeout(() => setConfirmClear(false), 3000);
     }
   };
+
+  // Filter to only show extensions that can be disabled
+  const toggleableExtensions = availableExtensions.filter((ext) => ext.canDisable);
 
   return (
     <>
@@ -115,6 +169,48 @@ export function SettingsModal({
             </div>
           </section>
 
+          {/* Extensions Section */}
+          {toggleableExtensions.length > 0 && (
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>Features</h3>
+              {pendingChanges && (
+                <div style={styles.restartNotice}>
+                  <InfoIcon />
+                  <span>Restart the app to apply changes</span>
+                </div>
+              )}
+              <div style={styles.extensionList}>
+                {toggleableExtensions.map((extension) => {
+                  const isDisabled = disabledExtensions.includes(extension.id);
+                  return (
+                    <div key={extension.id} style={styles.extensionRow}>
+                      <div style={styles.extensionInfo}>
+                        <span style={styles.extensionName}>{extension.name}</span>
+                        <span style={styles.extensionDescription}>{extension.description}</span>
+                      </div>
+                      <button
+                        onClick={() => handleExtensionToggle(extension.id)}
+                        style={{
+                          ...styles.toggle,
+                          ...(isDisabled ? styles.toggleOff : styles.toggleOn),
+                        }}
+                        aria-pressed={!isDisabled}
+                        aria-label={`${isDisabled ? "Enable" : "Disable"} ${extension.name}`}
+                      >
+                        <span
+                          style={{
+                            ...styles.toggleKnob,
+                            ...(isDisabled ? styles.toggleKnobOff : styles.toggleKnobOn),
+                          }}
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* Danger Zone */}
           <section style={styles.section}>
             <h3 style={styles.sectionTitle}>Data</h3>
@@ -139,6 +235,16 @@ function CloseIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
     </svg>
   );
 }
@@ -250,6 +356,81 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "11px",
     color: "var(--text-dim)",
   },
+  // Extension toggle styles
+  restartNotice: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 12px",
+    marginBottom: "12px",
+    background: "rgba(90, 155, 196, 0.1)",
+    border: "1px solid var(--accent)",
+    borderRadius: "var(--radius-sm)",
+    fontSize: "12px",
+    color: "var(--accent)",
+  },
+  extensionList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  extensionRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    padding: "12px 14px",
+    background: "var(--bg-secondary)",
+    borderRadius: "var(--radius-md)",
+  },
+  extensionInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    flex: 1,
+    minWidth: 0,
+  },
+  extensionName: {
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "var(--text-primary)",
+  },
+  extensionDescription: {
+    fontSize: "11px",
+    color: "var(--text-dim)",
+  },
+  toggle: {
+    position: "relative",
+    width: "44px",
+    height: "24px",
+    borderRadius: "12px",
+    border: "none",
+    cursor: "pointer",
+    transition: "background var(--transition-fast)",
+    flexShrink: 0,
+  },
+  toggleOn: {
+    background: "var(--accent)",
+  },
+  toggleOff: {
+    background: "var(--border)",
+  },
+  toggleKnob: {
+    position: "absolute",
+    top: "2px",
+    width: "20px",
+    height: "20px",
+    borderRadius: "50%",
+    background: "white",
+    transition: "left var(--transition-fast)",
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+  },
+  toggleKnobOn: {
+    left: "22px",
+  },
+  toggleKnobOff: {
+    left: "2px",
+  },
   dangerButton: {
     width: "100%",
     padding: "12px 16px",
@@ -266,4 +447,3 @@ const styles: Record<string, CSSProperties> = {
     color: "white",
   },
 };
-

@@ -93,47 +93,6 @@ describe("CharacterController", () => {
     });
   });
 
-  describe("speech bubble management", () => {
-    it("should set speech bubble", () => {
-      controller.setSpeechBubble({ text: "Hello!" });
-      const state = controller.getState();
-      expect(state.bubble.text).toBe("Hello!");
-    });
-
-    it("should trigger talk action when setting speech bubble", () => {
-      controller.setSpeechBubble({ text: "Hello!" });
-      // Update to sync state
-      controller.update(0.01);
-      const state = controller.getState();
-      expect(state.action).toBe("talk");
-    });
-
-    it("should clear talk action when clearing speech bubble", () => {
-      controller.setSpeechBubble({ text: "Hello!" });
-      controller.setSpeechBubble({ text: null });
-      const state = controller.getState();
-      expect(state.action).toBeNull();
-    });
-
-    it("should calculate talk duration based on text length", () => {
-      controller.setSpeechBubble({ text: "Hello!" });
-      controller.update(0.01);
-      const state1 = controller.getState();
-      controller.setSpeechBubble({ text: "This is a much longer sentence with many more words." });
-      controller.update(0.01);
-      const state2 = controller.getState();
-      // Longer text should have longer duration
-      expect(state1.action).toBe("talk");
-      expect(state2.action).toBe("talk");
-    });
-
-    it("should set speech bubble tone", () => {
-      controller.setSpeechBubble({ text: "Hello!", tone: "shout" });
-      const state = controller.getState();
-      expect(state.bubble.tone).toBe("shout");
-    });
-  });
-
   describe("theme and variant application", () => {
     it("should get current theme", () => {
       const theme = controller.getTheme();
@@ -159,32 +118,6 @@ describe("CharacterController", () => {
       const customController = new CharacterController("default", "einstein");
       const geometry = customController.getGeometry();
       expect(geometry.variant.id).toBe("einstein");
-    });
-  });
-
-  describe("plugin integration", () => {
-    it("should integrate Pomodoro plugin", () => {
-      const pomodoroState = controller.getPomodoroState();
-      expect(pomodoroState).toBeDefined();
-    });
-
-    it("should integrate Task plugin", () => {
-      const taskController = controller.getTaskController();
-      const taskState = taskController.getState();
-      expect(taskState).toBeDefined();
-    });
-
-    it("should handle pomodoro updates", () => {
-      controller.startPomodoro(5, 1);
-      const state = controller.getPomodoroState();
-      expect(state).toBeDefined();
-    });
-
-    it("should handle task updates", () => {
-      controller.addTask("Test task");
-      const taskController = controller.getTaskController();
-      const state = taskController.getState();
-      expect(state.tasks.length).toBe(1);
     });
   });
 
@@ -288,25 +221,17 @@ describe("CharacterController", () => {
 
     it("should execute clearAction command", () => {
       controller.triggerAction("wink", 0.5);
-      controller.executeCommand({ action: "clearAction", params: {} });
+      controller.executeCommand({ action: "clearAction" });
       expect(controller.getState().action).toBeNull();
     });
 
     it("should execute setHeadPose command", () => {
       controller.executeCommand({
         action: "setHeadPose",
-        params: { yawDegrees: 20, pitchDegrees: 10, duration: 0.3 },
+        params: { yaw: 0.2, pitch: 0.1, duration: 0.3 },
       });
       const state = controller.getState();
       expect(state.headPose).toBeDefined();
-    });
-
-    it("should execute setSpeechBubble command", () => {
-      controller.executeCommand({
-        action: "setSpeechBubble",
-        params: { text: "Hello!", tone: "default" },
-      });
-      expect(controller.getState().bubble.text).toBe("Hello!");
     });
   });
 
@@ -314,7 +239,7 @@ describe("CharacterController", () => {
     it("should set joint rotation", () => {
       controller.setJointRotation({
         joint: "headPivot",
-        angle: { y: 0.3 },
+        angle: { x: 0, y: 0.3, z: 0 },
       });
       const rotation = controller.getJointRotation("headPivot");
       expect(rotation).toBeDefined();
@@ -332,7 +257,6 @@ describe("CharacterController", () => {
       expect(state.mood).toBeDefined();
       expect(state.headPose).toBeDefined();
       expect(state.joints).toBeDefined();
-      expect(state.bubble).toBeDefined();
       expect(state.animation).toBeDefined();
     });
 

@@ -115,33 +115,6 @@ describe("StateManager", () => {
     });
   });
 
-  describe("speech bubble updates", () => {
-    it("should update speech bubble", () => {
-      stateManager.setSpeechBubble({ text: "Hello!", tone: "default" });
-      const state = stateManager.getState();
-      expect(state.bubble.text).toBe("Hello!");
-      expect(state.bubble.tone).toBe("default");
-    });
-
-    it("should clear speech bubble", () => {
-      stateManager.setSpeechBubble({ text: "Hello!", tone: "default" });
-      stateManager.setSpeechBubble({ text: null, tone: "default" });
-      const state = stateManager.getState();
-      expect(state.bubble.text).toBeNull();
-    });
-
-    it("should emit speech bubble changed event", () => {
-      const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
-      customManager.setSpeechBubble({ text: "Hello!", tone: "shout" });
-      expect(spyBus.emittedEvents.length).toBe(1);
-      expect(spyBus.emittedEvents[0]).toMatchObject({
-        type: "speechBubbleChanged",
-        bubble: { text: "Hello!", tone: "shout" },
-      });
-    });
-  });
-
   describe("action progress", () => {
     it("should update action progress", () => {
       stateManager.setActionProgress(0.5);

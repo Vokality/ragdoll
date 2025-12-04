@@ -108,7 +108,70 @@ export interface ExtensionManagerConfig {
    * Defaults to false.
    */
   autoDiscover?: boolean;
+
+  /**
+   * IDs of extensions to disable.
+   * Disabled extensions will not be registered and will not contribute tools or UI.
+   * Valid IDs: "character", "pomodoro", "tasks", "spotify"
+   */
+  disabledExtensions?: string[];
 }
+
+/** Built-in extension IDs */
+export const BUILT_IN_EXTENSION_IDS = [
+  "character",
+  "pomodoro",
+  "tasks",
+  "spotify",
+] as const;
+
+export type BuiltInExtensionId = (typeof BUILT_IN_EXTENSION_IDS)[number];
+
+/**
+ * Metadata for a built-in extension.
+ * Used by the UI to display extension toggles in settings.
+ */
+export interface BuiltInExtensionInfo {
+  /** Unique identifier */
+  id: BuiltInExtensionId;
+  /** Human-readable name */
+  name: string;
+  /** Short description of what the extension does */
+  description: string;
+  /** Whether this extension can be disabled by the user */
+  canDisable: boolean;
+}
+
+/**
+ * Metadata for all built-in extensions.
+ * Single source of truth for extension information displayed in settings.
+ */
+export const BUILT_IN_EXTENSIONS: readonly BuiltInExtensionInfo[] = [
+  {
+    id: "character",
+    name: "Character",
+    description: "Facial expressions and animations",
+    canDisable: false, // Core functionality, always enabled
+  },
+  {
+    id: "pomodoro",
+    name: "Focus Timer",
+    description: "Pomodoro-style work sessions",
+    canDisable: true,
+  },
+  {
+    id: "tasks",
+    name: "Tasks",
+    description: "Task tracking and management",
+    canDisable: true,
+  },
+  {
+    id: "spotify",
+    name: "Spotify",
+    description: "Music playback control",
+    canDisable: true,
+  },
+] as const;
 
 // =============================================================================
 // Extension Manager
@@ -182,67 +245,82 @@ export class ExtensionManager {
   }
 
   /**
+   * Check if an extension is disabled.
+   */
+  private isExtensionDisabled(id: BuiltInExtensionId): boolean {
+    return this.config.disabledExtensions?.includes(id) ?? false;
+  }
+
+  /**
    * Register the built-in extensions.
    *
    * - Character extension: forwards to renderer (UI-based)
    * - Pomodoro extension: stateful, managed in main process
    * - Tasks extension: stateful, managed in main process
+   *
+   * Extensions in the `disabledExtensions` config will be skipped.
    */
   private async registerBuiltInExtensions(): Promise<void> {
     // Character extension - forwards to renderer for UI updates
-    const characterHandler = this.createCharacterForwardingHandler();
-    const characterExtension = createCharacterExtension({
-      handler: characterHandler,
-    });
-    await this.registry.register(characterExtension);
+    if (!this.isExtensionDisabled("character")) {
+      const characterHandler = this.createCharacterForwardingHandler();
+      const characterExtension = createCharacterExtension({
+        handler: characterHandler,
+      });
+      await this.registry.register(characterExtension);
+    }
 
     // Pomodoro extension - stateful, managed here
-    const { extension: pomodoroExtension, manager: pomodoroManager } =
-      createStatefulPomodoroExtension({
-        sessionDuration: 30,
-        breakDuration: 5,
-        onStateChange: (event) => {
-          // Forward state changes to renderer
-          if (this.config.onPomodoroStateChange) {
-            this.config.onPomodoroStateChange(event);
-          }
-          // Also forward as tool execution for backward compatibility
-          if (this.config.onToolExecution) {
-            this.config.onToolExecution("_pomodoroStateChanged", {
-              type: event.type,
-              state: event.state,
-            });
-          }
-        },
-        onNotification: this.config.onNotification,
-      });
-    this.pomodoroManager = pomodoroManager;
-    await this.registry.register(pomodoroExtension);
+    if (!this.isExtensionDisabled("pomodoro")) {
+      const { extension: pomodoroExtension, manager: pomodoroManager } =
+        createStatefulPomodoroExtension({
+          sessionDuration: 30,
+          breakDuration: 5,
+          onStateChange: (event) => {
+            // Forward state changes to renderer
+            if (this.config.onPomodoroStateChange) {
+              this.config.onPomodoroStateChange(event);
+            }
+            // Also forward as tool execution for backward compatibility
+            if (this.config.onToolExecution) {
+              this.config.onToolExecution("_pomodoroStateChanged", {
+                type: event.type,
+                state: event.state,
+              });
+            }
+          },
+          onNotification: this.config.onNotification,
+        });
+      this.pomodoroManager = pomodoroManager;
+      await this.registry.register(pomodoroExtension);
+    }
 
     // Tasks extension - stateful, managed here
-    const { extension: taskExtension, manager: taskManager } =
-      createStatefulTaskExtension({
-        initialState: this.config.initialTaskState,
-        onStateChange: (event) => {
-          // Forward state changes to renderer
-          if (this.config.onTaskStateChange) {
-            this.config.onTaskStateChange(event);
-          }
-          // Also forward as tool execution for backward compatibility
-          if (this.config.onToolExecution) {
-            this.config.onToolExecution("_taskStateChanged", {
-              type: event.type,
-              state: event.state,
-              task: event.task,
-            });
-          }
-        },
-      });
-    this.taskManager = taskManager;
-    await this.registry.register(taskExtension);
+    if (!this.isExtensionDisabled("tasks")) {
+      const { extension: taskExtension, manager: taskManager } =
+        createStatefulTaskExtension({
+          initialState: this.config.initialTaskState,
+          onStateChange: (event) => {
+            // Forward state changes to renderer
+            if (this.config.onTaskStateChange) {
+              this.config.onTaskStateChange(event);
+            }
+            // Also forward as tool execution for backward compatibility
+            if (this.config.onToolExecution) {
+              this.config.onToolExecution("_taskStateChanged", {
+                type: event.type,
+                state: event.state,
+                task: event.task,
+              });
+            }
+          },
+        });
+      this.taskManager = taskManager;
+      await this.registry.register(taskExtension);
+    }
 
-    // Spotify extension - optional, only if configured
-    if (this.config.spotify) {
+    // Spotify extension - optional, only if configured and not disabled
+    if (this.config.spotify && !this.isExtensionDisabled("spotify")) {
       const { extension: spotifyExtension, manager: spotifyManager } =
         createStatefulSpotifyExtension({
           clientId: this.config.spotify.clientId,
@@ -341,6 +419,25 @@ export class ExtensionManager {
    */
   onToolsChanged(callback: () => void): () => void {
     return this.registry.onToolsChanged(() => callback());
+  }
+
+  // ===========================================================================
+  // Public API - Extension Info
+  // ===========================================================================
+
+  /**
+   * Get metadata for all available built-in extensions.
+   * Used by the UI to render extension toggles in settings.
+   */
+  getAvailableExtensions(): readonly BuiltInExtensionInfo[] {
+    return BUILT_IN_EXTENSIONS;
+  }
+
+  /**
+   * Get the list of currently disabled extension IDs.
+   */
+  getDisabledExtensions(): string[] {
+    return this.config.disabledExtensions ?? [];
   }
 
   // ===========================================================================
@@ -476,7 +573,7 @@ export class ExtensionManager {
     if (!this.spotifyManager || !this.spotifyManager.isAuthenticated()) {
       return null;
     }
-    
+
     try {
       return await this.spotifyManager.getPlaybackState();
     } catch (error) {

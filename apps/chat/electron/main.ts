@@ -7,18 +7,21 @@ import {
   shell,
 } from "electron";
 import * as path from "path";
-import * as fs from "fs";
 import { fileURLToPath } from "url";
-import type { Task, TaskState } from "@vokality/ragdoll";
-import { z } from "zod";
-import { getExtensionManager, type ExtensionManager } from "./services/extension-manager.js";
+import type { TaskState } from "@vokality/ragdoll";
+import { getExtensionManager, BUILT_IN_EXTENSIONS, type ExtensionManager } from "./services/extension-manager.js";
+import {
+  createStorageRepository,
+  taskStateSchema,
+  cloneTaskState,
+} from "./infrastructure/storage-repository.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Storage paths
 const USER_DATA_PATH = app.getPath("userData");
-const STORAGE_FILE = path.join(USER_DATA_PATH, "chat-storage.json");
+const storageRepo = createStorageRepository(USER_DATA_PATH);
 
 // Development mode check
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
@@ -26,124 +29,26 @@ const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
 let extensionManager: ExtensionManager | null = null;
 
-// Storage helpers
-const TASK_STATUS_VALUES = ["todo", "in_progress", "blocked", "done"] as const;
-
-const taskSchema: z.ZodType<Task> = z.object({
-  id: z.string(),
-  text: z.string(),
-  status: z.enum(TASK_STATUS_VALUES),
-  createdAt: z.number().int().nonnegative(),
-  blockedReason: z.string().optional(),
-});
-
-const taskStateSchema: z.ZodType<TaskState> = z.object({
-  tasks: z.array(taskSchema),
-  activeTaskId: z.string().nullable(),
-  isExpanded: z.boolean().default(false),
-});
-
-const conversationMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-});
-
-const spotifyTokensSchema = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string(),
-  expiresAt: z.number(),
-  scope: z.string(),
-});
-
-const storageSchema = z
-  .object({
-    apiKey: z.string().optional(),
-    apiKeyEncrypted: z.string().optional(),
-    settings: z
-      .object({
-        theme: z.string().optional(),
-        variant: z.string().optional(),
-      })
-      .optional(),
-    conversation: z.array(conversationMessageSchema).optional(),
-    tasks: taskStateSchema.optional(),
-    spotifyClientId: z.string().optional(),
-    spotifyTokens: spotifyTokensSchema.optional(),
-  })
-  .passthrough();
-
-type StorageData = z.infer<typeof storageSchema>;
-
-const DEFAULT_TASK_STATE: TaskState = {
-  tasks: [],
-  activeTaskId: null,
-  isExpanded: false,
-};
-
-function cloneTaskState(state: TaskState): TaskState {
-  return {
-    tasks: state.tasks.map((task: Task) => ({ ...task })),
-    activeTaskId: state.activeTaskId,
-    isExpanded: state.isExpanded,
-  };
-}
-
-function loadStorage(): StorageData {
-  try {
-    if (fs.existsSync(STORAGE_FILE)) {
-      const data = fs.readFileSync(STORAGE_FILE, "utf-8");
-      const parsed = JSON.parse(data);
-      const result = storageSchema.safeParse(parsed);
-      if (result.success) {
-        return result.data;
-      }
-      console.warn("Invalid chat storage detected, falling back to defaults", result.error.flatten());
-    }
-  } catch (error) {
-    console.error("Failed to load storage:", error);
-  }
-  return {};
-}
-
-function saveStorage(data: StorageData): void {
-  try {
-    const validated = storageSchema.parse(data);
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(validated, null, 2));
-  } catch (error) {
-    console.error("Failed to save storage:", error);
-  }
-}
-
-function getStoredTaskState(): TaskState {
-  const storage = loadStorage();
-  return storage.tasks ? cloneTaskState(storage.tasks) : cloneTaskState(DEFAULT_TASK_STATE);
-}
-
 async function createWindow(): Promise<void> {
-  // Load initial task state from storage
-  const initialTaskState = getStoredTaskState();
-
-  // Load Spotify config from storage
-  const storage = loadStorage();
+  const initialTaskState = storageRepo.getTaskState();
+  const storage = storageRepo.read();
   const spotifyClientId = storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID;
   const spotifyTokens = storage.spotifyTokens;
 
-  // Initialize extension manager with state management
+  const disabledExtensions = storage.settings?.disabledExtensions ?? [];
   extensionManager = getExtensionManager({
     initialTaskState,
+    disabledExtensions,
     onToolExecution: (name, args) => {
-      // Forward character tools to renderer
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("chat:function-call", name, args);
       }
     },
     onTaskStateChange: (event) => {
-      // Persist task state to storage
-      const storage = loadStorage();
-      storage.tasks = event.state;
-      saveStorage(storage);
+      storageRepo.update((draft) => {
+        draft.tasks = cloneTaskState(event.state);
+      });
 
-      // Notify renderer of state change
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("tasks:state-changed", event);
       }
@@ -275,10 +180,9 @@ async function handleProtocolUrl(url: string): Promise<void> {
         const tokens = await extensionManager?.exchangeSpotifyCode(code);
 
         if (tokens) {
-          // Persist tokens
-          const storage = loadStorage();
-          storage.spotifyTokens = tokens;
-          saveStorage(storage);
+          storageRepo.update((draft) => {
+            draft.spotifyTokens = tokens;
+          });
 
           console.log("[Protocol] Spotify tokens saved, notifying renderer...");
           mainWindow?.webContents.send("spotify:auth-success");
@@ -321,7 +225,7 @@ app.on("window-all-closed", () => {
 // ============================================
 
 ipcMain.handle("auth:has-key", async (): Promise<boolean> => {
-  const storage = loadStorage();
+  const storage = storageRepo.read();
   return !!storage.apiKeyEncrypted;
 });
 
@@ -331,25 +235,19 @@ ipcMain.handle("auth:set-key", async (_, key: string): Promise<{ success: boolea
       return { success: false, error: "Invalid API key" };
     }
 
-    // Basic format validation
     if (!key.startsWith("sk-") || key.length < 20) {
       return { success: false, error: "Invalid API key format" };
     }
 
-    // Encrypt and store
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(key);
-      const storage = loadStorage();
-      storage.apiKeyEncrypted = encrypted.toString("base64");
-      saveStorage(storage);
-      return { success: true };
-    } else {
-      // Fallback for systems without secure storage
-      const storage = loadStorage();
-      storage.apiKeyEncrypted = Buffer.from(key).toString("base64");
-      saveStorage(storage);
-      return { success: true };
-    }
+    const encryptedValue = safeStorage.isEncryptionAvailable()
+      ? safeStorage.encryptString(key).toString("base64")
+      : Buffer.from(key).toString("base64");
+
+    storageRepo.update((draft) => {
+      draft.apiKeyEncrypted = encryptedValue;
+    });
+
+    return { success: true };
   } catch (error) {
     console.error("Failed to set API key:", error);
     return { success: false, error: "Failed to store API key" };
@@ -358,7 +256,7 @@ ipcMain.handle("auth:set-key", async (_, key: string): Promise<{ success: boolea
 
 ipcMain.handle("auth:get-key", async (): Promise<string | null> => {
   try {
-    const storage = loadStorage();
+    const storage = storageRepo.read();
     if (!storage.apiKeyEncrypted) {
       return null;
     }
@@ -366,9 +264,8 @@ ipcMain.handle("auth:get-key", async (): Promise<string | null> => {
     if (safeStorage.isEncryptionAvailable()) {
       const encrypted = Buffer.from(storage.apiKeyEncrypted, "base64");
       return safeStorage.decryptString(encrypted);
-    } else {
-      return Buffer.from(storage.apiKeyEncrypted, "base64").toString();
     }
+    return Buffer.from(storage.apiKeyEncrypted, "base64").toString();
   } catch (error) {
     console.error("Failed to get API key:", error);
     return null;
@@ -377,9 +274,9 @@ ipcMain.handle("auth:get-key", async (): Promise<string | null> => {
 
 ipcMain.handle("auth:clear-key", async (): Promise<{ success: boolean }> => {
   try {
-    const storage = loadStorage();
-    delete storage.apiKeyEncrypted;
-    saveStorage(storage);
+    storageRepo.update((draft) => {
+      delete draft.apiKeyEncrypted;
+    });
     return { success: true };
   } catch (error) {
     console.error("Failed to clear API key:", error);
@@ -413,15 +310,35 @@ ipcMain.handle("auth:validate-key", async (_, key: string): Promise<{ valid: boo
 // ============================================
 
 ipcMain.handle("settings:get", async () => {
-  const storage = loadStorage();
+  const storage = storageRepo.read();
   return storage.settings ?? { theme: "default", variant: "human" };
 });
 
 ipcMain.handle("settings:set", async (_, settings: { theme?: string; variant?: string }) => {
-  const storage = loadStorage();
-  storage.settings = { ...storage.settings, ...settings };
-  saveStorage(storage);
+  storageRepo.update((draft) => {
+    draft.settings = { ...draft.settings, ...settings };
+  });
   return { success: true };
+});
+
+// ============================================
+// IPC Handlers - Extensions (Built-in)
+// ============================================
+
+ipcMain.handle("extensions:get-available", async () => {
+  return BUILT_IN_EXTENSIONS;
+});
+
+ipcMain.handle("extensions:get-disabled", async () => {
+  const storage = storageRepo.read();
+  return storage.settings?.disabledExtensions ?? [];
+});
+
+ipcMain.handle("extensions:set-disabled", async (_, disabledExtensions: string[]) => {
+  storageRepo.update((draft) => {
+    draft.settings = { ...draft.settings, disabledExtensions };
+  });
+  return { success: true, requiresRestart: true };
 });
 
 // ============================================
@@ -429,21 +346,21 @@ ipcMain.handle("settings:set", async (_, settings: { theme?: string; variant?: s
 // ============================================
 
 ipcMain.handle("chat:get-conversation", async () => {
-  const storage = loadStorage();
+  const storage = storageRepo.read();
   return storage.conversation ?? [];
 });
 
 ipcMain.handle("chat:clear-conversation", async () => {
-  const storage = loadStorage();
-  storage.conversation = [];
-  saveStorage(storage);
+  storageRepo.update((draft) => {
+    draft.conversation = [];
+  });
   return { success: true };
 });
 
 ipcMain.handle("chat:save-conversation", async (_, conversation: Array<{ role: "user" | "assistant"; content: string }>) => {
-  const storage = loadStorage();
-  storage.conversation = conversation;
-  saveStorage(storage);
+  storageRepo.update((draft) => {
+    draft.conversation = conversation;
+  });
   return { success: true };
 });
 
@@ -452,25 +369,22 @@ ipcMain.handle("chat:save-conversation", async (_, conversation: Array<{ role: "
 // ============================================
 
 ipcMain.handle("tasks:get-state", async (): Promise<TaskState> => {
-  // Get state from extension manager if available, otherwise from storage
   if (extensionManager) {
     const state = extensionManager.getTaskState();
     if (state) return state;
   }
-  return getStoredTaskState();
+  return storageRepo.getTaskState();
 });
 
 ipcMain.handle("tasks:save-state", async (_, state: TaskState): Promise<{ success: boolean; error?: string }> => {
   try {
     const parsed = taskStateSchema.parse(state);
-    // Load state into extension manager
     if (extensionManager) {
       extensionManager.loadTaskState(parsed);
     }
-    // Also persist to storage
-    const storage = loadStorage();
-    storage.tasks = cloneTaskState(parsed);
-    saveStorage(storage);
+    storageRepo.update((draft) => {
+      draft.tasks = cloneTaskState(parsed);
+    });
     return { success: true };
   } catch (error) {
     console.error("Failed to persist tasks:", error);
@@ -506,10 +420,9 @@ ipcMain.handle("spotify:exchange-code", async (_, code: string) => {
   try {
     const tokens = await extensionManager?.exchangeSpotifyCode(code);
     if (tokens) {
-      // Persist tokens to storage
-      const storage = loadStorage();
-      (storage as Record<string, unknown>).spotifyTokens = tokens;
-      saveStorage(storage);
+      storageRepo.update((draft) => {
+        draft.spotifyTokens = tokens;
+      });
       return { success: true, tokens };
     }
     return { success: false, error: "Failed to exchange code" };
@@ -533,22 +446,21 @@ ipcMain.handle("spotify:update-playback-state", async (_, playback) => {
 
 ipcMain.handle("spotify:disconnect", async () => {
   extensionManager?.disconnectSpotify();
-  // Clear persisted tokens
-  const storage = loadStorage();
-  delete storage.spotifyTokens;
-  saveStorage(storage);
+  storageRepo.update((draft) => {
+    delete draft.spotifyTokens;
+  });
   return { success: true };
 });
 
 ipcMain.handle("spotify:get-client-id", async () => {
-  const storage = loadStorage();
+  const storage = storageRepo.read();
   return storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID || null;
 });
 
 ipcMain.handle("spotify:set-client-id", async (_, clientId: string) => {
-  const storage = loadStorage();
-  storage.spotifyClientId = clientId;
-  saveStorage(storage);
+  storageRepo.update((draft) => {
+    draft.spotifyClientId = clientId;
+  });
   return { success: true };
 });
 
@@ -662,8 +574,7 @@ import { sendChatMessage } from "./services/openai-service.js";
 
 ipcMain.handle("chat:send-message", async (event, message: string, conversationHistory: Array<{ role: "user" | "assistant"; content: string }>) => {
   try {
-    // Get API key
-    const storage = loadStorage();
+    const storage = storageRepo.read();
     if (!storage.apiKeyEncrypted) {
       return { success: false, error: "No API key configured" };
     }

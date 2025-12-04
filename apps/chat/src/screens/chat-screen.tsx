@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo, type CSSProperties } from "react";
-import type { CharacterController, FacialMood, PomodoroDuration, TaskState, TaskController, PomodoroController } from "@vokality/ragdoll";
+import type { CharacterController, FacialMood, PomodoroDuration, TaskController, PomodoroController } from "@vokality/ragdoll";
 import {
   createDerivedSlotState,
   createSpotifyUISlot,
@@ -14,21 +14,12 @@ import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
 import { useSpotifyPlayback } from "../hooks/use-spotify-playback";
+import { useChatApplication } from "../hooks/use-chat-application";
 
 interface ChatScreenProps {
   onLogout: () => void;
 }
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-const EMPTY_TASK_STATE: TaskState = {
-  tasks: [],
-  activeTaskId: null,
-  isExpanded: false,
-};
 
 /**
  * Create a task UI slot from a CharacterController's TaskController
@@ -236,20 +227,20 @@ function createPomodoroSlotFromController(pomodoroController: PomodoroController
 
 export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
-  const [settings, setSettings] = useState({ theme: "default", variant: "human" });
-  const [conversation, setConversation] = useState<Message[]>([]);
-  const [initialTaskState, setInitialTaskState] = useState<TaskState | null>(null);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const streamingTextRef = useRef("");
-  const [streamingContent, setStreamingContent] = useState<string>("");
+  const {
+    settings,
+    visibleMessages,
+    initialTaskState,
+    isStreaming,
+    isLoading,
+    actions: { sendMessage: sendChatMessage, changeTheme, changeVariant, clearConversation, clearApiKey },
+    subscribeToFunctionCalls,
+  } = useChatApplication();
 
-  // Spotify Web Playback SDK integration
   const { state: spotifyState, controls: spotifyControls } = useSpotifyPlayback();
 
-  // Setup actions for Spotify extension UI
   const spotifySetupActions = useMemo<SpotifySetupActions>(() => ({
     getClientId: () => window.electronAPI.spotifyGetClientId(),
     saveClientId: async (clientId: string) => {
@@ -266,13 +257,11 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     getPlaybackState: () => window.electronAPI.spotifyGetPlaybackState(),
   }), []);
 
-  // Create Spotify slot ONCE (stable reference) - state updates handled via useEffect
   const spotifySlotRef = useRef<{
     slot: ExtensionUISlot;
     stateStore: ReturnType<typeof createSpotifyUISlot>["stateStore"];
   } | null>(null);
 
-  // Initialize slot on first render
   if (!spotifySlotRef.current) {
     const { slot, stateStore } = createSpotifyUISlot({
       controls: spotifyControls,
@@ -293,17 +282,13 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     playbackRef.current = spotifyState.playback;
   }, [spotifyState.playback]);
 
-  // Update slot state only when connection or track/play state meaningfully changes
   useEffect(() => {
     if (!spotifySlotRef.current) return;
 
     const { stateStore } = spotifySlotRef.current;
     const playbackSnapshot = playbackRef.current;
 
-    // Badge shows play state indicator
     const badge = spotifyHasTrack ? (spotifyIsPlaying ? "▶" : "❚❚") : null;
-
-    // Visibility: always show until connected, then only when playing
     const visible = !spotifyState.hasConnected || spotifyHasTrack;
 
     stateStore.setState({
@@ -334,7 +319,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
 
   const spotifySlot = spotifySlotRef.current!.slot;
 
-  // Create extension UI slots when controller is ready
   const slots = useMemo<ExtensionUISlot[]>(() => {
     const result: ExtensionUISlot[] = [];
 
@@ -343,152 +327,71 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
       result.push(createPomodoroSlotFromController(controller.getPomodoroController()));
     }
 
-    // Always include Spotify slot
     result.push(spotifySlot);
 
     return result;
   }, [controller, spotifySlot]);
 
-  // Load settings on mount
   useEffect(() => {
-    window.electronAPI.getSettings().then((s) => {
-      setSettings({ theme: s.theme ?? "default", variant: s.variant ?? "human" });
+    if (!controller) return;
+    return subscribeToFunctionCalls((name, args) => {
+      executeFunctionCall(controller, name, args);
     });
-    window.electronAPI.getConversation().then((conv) => {
-      if (conv && conv.length > 0) {
-        setConversation(conv);
-      }
-    });
-    window.electronAPI
-      .getTaskState()
-      .then((state) => setInitialTaskState(state ?? EMPTY_TASK_STATE))
-      .catch((error) => {
-        console.error("Failed to load task state", error);
-        setInitialTaskState(EMPTY_TASK_STATE);
-      });
-  }, []);
-
-  // Set up streaming event listeners
-  useEffect(() => {
-    const unsubText = window.electronAPI.onStreamingText((text) => {
-      streamingTextRef.current += text;
-      setStreamingContent(streamingTextRef.current);
-    });
-
-    const unsubFunctionCall = window.electronAPI.onFunctionCall((name, args) => {
-      if (controller) {
-        executeFunctionCall(controller, name, args);
-      }
-    });
-
-    const unsubStreamEnd = window.electronAPI.onStreamEnd(() => {
-      setIsStreaming(false);
-      setIsLoading(false);
-
-      // Save the assistant's response to conversation
-      if (streamingTextRef.current) {
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: streamingTextRef.current,
-        };
-        setConversation((prev) => {
-          const updated = [...prev, assistantMessage];
-          // Save to storage
-          window.electronAPI.saveConversation(updated);
-          return updated;
-        });
-      }
-    });
-
-    return () => {
-      unsubText();
-      unsubFunctionCall();
-      unsubStreamEnd();
-    };
-  }, [controller]);
+  }, [controller, subscribeToFunctionCalls]);
 
   const handleControllerReady = useCallback((ctrl: CharacterController) => {
     setController(ctrl);
-    // Set initial greeting mood
     ctrl.setMood("smile", 0.5);
   }, []);
 
-  const handleSendMessage = async (message: string) => {
-    if (isLoading) return;
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      if (isLoading) return;
 
-    // Add user message to conversation
-    const userMessage: Message = { role: "user", content: message };
-    const updatedConversation = [...conversation, userMessage];
-    setConversation(updatedConversation);
-
-    // Reset streaming state
-    streamingTextRef.current = "";
-    setStreamingContent("");
-    setIsStreaming(true);
-    setIsLoading(true);
-
-    // Show thinking expression
-    if (controller) {
-      controller.setMood("thinking", 0.3);
-    }
-
-    // Send message to main process with updated history
-    const result = await window.electronAPI.sendMessage(message, updatedConversation);
-
-    if (!result.success) {
-      setIsStreaming(false);
-      setIsLoading(false);
-      setStreamingContent("");
       if (controller) {
+        controller.setMood("thinking", 0.3);
+      }
+
+      const result = await sendChatMessage(message);
+
+      if (!result.success && controller) {
         controller.setMood("sad", 0.3);
       }
-    }
-  };
+    },
+    [controller, isLoading, sendChatMessage]
+  );
 
-  const handleThemeChange = async (theme: string) => {
-    setSettings((prev) => ({ ...prev, theme }));
-    await window.electronAPI.setSettings({ theme });
-  };
+  const handleThemeChange = useCallback(
+    async (theme: string) => {
+      await changeTheme(theme);
+    },
+    [changeTheme]
+  );
 
-  const handleVariantChange = async (variant: string) => {
-    setSettings((prev) => ({ ...prev, variant }));
-    await window.electronAPI.setSettings({ variant });
-  };
+  const handleVariantChange = useCallback(
+    async (variant: string) => {
+      await changeVariant(variant);
+    },
+    [changeVariant]
+  );
 
-  const handleClearConversation = async () => {
-    setConversation([]);
-    setStreamingContent("");
-    await window.electronAPI.clearConversation();
+  const handleClearConversation = useCallback(async () => {
+    await clearConversation();
     setIsSettingsOpen(false);
     if (controller) {
       controller.setMood("smile", 0.3);
     }
-  };
+  }, [clearConversation, controller]);
 
-  const handleChangeApiKey = async () => {
-    await window.electronAPI.clearApiKey();
+  const handleChangeApiKey = useCallback(async () => {
+    await clearApiKey();
     onLogout();
-  };
-
-  // Compute visible messages (last 2 from conversation + streaming if active)
-  const visibleMessages = useMemo(() => {
-    let messages = [...conversation];
-
-    // Add streaming message if active
-    if (isStreaming && streamingContent) {
-      messages = [...messages, { role: "assistant" as const, content: streamingContent }];
-    }
-
-    // Get last 2 messages
-    return messages.slice(-2);
-  }, [conversation, isStreaming, streamingContent]);
+  }, [clearApiKey, onLogout]);
 
   return (
     <div style={styles.container}>
-      {/* Drag region for window */}
       <div style={styles.dragRegion} className="drag-region" />
 
-      {/* Header */}
       <header style={styles.header}>
         <button
           onClick={() => setIsSettingsOpen(true)}
@@ -511,7 +414,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         </div>
       </header>
 
-      {/* Character View - wait for initial state to load */}
       {initialTaskState !== null && (
         <CharacterView
           messages={visibleMessages}
@@ -523,14 +425,12 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
         />
       )}
 
-      {/* Chat Input with extension slots */}
       <ChatInput
         onSend={handleSendMessage}
         disabled={isLoading}
         slots={slots}
       />
 
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -544,6 +444,7 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     </div>
   );
 }
+
 
 // Execute MCP function calls on the CharacterController
 function executeFunctionCall(

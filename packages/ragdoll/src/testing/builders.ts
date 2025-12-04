@@ -9,7 +9,6 @@ import type {
   HeadPose,
   JointName,
   Vector3Like,
-  SpeechBubbleState,
 } from "../types";
 
 /**
@@ -33,7 +32,6 @@ export class CharacterStateBuilder {
       joints,
       mood: "neutral",
       action: null,
-      bubble: { text: null, tone: "default" },
       animation: {
         action: null,
         actionProgress: 0,
@@ -59,14 +57,6 @@ export class CharacterStateBuilder {
     return this;
   }
 
-  withSpeechBubble(
-    text: string | null,
-    tone?: "default" | "whisper" | "shout",
-  ): this {
-    this.state.bubble = { text, tone: tone ?? "default" };
-    return this;
-  }
-
   withTalking(isTalking: boolean): this {
     this.state.animation.isTalking = isTalking;
     return this;
@@ -74,27 +64,6 @@ export class CharacterStateBuilder {
 
   build(): CharacterState {
     return JSON.parse(JSON.stringify(this.state));
-  }
-}
-
-/**
- * Builder for SpeechBubbleState
- */
-export class SpeechBubbleBuilder {
-  private bubble: SpeechBubbleState = { text: null, tone: "default" };
-
-  withText(text: string): this {
-    this.bubble.text = text;
-    return this;
-  }
-
-  withTone(tone: "default" | "whisper" | "shout"): this {
-    this.bubble.tone = tone;
-    return this;
-  }
-
-  build(): SpeechBubbleState {
-    return { ...this.bubble };
   }
 }
 

@@ -14,7 +14,6 @@ import {
   SpyEventBus,
   CharacterStateBuilder,
   HeadPoseBuilder,
-  SpeechBubbleBuilder,
 } from "./index";
 
 describe("ActionController", () => {
@@ -167,22 +166,18 @@ describe("CharacterStateBuilder", () => {
 
     expect(state.mood).toBe("neutral");
     expect(state.action).toBeNull();
-    expect(state.bubble.text).toBeNull();
   });
 
   it("should build custom state", () => {
     const state = new CharacterStateBuilder()
       .withMood("smile")
       .withAction("wink", 0.5)
-      .withSpeechBubble("Hello!", "shout")
       .withTalking(true)
       .build();
 
     expect(state.mood).toBe("smile");
     expect(state.action).toBe("wink");
     expect(state.animation.actionProgress).toBe(0.5);
-    expect(state.bubble.text).toBe("Hello!");
-    expect(state.bubble.tone).toBe("shout");
     expect(state.animation.isTalking).toBe(true);
   });
 });
@@ -206,14 +201,3 @@ describe("HeadPoseBuilder", () => {
   });
 });
 
-describe("SpeechBubbleBuilder", () => {
-  it("should build speech bubble", () => {
-    const bubble = new SpeechBubbleBuilder()
-      .withText("Test message")
-      .withTone("whisper")
-      .build();
-
-    expect(bubble.text).toBe("Test message");
-    expect(bubble.tone).toBe("whisper");
-  });
-});

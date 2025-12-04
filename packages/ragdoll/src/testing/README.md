@@ -1,6 +1,6 @@
 # Ragdoll Testing Utilities
 
-Test utilities to make Ragdoll components easy to test.
+Domain-minded helpers for exercising controllers, state managers, and integration code without pulling in any UI.
 
 ## Installation
 
@@ -12,48 +12,58 @@ npm install --save-dev @vokality/ragdoll
 
 ### MockClock - Control Time in Tests
 
-```typescript
+```ts
 import { MockClock } from "@vokality/ragdoll/testing";
+import { CharacterController } from "@vokality/ragdoll";
 
-describe("PomodoroController", () => {
-  it("should complete after session duration", () => {
+describe("character update loop", () => {
+  it("can be stepped deterministically", () => {
+    const controller = new CharacterController();
     const clock = new MockClock();
-    const controller = new PomodoroController({ clock });
 
-    controller.start(1, 1); // 1 minute session, 1 minute break
+    // Run the controller update at a fixed cadence
+    clock.setInterval(() => {
+      controller.update(1 / 60); // 60 FPS delta in seconds
+    }, 16);
 
-    // Advance time by 1 minute
-    clock.advance(60 * 1000);
+    // Simulate one second of time
+    clock.advance(1000);
 
-    expect(controller.getState().state).toBe("running");
-    expect(controller.getState().isBreak).toBe(true);
+    expect(controller.getState().animation).toBeDefined();
   });
 });
 ```
 
 ### Builders - Create Test Data
 
-```typescript
+```ts
+import { StateManager } from "@vokality/ragdoll";
 import {
   CharacterStateBuilder,
   HeadPoseBuilder,
+  SpyEventBus,
 } from "@vokality/ragdoll/testing";
 
 describe("StateManager", () => {
-  it("should update state", () => {
-    const initialState = new CharacterStateBuilder()
+  it("should update mood + action atomically", () => {
+    const state = new CharacterStateBuilder()
       .withMood("smile")
       .withAction("wink", 0.5)
       .build();
+    const manager = new StateManager(state, new SpyEventBus());
 
-    const manager = new StateManager(initialState);
-    expect(manager.getState().mood).toBe("smile");
+    manager.setMood("laugh", "smile");
+
+    expect(manager.getState().mood).toBe("laugh");
   });
 
-  it("should handle head pose", () => {
+  it("should load head pose snapshots", () => {
     const pose = new HeadPoseBuilder().lookingLeft(20).lookingUp(10).build();
+    const manager = new StateManager(new CharacterStateBuilder().build());
 
-    controller.setHeadPose(pose);
+    manager.setHeadPose(pose);
+
+    expect(manager.getState().headPose.yaw).toBeCloseTo(pose.yaw);
   });
 });
 ```
@@ -61,6 +71,7 @@ describe("StateManager", () => {
 ### Mocks - Test in Isolation
 
 ```typescript
+import { ActionController } from "@vokality/ragdoll";
 import { MockHeadPoseController } from "@vokality/ragdoll/testing";
 
 describe("ActionController", () => {
@@ -79,18 +90,19 @@ describe("ActionController", () => {
 
 ### SpyEventBus - Track Events
 
-```typescript
-import { SpyEventBus } from "@vokality/ragdoll/testing";
+```ts
+import { StateManager } from "@vokality/ragdoll";
+import { CharacterStateBuilder, SpyEventBus } from "@vokality/ragdoll/testing";
 
-describe("State Events", () => {
-  it("should emit mood change events", () => {
-    const eventBus = new SpyEventBus();
-    const stateManager = new StateManager(defaultState, eventBus);
+describe("state events", () => {
+  it("records the exact event payloads", () => {
+    const bus = new SpyEventBus();
+    const manager = new StateManager(new CharacterStateBuilder().build(), bus);
 
-    stateManager.setMood("smile", "neutral");
+    manager.setMood("smile", "neutral");
 
-    expect(eventBus.emittedEvents).toHaveLength(1);
-    expect(eventBus.emittedEvents[0]).toMatchObject({
+    expect(bus.emittedEvents).toHaveLength(1);
+    expect(bus.emittedEvents[0]).toMatchObject({
       type: "moodChanged",
       mood: "smile",
       previousMood: "neutral",
@@ -117,17 +129,12 @@ describe("State Events", () => {
   - `withMood(mood)`
   - `withAction(action, progress)`
   - `withHeadPose(pose)`
-  - `withSpeechBubble(text, tone)`
   - `withTalking(isTalking)`
 
 - **`HeadPoseBuilder`**: Build HeadPose objects
   - `withYaw(radians)` / `withPitch(radians)`
   - `lookingLeft(degrees)` / `lookingRight(degrees)`
   - `lookingUp(degrees)` / `lookingDown(degrees)`
-
-- **`SpeechBubbleBuilder`**: Build SpeechBubbleState objects
-  - `withText(text)`
-  - `withTone(tone)`
 
 ### Mocks
 

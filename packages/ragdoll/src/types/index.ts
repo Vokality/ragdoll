@@ -49,17 +49,11 @@ export interface FacialAnimationState {
   isTalking: boolean;
 }
 
-export interface SpeechBubbleState {
-  text: string | null;
-  tone: "default" | "shout" | "whisper";
-}
-
 export interface CharacterState {
   headPose: HeadPose;
   joints: Record<JointName, Vector3Like>;
   mood: FacialMood;
   action: FacialAction | null;
-  bubble: SpeechBubbleState;
   animation: FacialAnimationState;
 }
 
@@ -88,16 +82,7 @@ export type FacialCommand =
         pitch?: number;
         duration?: number;
       };
-    }
-  | {
-      action: "setSpeechBubble";
-      params: SpeechBubbleState;
     };
-
-export interface SpeechBubblePayload {
-  text: string | null;
-  tone?: "default" | "shout" | "whisper";
-}
 
 export interface FacialStatePayload {
   mood?: {
@@ -114,7 +99,6 @@ export interface FacialStatePayload {
     pitch?: number;
     duration?: number;
   };
-  bubble?: SpeechBubblePayload;
 }
 
 export interface JointCommand {
@@ -123,32 +107,3 @@ export interface JointCommand {
   rotation?: { x: number; y: number; z: number };
 }
 
-export type PomodoroState = "idle" | "running" | "paused" | "break";
-
-export type PomodoroDuration = 5 | 15 | 30 | 60 | 120; // minutes
-
-export interface PomodoroStateData {
-  state: PomodoroState;
-  sessionDuration: PomodoroDuration; // minutes
-  breakDuration: PomodoroDuration; // minutes
-  elapsedTime: number; // seconds
-  remainingTime: number; // seconds
-  isBreak: boolean;
-}
-
-// Task types
-export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
-
-export interface Task {
-  id: string;
-  text: string;
-  status: TaskStatus;
-  createdAt: number;
-  blockedReason?: string;
-}
-
-export interface TaskState {
-  tasks: Task[];
-  activeTaskId: string | null;
-  isExpanded: boolean;
-}

@@ -6,18 +6,9 @@ import { HeadPoseController } from "./head-pose-controller";
 import { ActionController } from "./action-controller";
 import { IdleController } from "./idle-controller";
 import type { IdleState } from "./idle-controller";
-import { PomodoroController } from "./pomodoro-controller";
-import { TaskController } from "./task-controller";
 import { StateManager } from "../state/state-manager";
 import { EventBus } from "../state/event-bus";
 import type { FeaturePlugin } from "../plugins/plugin-interface";
-import type {
-  PomodoroStateData,
-  PomodoroDuration,
-  TaskStatus,
-  Task,
-  TaskState,
-} from "../types";
 import type { RagdollTheme } from "../themes/types";
 import { getTheme, getDefaultTheme } from "../themes";
 import { getVariant, getDefaultVariant } from "../variants";
@@ -27,8 +18,6 @@ import type {
   FacialCommand,
   FacialMood,
   FacialAction,
-  SpeechBubblePayload,
-  SpeechBubbleState,
   JointCommand,
   JointName,
   HeadPose,
@@ -41,14 +30,8 @@ export class CharacterController {
   private expressionController: ExpressionController;
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
-  private pomodoroController: PomodoroController;
-  private taskController: TaskController;
-  private speechBubble: SpeechBubbleState = { text: null, tone: "default" };
   private theme: RagdollTheme;
   private variant: CharacterVariant;
-  private lastPomodoroState: PomodoroStateData | null = null;
-  private lastReminderTime: number | null = null;
-  private pomodoroUnsubscribe?: () => void;
   private stateManager: StateManager;
   private eventBus: EventBus;
   private plugins: Map<string, FeaturePlugin> = new Map();
@@ -65,8 +48,6 @@ export class CharacterController {
       this.actionController,
     );
     this.idleController = new IdleController();
-    this.pomodoroController = new PomodoroController();
-    this.taskController = new TaskController();
 
     // Initialize state management
     this.eventBus = new EventBus();
@@ -79,7 +60,6 @@ export class CharacterController {
       joints,
       mood: "neutral",
       action: null,
-      bubble: { text: null, tone: "default" },
       animation: {
         action: null,
         actionProgress: 0,
@@ -87,11 +67,6 @@ export class CharacterController {
       },
     };
     this.stateManager = new StateManager(initialState, this.eventBus);
-
-    // Set up pomodoro reminders
-    this.pomodoroUnsubscribe = this.pomodoroController.onUpdate((state) => {
-      this.handlePomodoroUpdate(state);
-    });
   }
 
   public executeCommand(command: FacialCommand): void {
@@ -107,9 +82,6 @@ export class CharacterController {
         break;
       case "setHeadPose":
         this.setHeadPose(command.params, command.params.duration);
-        break;
-      case "setSpeechBubble":
-        this.setSpeechBubble(command.params);
         break;
     }
   }
@@ -144,43 +116,6 @@ export class CharacterController {
     this.headPoseController.nudge(delta, duration);
   }
 
-  public setSpeechBubble(payload: SpeechBubblePayload): void {
-    this.speechBubble = {
-      text: payload.text,
-      tone: payload.tone ?? "default",
-    };
-    this.stateManager.setSpeechBubble(this.speechBubble);
-
-    if (payload.text) {
-      const duration = this.calculateTalkDuration(payload.text);
-      if (!this.actionController.isTalking()) {
-        this.actionController.triggerAction("talk", duration);
-      } else {
-        // Update duration if already talking (restart with new duration)
-        this.actionController.triggerAction("talk", duration);
-      }
-    } else {
-      if (this.actionController.isTalking()) {
-        this.actionController.clearAction();
-      }
-    }
-  }
-
-  /**
-   * Calculate talk duration based on text length using average reading speed.
-   * Uses ~3.5 words/second (200-250 words/minute) with a minimum duration.
-   */
-  private calculateTalkDuration(text: string): number {
-    const words = text
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0);
-    const wordCount = words.length;
-    // Average reading speed: ~3.5 words/second = ~0.29 seconds/word
-    // Add 0.2s buffer for natural feel
-    const duration = Math.max(0.5, wordCount / 3.5 + 0.2);
-    return duration;
-  }
 
   public setJointRotation(command: JointCommand): void {
     const angle = command.angle ?? command.rotation;
@@ -240,10 +175,6 @@ export class CharacterController {
    */
   public getEventBus(): EventBus {
     return this.eventBus;
-  }
-
-  public getSpeechBubble(): SpeechBubbleState {
-    return { ...this.speechBubble };
   }
 
   public getHeadWorldPosition(): { x: number; y: number; z: number } {
@@ -418,245 +349,6 @@ export class CharacterController {
     return this.theme.id;
   }
 
-  public getPomodoroController(): PomodoroController {
-    return this.pomodoroController;
-  }
-
-  /**
-   * Get current pomodoro state
-   */
-  public getPomodoroState(): PomodoroStateData {
-    return this.pomodoroController.getState();
-  }
-
-  /**
-   * Start pomodoro session
-   */
-  public startPomodoro(
-    sessionDuration?: PomodoroDuration,
-    breakDuration?: PomodoroDuration,
-  ): void {
-    this.pomodoroController.start(sessionDuration, breakDuration);
-  }
-
-  /**
-   * Pause pomodoro session
-   */
-  public pausePomodoro(): void {
-    this.pomodoroController.pause();
-  }
-
-  /**
-   * Reset pomodoro timer
-   */
-  public resetPomodoro(): void {
-    this.pomodoroController.reset();
-  }
-
-  /**
-   * Handle pomodoro state updates and show reminders
-   */
-  private handlePomodoroUpdate(state: PomodoroStateData): void {
-    const now = Date.now();
-
-    // Handle state transitions
-    if (this.lastPomodoroState) {
-      const prevState = this.lastPomodoroState.state;
-      const prevIsBreak = this.lastPomodoroState.isBreak;
-
-      // Session started
-      if (prevState === "idle" && state.state === "running" && !state.isBreak) {
-        const durationLabel = this.getDurationLabel(state.sessionDuration);
-        this.setSpeechBubble({
-          text: `Focus time started! 🍅 (${durationLabel})`,
-          tone: "default",
-        });
-        this.lastReminderTime = now;
-      }
-      // Session completed, break started
-      else if (
-        prevState === "running" &&
-        !prevIsBreak &&
-        state.state === "running" &&
-        state.isBreak
-      ) {
-        const breakLabel = this.getDurationLabel(state.breakDuration);
-        this.setSpeechBubble({
-          text: `Time for a break! ☕ (${breakLabel})`,
-          tone: "default",
-        });
-        this.lastReminderTime = now;
-      }
-      // Break completed
-      else if (
-        prevState === "running" &&
-        prevIsBreak &&
-        state.state === "idle"
-      ) {
-        this.setSpeechBubble({
-          text: "Break's over, back to work! 💪",
-          tone: "default",
-        });
-        this.lastReminderTime = now;
-      }
-    }
-
-    // Show 5-minute warning (only once per session)
-    if (
-      state.state === "running" &&
-      state.remainingTime <= 300 && // 5 minutes
-      state.remainingTime > 299 &&
-      (!this.lastReminderTime || now - this.lastReminderTime > 60000) // Don't spam
-    ) {
-      this.setSpeechBubble({
-        text: "5 minutes left in this session",
-        tone: "whisper",
-      });
-      this.lastReminderTime = now;
-    }
-
-    this.lastPomodoroState = { ...state };
-  }
-
-  /**
-   * Get human-readable duration label
-   */
-  private getDurationLabel(duration: PomodoroDuration): string {
-    if (duration === 15) return "15 min";
-    if (duration === 30) return "30 min";
-    if (duration === 60) return "1 hour";
-    if (duration === 120) return "2 hours";
-    return `${duration} min`;
-  }
-
-  // Task management methods
-
-  public getTaskController(): TaskController {
-    return this.taskController;
-  }
-
-  /**
-   * Replace the current task state
-   */
-  public loadTaskState(state: TaskState): void {
-    this.taskController.loadState(state);
-  }
-
-  /**
-   * Add a new task
-   */
-  public addTask(text: string, status: TaskStatus = "todo"): void {
-    this.taskController.addTask(text, status);
-  }
-
-  /**
-   * Update a task's status
-   */
-  public updateTaskStatus(
-    taskId: string,
-    status: TaskStatus,
-    blockedReason?: string,
-  ): void {
-    this.taskController.updateTaskStatus(taskId, status, blockedReason);
-  }
-
-  /**
-   * Set a task as the active task
-   */
-  public setActiveTask(taskId: string): void {
-    this.taskController.setActiveTask(taskId);
-  }
-
-  /**
-   * Remove a task
-   */
-  public removeTask(taskId: string): void {
-    this.taskController.removeTask(taskId);
-  }
-
-  /**
-   * Complete the active task
-   */
-  public completeActiveTask(): void {
-    this.taskController.completeActiveTask();
-  }
-
-  /**
-   * Clear completed tasks
-   */
-  public clearCompletedTasks(): void {
-    this.taskController.clearCompleted();
-  }
-
-  /**
-   * Clear all tasks
-   */
-  public clearAllTasks(): void {
-    this.taskController.clearAll();
-  }
-
-  /**
-   * Expand task drawer
-   */
-  public expandTasks(): void {
-    this.taskController.expand();
-  }
-
-  /**
-   * Collapse task drawer
-   */
-  public collapseTasks(): void {
-    this.taskController.collapse();
-  }
-
-  /**
-   * Toggle task drawer
-   */
-  public toggleTasks(): void {
-    this.taskController.toggle();
-  }
-
-  /**
-   * Get all tasks with their IDs
-   */
-  public getTasks(): Task[] {
-    return this.taskController.getState().tasks;
-  }
-
-  /**
-   * Get a task by ID
-   */
-  public getTask(taskId: string): Task | null {
-    const tasks = this.taskController.getState().tasks;
-    return tasks.find((t) => t.id === taskId) ?? null;
-  }
-
-  /**
-   * Find a task by text and set it as active
-   */
-  public findAndSetActiveTask(text: string): boolean {
-    const task = this.taskController.findTaskByText(text);
-    if (task && task.status !== "done") {
-      this.taskController.setActiveTask(task.id);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Find or create a task and set it as active
-   * Returns true if task was found and activated, false if created new
-   */
-  public findOrCreateAndStartTask(text: string): boolean {
-    const existing = this.taskController.findTaskByText(text);
-    if (existing && existing.status !== "done") {
-      this.taskController.setActiveTask(existing.id);
-      return true; // Found existing task
-    }
-    // Create new task with in_progress status
-    this.taskController.addTask(text, "in_progress");
-    return false; // Created new task
-  }
 
   /**
    * Register a feature plugin
@@ -694,12 +386,6 @@ export class CharacterController {
    * Cleanup resources (timers, subscriptions)
    */
   public destroy(): void {
-    // Clean up pomodoro subscription
-    if (this.pomodoroUnsubscribe) {
-      this.pomodoroUnsubscribe();
-      this.pomodoroUnsubscribe = undefined;
-    }
-    this.pomodoroController.destroy();
     this.idleController.reset();
 
     // Destroy all plugins

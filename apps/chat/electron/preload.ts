@@ -19,6 +19,13 @@ export interface LoadedPackage {
   extensionId: string;
 }
 
+export interface BuiltInExtensionInfo {
+  id: string;
+  name: string;
+  description: string;
+  canDisable: boolean;
+}
+
 export interface ToolDefinition {
   type: "function";
   function: {
@@ -137,6 +144,9 @@ export interface ElectronAPI {
   // Extensions
   getExtensionStats: () => Promise<ExtensionStats>;
   getExtensionTools: () => Promise<ToolDefinition[]>;
+  getAvailableExtensions: () => Promise<BuiltInExtensionInfo[]>;
+  getDisabledExtensions: () => Promise<string[]>;
+  setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
   discoverPackages: () => Promise<string[]>;
   getLoadedPackages: () => Promise<LoadedPackage[]>;
   loadPackage: (packageName: string, config?: Record<string, unknown>) => Promise<LoadResult>;
@@ -222,6 +232,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Extensions
   getExtensionStats: () => ipcRenderer.invoke("extensions:get-stats"),
   getExtensionTools: () => ipcRenderer.invoke("extensions:get-tools"),
+  getAvailableExtensions: () => ipcRenderer.invoke("extensions:get-available"),
+  getDisabledExtensions: () => ipcRenderer.invoke("extensions:get-disabled"),
+  setDisabledExtensions: (extensionIds: string[]) =>
+    ipcRenderer.invoke("extensions:set-disabled", extensionIds),
   discoverPackages: () => ipcRenderer.invoke("extensions:discover-packages"),
   getLoadedPackages: () => ipcRenderer.invoke("extensions:get-loaded-packages"),
   loadPackage: (packageName: string, config?: Record<string, unknown>) =>
