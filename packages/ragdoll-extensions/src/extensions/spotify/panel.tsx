@@ -8,76 +8,12 @@
  */
 
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react";
-import {
-  createSlotState,
-  type ExtensionUISlot,
-  type MutableSlotStateStore,
-} from "../../ui/index.js";
 import type { SpotifyPlaybackState, SpotifyTrack } from "./types.js";
+import type { SpotifyPlaybackControls, SpotifySetupActions } from "./ui-types.js";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Controls interface for playback actions.
- */
-export interface SpotifyPlaybackControls {
-  /** Resume or start playback */
-  play(): void;
-  /** Pause playback */
-  pause(): void;
-  /** Skip to next track */
-  next(): void;
-  /** Skip to previous track */
-  previous(): void;
-}
-
-/**
- * Setup/auth actions for the Spotify panel
- */
-export interface SpotifySetupActions {
-  /** Get stored client ID */
-  getClientId(): Promise<string | null>;
-  /** Save client ID and reload */
-  saveClientId(clientId: string): Promise<void>;
-  /** Check if Spotify is enabled (has client ID) */
-  isEnabled(): Promise<boolean>;
-  /** Check if authenticated */
-  isAuthenticated(): Promise<boolean>;
-  /** Get OAuth authorization URL */
-  getAuthUrl(): Promise<string | null>;
-  /** Disconnect and clear tokens */
-  disconnect(): Promise<void>;
-  /** Get current playback state */
-  getPlaybackState(): Promise<SpotifyPlaybackState | null>;
-}
-
-export interface SpotifyUISlotOptions {
-  /** Playback controls */
-  controls: SpotifyPlaybackControls;
-  /** Setup/auth actions */
-  setupActions: SpotifySetupActions;
-  /** Current playback state */
-  playback: SpotifyPlaybackState;
-  /** Whether Spotify has ever been connected in this session */
-  hasConnected?: boolean;
-  /** Connection error message, if any */
-  error?: string | null;
-  /** Optional slot ID (default: "spotify.main") */
-  id?: string;
-  /** Optional slot label (default: "Spotify") */
-  label?: string;
-  /** Optional slot priority (default: 80) */
-  priority?: number;
-}
-
-export interface SpotifyUISlotResult {
-  /** The UI slot definition */
-  slot: ExtensionUISlot;
-  /** The slot state store (for updating state) */
-  stateStore: MutableSlotStateStore;
-}
 
 // =============================================================================
 // Helpers
@@ -288,7 +224,7 @@ function SpotifyPanelComponent({
             .
           </p>
           <p style={styles.hint}>
-            Create an app and add <code style={styles.code}>ragdoll://spotify-callback</code> as a Redirect URI.
+            Create an app and add <code style={styles.code}>lumen://spotify-callback</code> as a Redirect URI.
           </p>
 
           <div style={styles.inputGroup}>
@@ -328,7 +264,7 @@ function SpotifyPanelComponent({
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Connect Spotify</h3>
           <p style={styles.description}>
-            Click below to authorize Ragdoll to access your Spotify account.
+            Click below to authorize Lumen to access your Spotify account.
           </p>
 
           {error && <p style={styles.error}>{error}</p>}
@@ -418,71 +354,6 @@ function SpotifyPanelComponent({
 
     </div>
   );
-}
-
-// =============================================================================
-// UI Slot Factory
-// =============================================================================
-
-/**
- * Create a UI slot for the Spotify extension.
- *
- * Shows different UI based on connection state:
- * - Setup form when not configured
- * - Connect button when not authenticated
- * - Playback controls when connected
- */
-export function createSpotifyUISlot(options: SpotifyUISlotOptions): SpotifyUISlotResult {
-  const {
-    controls,
-    setupActions,
-    playback,
-    hasConnected = false,
-    error = null,
-    id = "spotify.main",
-    label = "Spotify",
-    priority = 80,
-  } = options;
-
-  const hasTrack = playback.track !== null;
-
-  // Badge shows play state indicator
-  let badge: number | string | null = null;
-  if (hasTrack) {
-    badge = playback.isPlaying ? "▶" : "❚❚";
-  }
-
-  // Visibility: always show until connected, then only when playing
-  const visible = !hasConnected || hasTrack;
-
-  // Create mutable state store
-  const stateStore = createSlotState({
-    badge,
-    visible,
-    panel: {
-      type: "custom" as const,
-      title: "Spotify",
-      component: ({ onClose }) => (
-        <SpotifyPanelComponent
-          onClose={onClose}
-          controls={controls}
-          setupActions={setupActions}
-          playback={playback}
-          error={error}
-        />
-      ),
-    },
-  });
-
-  const slot: ExtensionUISlot = {
-    id,
-    label,
-    icon: "music",
-    priority,
-    state: stateStore,
-  };
-
-  return { slot, stateStore };
 }
 
 // =============================================================================
@@ -675,9 +546,3 @@ const styles: Record<string, CSSProperties> = {
 // =============================================================================
 
 export { SpotifyPanelComponent };
-
-// =============================================================================
-// Convenience Export
-// =============================================================================
-
-export { createSpotifyUISlot as createSpotifySlot };

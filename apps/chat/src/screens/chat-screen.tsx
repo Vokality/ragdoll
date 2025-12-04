@@ -284,19 +284,21 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     spotifySlotRef.current = { slot, stateStore };
   }
 
+  const playbackRef = useRef(spotifyState.playback);
   const spotifyTrackId = spotifyState.playback.track?.id ?? null;
   const spotifyIsPlaying = spotifyState.playback.isPlaying;
   const spotifyHasTrack = spotifyTrackId !== null;
-  const playbackSnapshot = useMemo(
-    () => spotifyState.playback,
-    [spotifyTrackId, spotifyIsPlaying],
-  );
+
+  useEffect(() => {
+    playbackRef.current = spotifyState.playback;
+  }, [spotifyState.playback]);
 
   // Update slot state only when connection or track/play state meaningfully changes
   useEffect(() => {
     if (!spotifySlotRef.current) return;
 
     const { stateStore } = spotifySlotRef.current;
+    const playbackSnapshot = playbackRef.current;
 
     // Badge shows play state indicator
     const badge = spotifyHasTrack ? (spotifyIsPlaying ? "▶" : "❚❚") : null;
@@ -328,7 +330,6 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     spotifyState.error,
     spotifyControls,
     spotifySetupActions,
-    playbackSnapshot,
   ]);
 
   const spotifySlot = spotifySlotRef.current!.slot;

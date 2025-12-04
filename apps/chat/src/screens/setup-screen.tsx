@@ -100,9 +100,9 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
       {/* Setup card */}
       <div style={styles.card} className="card animate-slideUp">
-        <h1 style={styles.title}>Welcome to Ragdoll Chat</h1>
+        <h1 style={styles.title}>Meet Lumen</h1>
         <p style={styles.subtitle}>
-          Enter your OpenAI API key to get started.
+          Your expressive assistant. Enter your OpenAI API key to get started.
         </p>
 
         <ApiKeyInput

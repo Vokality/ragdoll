@@ -46,7 +46,7 @@ const INITIAL_STATE: SpotifyState = {
 export interface SpotifyManagerConfig {
   /** Spotify Client ID (from Spotify Developer Dashboard) */
   clientId: string;
-  /** Redirect URI for OAuth (e.g., "ragdoll://spotify-callback") */
+  /** Redirect URI for OAuth (e.g., "lumen://spotify-callback") */
   redirectUri: string;
   /** Scopes to request (defaults to playback + user read) */
   scopes?: string[];

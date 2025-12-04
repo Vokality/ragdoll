@@ -172,7 +172,7 @@ async function createWindow(): Promise<void> {
     // Spotify config - only enabled if client ID is configured
     spotify: spotifyClientId ? {
       clientId: spotifyClientId,
-      redirectUri: "ragdoll://spotify-callback",
+      redirectUri: "lumen://spotify-callback",
       initialTokens: spotifyTokens,
     } : undefined,
   });
@@ -217,11 +217,12 @@ async function createWindow(): Promise<void> {
 if (process.defaultApp) {
   // Development: register with path to electron
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("ragdoll", process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient("lumen", process.execPath, [path.resolve(process.argv[1])]);
   }
+
 } else {
   // Production
-  app.setAsDefaultProtocolClient("ragdoll");
+  app.setAsDefaultProtocolClient("lumen");
 }
 
 // Handle protocol URLs on macOS
@@ -242,7 +243,7 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
     // Handle the protocol URL from command line (Windows/Linux)
-    const url = commandLine.find((arg) => arg.startsWith("ragdoll://"));
+    const url = commandLine.find((arg) => arg.startsWith("lumen://"));
     if (url) {
       await handleProtocolUrl(url);
     }
@@ -250,7 +251,7 @@ if (!gotTheLock) {
 }
 
 /**
- * Handle ragdoll:// protocol URLs
+ * Handle lumen:// protocol URLs
  */
 async function handleProtocolUrl(url: string): Promise<void> {
   console.log("[Protocol] Received URL:", url);
@@ -258,7 +259,7 @@ async function handleProtocolUrl(url: string): Promise<void> {
   try {
     const parsed = new URL(url);
 
-    // Handle Spotify OAuth callback: ragdoll://spotify-callback?code=...
+    // Handle Spotify OAuth callback: lumen://spotify-callback?code=...
     if (parsed.hostname === "spotify-callback" || parsed.pathname === "//spotify-callback") {
       const code = parsed.searchParams.get("code");
       const error = parsed.searchParams.get("error");

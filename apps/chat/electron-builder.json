@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.vokality.ragdoll-chat",
-  "productName": "Ragdoll Chat",
+  "appId": "com.vokality.lumen",
+  "productName": "Lumen",
   "electronVersion": "33.0.0",
   "directories": {
     "output": "release"
@@ -20,14 +20,17 @@
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
-    "darkModeSupport": true
+    "darkModeSupport": true,
+    "icon": "assets/icons/lumen.icns"
   },
   "win": {
-    "target": ["nsis", "portable"]
+    "target": ["nsis", "portable"],
+    "icon": "assets/icons/lumen.ico"
   },
   "linux": {
     "target": ["AppImage", "deb"],
-    "category": "Utility"
+    "category": "Utility",
+    "icon": "assets/icons/lumen-512.png"
   },
   "nsis": {
     "oneClick": false,

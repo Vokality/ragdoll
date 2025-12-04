@@ -44,7 +44,7 @@ log "Preparing production-only dependencies with bun"
 
   cat > package.json <<'EOF'
 {
-  "name": "ragdoll-chat",
+  "name": "lumen",
   "version": "0.1.0",
   "type": "module",
   "dependencies": {

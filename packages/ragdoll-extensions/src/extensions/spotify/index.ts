@@ -303,7 +303,7 @@ export interface StatefulSpotifyOptions {
   id?: string;
   /** Spotify Client ID */
   clientId: string;
-  /** Redirect URI for OAuth (e.g., "ragdoll://spotify-callback") */
+  /** Redirect URI for OAuth (e.g., "lumen://spotify-callback") */
   redirectUri: string;
   /** Callback when state changes */
   onStateChange?: SpotifyEventCallback;
@@ -319,7 +319,7 @@ export interface StatefulSpotifyOptions {
  * ```ts
  * const { extension, manager } = createStatefulSpotifyExtension({
  *   clientId: "your-spotify-client-id",
- *   redirectUri: "ragdoll://spotify-callback",
+ *   redirectUri: "lumen://spotify-callback",
  *   onStateChange: (event) => {
  *     mainWindow?.webContents.send("spotify:state-changed", event.state);
  *   },

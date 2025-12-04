@@ -1,5 +1,5 @@
 {
-  "name": "ragdoll-chat",
+  "name": "lumen",
   "version": "0.1.2",
   "private": true,
   "author": "lemuel@vokality.com",
@@ -13,6 +13,7 @@
     "url": "https://github.com/vokality/ragdoll/issues"
   },
   "keywords": [
+    "lumen",
     "ragdoll",
     "chat",
     "ai",
@@ -21,7 +22,7 @@
     "character",
     "gpt"
   ],
-  "description": "Chat with an animated AI character powered by GPT",
+  "description": "Lumen is an expressive GPT assistant powered by the Ragdoll framework",
   "main": "dist/electron/main.js",
   "type": "module",
   "scripts": {
