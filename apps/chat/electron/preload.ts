@@ -1,6 +1,4 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { TaskState } from "@vokality/ragdoll-extension-tasks";
-import type { PomodoroState } from "@vokality/ragdoll-extension-pomodoro";
 
 // Types for extension management
 export interface LoadResult {
@@ -20,7 +18,8 @@ export interface LoadedPackage {
   extensionId: string;
 }
 
-export interface BuiltInExtensionInfo {
+export interface ExtensionInfo {
+  packageName: string;
   id: string;
   name: string;
   description: string;
@@ -36,62 +35,16 @@ export interface ToolDefinition {
   };
 }
 
-export interface TaskEvent {
-  type: string;
-  task?: unknown;
-  taskId?: string;
-  state: TaskState;
-  timestamp: number;
+export interface StateChannelInfo {
+  extensionId: string;
+  channelId: string;
+  state: unknown;
 }
 
-export interface PomodoroEvent {
-  type: string;
-  state: PomodoroState;
-  timestamp: number;
-}
-
-export interface PomodoroStateSnapshot {
-  phase: string;
-  remainingSeconds: number;
-  isBreak: boolean;
-  sessionsCompleted: number;
-}
-
-// Spotify types (local definitions to avoid importing from Node-only module)
-export interface SpotifyPlaybackState {
-  isPlaying: boolean;
-  track: {
-    id: string;
-    name: string;
-    uri: string;
-    durationMs: number;
-    artists: Array<{ id: string; name: string; uri: string }>;
-    album: {
-      id: string;
-      name: string;
-      uri: string;
-      images: Array<{ url: string; height: number | null; width: number | null }>;
-    };
-    artworkUrl: string | null;
-  } | null;
-  progressMs: number;
-  device: {
-    id: string;
-    name: string;
-    type: string;
-    isActive: boolean;
-    volumePercent: number;
-  } | null;
-  shuffleState: boolean;
-  repeatState: "off" | "track" | "context";
-  timestamp: number;
-}
-
-export interface SpotifyTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  scope: string;
+export interface StateChannelChangeEvent {
+  extensionId: string;
+  channelId: string;
+  state: unknown;
 }
 
 // Types for the API
@@ -122,13 +75,10 @@ export interface ElectronAPI {
   getSettings: () => Promise<{ theme?: string; variant?: string }>;
   setSettings: (settings: { theme?: string; variant?: string }) => Promise<{ success: boolean }>;
 
-  // Tasks
-  getTaskState: () => Promise<TaskState>;
-
   // Extensions
   getExtensionStats: () => Promise<ExtensionStats>;
   getExtensionTools: () => Promise<ToolDefinition[]>;
-  getAvailableExtensions: () => Promise<BuiltInExtensionInfo[]>;
+  getAvailableExtensions: () => Promise<ExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
   discoverPackages: () => Promise<string[]>;
@@ -142,26 +92,10 @@ export interface ElectronAPI {
     args?: Record<string, unknown>
   ) => Promise<{ success: boolean; error?: string }>;
 
-  // State sync events
-  onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
-  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
-  getPomodoroState: () => Promise<PomodoroStateSnapshot | null>;
-
-  // Spotify
-  spotifyIsEnabled: () => Promise<boolean>;
-  spotifyIsAuthenticated: () => Promise<boolean>;
-  spotifyGetAuthUrl: (state?: string) => Promise<string | null>;
-  spotifyExchangeCode: (code: string) => Promise<{ success: boolean; tokens?: SpotifyTokens; error?: string }>;
-  spotifyGetAccessToken: () => Promise<string | null>;
-  spotifyGetPlaybackState: () => Promise<SpotifyPlaybackState | null>;
-  spotifyUpdatePlaybackState: (playback: SpotifyPlaybackState) => Promise<{ success: boolean }>;
-  spotifyDisconnect: () => Promise<{ success: boolean }>;
-  spotifyGetClientId: () => Promise<string | null>;
-  spotifySetClientId: (clientId: string) => Promise<{ success: boolean }>;
-  spotifyPlay: () => Promise<{ success: boolean; error?: string }>;
-  spotifyPause: () => Promise<{ success: boolean; error?: string }>;
-  spotifyNext: () => Promise<{ success: boolean; error?: string }>;
-  spotifyPrevious: () => Promise<{ success: boolean; error?: string }>;
+  // Extension State Channels (generic)
+  getAllStateChannels: () => Promise<StateChannelInfo[]>;
+  getStateChannel: (channelId: string) => Promise<unknown | null>;
+  onStateChannelChanged: (callback: (event: StateChannelChangeEvent) => void) => () => void;
 
   // Platform
   platform: string;
@@ -213,9 +147,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setSettings: (settings: { theme?: string; variant?: string }) =>
     ipcRenderer.invoke("settings:set", settings),
 
-  // Tasks
-  getTaskState: () => ipcRenderer.invoke("tasks:get-state"),
-
   // Extensions
   getExtensionStats: () => ipcRenderer.invoke("extensions:get-stats"),
   getExtensionTools: () => ipcRenderer.invoke("extensions:get-tools"),
@@ -235,39 +166,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   executeExtensionTool: (toolName: string, args?: Record<string, unknown>) =>
     ipcRenderer.invoke("extensions:execute-tool", toolName, args ?? {}),
 
-  // State sync events
-  onTaskStateChanged: (callback: (event: TaskEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, event: TaskEvent) => callback(event);
-    ipcRenderer.on("tasks:state-changed", handler);
+  // Extension State Channels (generic)
+  getAllStateChannels: () => ipcRenderer.invoke("extensions:get-all-state-channels"),
+  getStateChannel: (channelId: string) => ipcRenderer.invoke("extensions:get-state-channel", channelId),
+  onStateChannelChanged: (callback: (event: StateChannelChangeEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: StateChannelChangeEvent) => callback(event);
+    ipcRenderer.on("extension-state:changed", handler);
     return () => {
-      ipcRenderer.removeListener("tasks:state-changed", handler);
+      ipcRenderer.removeListener("extension-state:changed", handler);
     };
   },
-  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, event: PomodoroEvent) => callback(event);
-    ipcRenderer.on("pomodoro:state-changed", handler);
-    return () => {
-      ipcRenderer.removeListener("pomodoro:state-changed", handler);
-    };
-  },
-  getPomodoroState: () => ipcRenderer.invoke("pomodoro:get-state"),
-
-  // Spotify
-  spotifyIsEnabled: () => ipcRenderer.invoke("spotify:is-enabled"),
-  spotifyIsAuthenticated: () => ipcRenderer.invoke("spotify:is-authenticated"),
-  spotifyGetAuthUrl: (state?: string) => ipcRenderer.invoke("spotify:get-auth-url", state),
-  spotifyExchangeCode: (code: string) => ipcRenderer.invoke("spotify:exchange-code", code),
-  spotifyGetAccessToken: () => ipcRenderer.invoke("spotify:get-access-token"),
-  spotifyGetPlaybackState: () => ipcRenderer.invoke("spotify:get-playback-state"),
-  spotifyUpdatePlaybackState: (playback: SpotifyPlaybackState) =>
-    ipcRenderer.invoke("spotify:update-playback-state", playback),
-  spotifyDisconnect: () => ipcRenderer.invoke("spotify:disconnect"),
-  spotifyGetClientId: () => ipcRenderer.invoke("spotify:get-client-id"),
-  spotifySetClientId: (clientId: string) => ipcRenderer.invoke("spotify:set-client-id", clientId),
-  spotifyPlay: () => ipcRenderer.invoke("spotify:play"),
-  spotifyPause: () => ipcRenderer.invoke("spotify:pause"),
-  spotifyNext: () => ipcRenderer.invoke("spotify:next"),
-  spotifyPrevious: () => ipcRenderer.invoke("spotify:previous"),
 
   // Platform
   platform: process.platform,

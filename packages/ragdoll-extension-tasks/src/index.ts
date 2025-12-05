@@ -539,5 +539,26 @@ export async function createRuntime(
 }
 
 export { createRuntime as createTaskRuntime };
-export { createTaskUISlot, type TaskUISlotOptions } from "./ui.js";
-export default createRuntime;
+// NOTE: UI exports removed to avoid pulling React into main process
+// export { createTaskUISlot, type TaskUISlotOptions } from "./ui.js";
+
+import {
+  createExtension,
+  type RagdollExtension,
+} from "@vokality/ragdoll-extensions/core";
+
+/**
+ * Create the tasks extension.
+ */
+function createTasksExtension(config?: Record<string, unknown>): RagdollExtension {
+  return createExtension({
+    id: DEFAULT_EXTENSION_ID,
+    name: "Task Manager",
+    version: "0.1.0",
+    description: "Task tracking and management tools",
+    createRuntime: (host, _context) => createRuntime(config as TaskRuntimeOptions | undefined, host),
+  });
+}
+
+export { createTasksExtension as createExtension };
+export default createTasksExtension;

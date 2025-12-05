@@ -1,34 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import { z } from "zod";
-import type { Task, TaskState } from "@vokality/ragdoll-extension-tasks";
-
-const TASK_STATUS_VALUES = ["todo", "in_progress", "blocked", "done"] as const;
-
-const taskSchema: z.ZodType<Task> = z.object({
-  id: z.string(),
-  text: z.string(),
-  status: z.enum(TASK_STATUS_VALUES),
-  createdAt: z.number().int().nonnegative(),
-  blockedReason: z.string().optional(),
-});
-
-export const taskStateSchema: z.ZodType<TaskState> = z.object({
-  tasks: z.array(taskSchema),
-  activeTaskId: z.string().nullable(),
-  isExpanded: z.boolean().default(false),
-});
 
 export const conversationMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
-});
-
-export const spotifyTokensSchema = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string(),
-  expiresAt: z.number(),
-  scope: z.string(),
 });
 
 export const storageSchema = z
@@ -43,9 +19,6 @@ export const storageSchema = z
       })
       .optional(),
     conversation: z.array(conversationMessageSchema).optional(),
-    tasks: taskStateSchema.optional(),
-    spotifyClientId: z.string().optional(),
-    spotifyTokens: spotifyTokensSchema.optional(),
   })
   .passthrough();
 
@@ -56,22 +29,6 @@ export interface StorageRepository {
   read(): StorageData;
   write(data: StorageData): void;
   update(mutator: (draft: StorageData) => void): StorageData;
-  getTaskState(): TaskState;
-  setTaskState(state: TaskState): void;
-}
-
-export const DEFAULT_TASK_STATE: TaskState = {
-  tasks: [],
-  activeTaskId: null,
-  isExpanded: false,
-};
-
-export function cloneTaskState(state: TaskState): TaskState {
-  return {
-    tasks: state.tasks.map((task: Task) => ({ ...task })),
-    activeTaskId: state.activeTaskId,
-    isExpanded: state.isExpanded,
-  };
 }
 
 export function createStorageRepository(userDataPath: string): StorageRepository {
@@ -110,23 +67,10 @@ export function createStorageRepository(userDataPath: string): StorageRepository
     return draft;
   };
 
-  const getTaskState = (): TaskState => {
-    const storage = read();
-    return storage.tasks ? cloneTaskState(storage.tasks) : cloneTaskState(DEFAULT_TASK_STATE);
-  };
-
-  const setTaskState = (state: TaskState): void => {
-    update((draft) => {
-      draft.tasks = cloneTaskState(state);
-    });
-  };
-
   return {
     filePath: storageFile,
     read,
     write,
     update,
-    getTaskState,
-    setTaskState,
   };
 }

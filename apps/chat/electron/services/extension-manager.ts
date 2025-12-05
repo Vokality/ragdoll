@@ -4,15 +4,16 @@
  * Responsibilities:
  * - Manages the ExtensionRegistry lifecycle
  * - Provides ExtensionHostEnvironment to extensions
- * - Registers built-in extensions (character, tasks, pomodoro, spotify)
+ * - Discovers and loads extension packages dynamically
  * - Syncs state changes to the renderer via IPC
  * - Provides tool definitions to the OpenAI service
  */
 
+import * as path from "path";
+import * as fs from "fs";
 import {
   createRegistry,
   createLoader,
-  createExtension,
   type ExtensionRegistry,
   type ExtensionLoader,
   type ToolDefinition,
@@ -21,30 +22,8 @@ import {
   type ExtensionHostEnvironment,
   type NotificationRequest,
   type NotificationCallback,
-} from "@vokality/ragdoll-extensions";
-
-import {
-  createCharacterRuntime,
-} from "@vokality/ragdoll-extension-character";
-
-import {
-  createTaskRuntime,
-  type TaskState,
-  type TaskEvent,
-} from "@vokality/ragdoll-extension-tasks";
-
-import {
-  createPomodoroRuntime,
-  type PomodoroEvent,
-} from "@vokality/ragdoll-extension-pomodoro";
-
-import {
-  createSpotifyManager,
-  type SpotifyManager,
-  type SpotifyEvent,
-  type SpotifyTokens,
-  type SpotifyPlaybackState,
-} from "@vokality/ragdoll-extension-spotify";
+  type ExtensionStateChannel,
+} from "@vokality/ragdoll-extensions/core";
 
 // =============================================================================
 // Types
@@ -60,97 +39,22 @@ export type ToolExecutionCallback = (
 ) => void;
 
 /**
- * Callback for task state changes
+ * Generic callback for extension state changes
  */
-export type TaskStateCallback = (event: TaskEvent) => void;
+export type StateChangeCallback = (
+  extensionId: string,
+  channelId: string,
+  state: unknown
+) => void;
 
 /**
- * Callback for pomodoro state changes
+ * Extension metadata from package.json
  */
-export type PomodoroStateCallback = (event: PomodoroEvent) => void;
-
-/**
- * Callback for Spotify state changes
- */
-export type SpotifyStateCallback = (event: SpotifyEvent) => void;
-
-/**
- * Spotify configuration
- */
-export interface SpotifyConfig {
-  clientId: string;
-  redirectUri: string;
-  /** Initial tokens if already authenticated */
-  initialTokens?: SpotifyTokens;
-}
-
-/**
- * Configuration for the extension manager
- */
-export interface ExtensionManagerConfig {
-  /** Callback invoked when character tools are executed (for forwarding to renderer) */
-  onToolExecution?: ToolExecutionCallback;
-
-  /** Callback when task state changes (for persistence/sync to renderer) */
-  onTaskStateChange?: TaskStateCallback;
-
-  /** Callback when pomodoro state changes (for sync to renderer) */
-  onPomodoroStateChange?: PomodoroStateCallback;
-
-  /** Callback when Spotify state changes (for sync to renderer) */
-  onSpotifyStateChange?: SpotifyStateCallback;
-
-  /** Callback to show system notifications (provided by host environment) */
-  onNotification?: NotificationCallback;
-
-  /** Initial task state to load */
-  initialTaskState?: TaskState;
-
-  /** Spotify configuration (optional - Spotify extension only enabled if provided) */
-  spotify?: SpotifyConfig;
-
-  /**
-   * Paths to search for node_modules directories containing extensions.
-   * Used by the extension loader for package discovery.
-   */
-  searchPaths?: string[];
-
-  /**
-   * Whether to auto-discover and load extensions from searchPaths on initialize.
-   * Defaults to false.
-   */
-  autoDiscover?: boolean;
-
-  /**
-   * IDs of extensions to disable.
-   * Disabled extensions will not be registered and will not contribute tools or UI.
-   * Valid IDs: "character", "pomodoro", "tasks", "spotify"
-   */
-  disabledExtensions?: string[];
-
-  /**
-   * User data path for extension storage
-   */
-  userDataPath: string;
-}
-
-/** Built-in extension IDs */
-export const BUILT_IN_EXTENSION_IDS = [
-  "character",
-  "pomodoro",
-  "tasks",
-  "spotify",
-] as const;
-
-export type BuiltInExtensionId = (typeof BUILT_IN_EXTENSION_IDS)[number];
-
-/**
- * Metadata for a built-in extension.
- * Used by the UI to display extension toggles in settings.
- */
-export interface BuiltInExtensionInfo {
+export interface ExtensionInfo {
+  /** Package name (e.g., @vokality/ragdoll-extension-tasks) */
+  packageName: string;
   /** Unique identifier */
-  id: BuiltInExtensionId;
+  id: string;
   /** Human-readable name */
   name: string;
   /** Short description of what the extension does */
@@ -160,35 +64,47 @@ export interface BuiltInExtensionInfo {
 }
 
 /**
- * Metadata for all built-in extensions.
- * Single source of truth for extension information displayed in settings.
+ * Configuration for the extension manager
  */
-export const BUILT_IN_EXTENSIONS: readonly BuiltInExtensionInfo[] = [
-  {
-    id: "character",
-    name: "Character",
-    description: "Facial expressions and animations",
-    canDisable: false, // Core functionality, always enabled
-  },
-  {
-    id: "pomodoro",
-    name: "Focus Timer",
-    description: "Pomodoro-style work sessions",
-    canDisable: true,
-  },
-  {
-    id: "tasks",
-    name: "Tasks",
-    description: "Task tracking and management",
-    canDisable: true,
-  },
-  {
-    id: "spotify",
-    name: "Spotify",
-    description: "Music playback control",
-    canDisable: true,
-  },
-] as const;
+export interface ExtensionManagerConfig {
+  /** Callback invoked when tools are executed (for forwarding to renderer) */
+  onToolExecution?: ToolExecutionCallback;
+
+  /** Generic callback when any extension state channel changes (for sync to renderer) */
+  onStateChange?: StateChangeCallback;
+
+  /** Callback to show system notifications (provided by host environment) */
+  onNotification?: NotificationCallback;
+
+  /**
+   * Paths to search for node_modules directories containing extensions.
+   * Used by the extension loader for package discovery.
+   */
+  searchPaths: string[];
+
+  /**
+   * Whether to auto-discover and load extensions from searchPaths on initialize.
+   * Defaults to true.
+   */
+  autoDiscover?: boolean;
+
+  /**
+   * IDs of extensions to disable.
+   * Disabled extensions will not be loaded.
+   */
+  disabledExtensions?: string[];
+
+  /**
+   * User data path for extension storage
+   */
+  userDataPath: string;
+
+  /**
+   * Extension-specific configuration passed to extensions on load.
+   * Keyed by extension ID.
+   */
+  extensionConfigs?: Record<string, Record<string, unknown>>;
+}
 
 // =============================================================================
 // Extension Manager
@@ -202,9 +118,9 @@ export class ExtensionManager {
   private loader: ExtensionLoader;
   private config: ExtensionManagerConfig;
   private initialized = false;
-  private spotifyManager: SpotifyManager | null = null;
   private stateChannelUnsubscribers: Array<() => void> = [];
   private storageMap = new Map<string, Map<string, unknown>>();
+  private loadedExtensions: ExtensionInfo[] = [];
 
   constructor(config: ExtensionManagerConfig) {
     this.config = config;
@@ -212,7 +128,7 @@ export class ExtensionManager {
 
     const hostEnv = this.createHostEnvironment();
     this.loader = createLoader(this.registry, {
-      searchPaths: config.searchPaths ?? [],
+      searchPaths: config.searchPaths,
       continueOnError: true,
       hostEnvironment: hostEnv,
     });
@@ -281,6 +197,9 @@ export class ExtensionManager {
       notifications,
       logger,
       ipc,
+      getDataPath: (extensionId: string) => {
+        return path.join(this.config.userDataPath, "extensions", extensionId);
+      },
       schedulePersistence: async (extensionId: string, reason: string) => {
         logger.debug?.(`Persistence scheduled for ${extensionId}: ${reason}`);
       },
@@ -288,125 +207,91 @@ export class ExtensionManager {
   }
 
   /**
-   * Initialize the extension manager and register built-in extensions.
+   * Initialize the extension manager and discover/load extensions.
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
 
-    // Register built-in extensions
-    await this.registerBuiltInExtensions();
+    // Discover and load extension packages
+    const autoDiscover = this.config.autoDiscover ?? true;
+    if (autoDiscover && this.config.searchPaths.length > 0) {
+      const results = await this.discoverAndLoadPackages();
+
+      // Track loaded extensions
+      for (const result of results) {
+        if (result.success && result.extensionId) {
+          // Get extension metadata from package
+          const packageData = this.getPackageMetadata(result.packageName);
+          if (packageData) {
+            this.loadedExtensions.push(packageData);
+          }
+        }
+      }
+    }
 
     // Subscribe to state channels
     this.subscribeToStateChannels();
-
-    // Auto-discover and load packages if configured
-    if (this.config.autoDiscover && this.config.searchPaths?.length) {
-      await this.discoverAndLoadPackages();
-    }
 
     this.initialized = true;
   }
 
   /**
+   * Get extension metadata from a loaded package.
+   */
+  private getPackageMetadata(packageName: string): ExtensionInfo | null {
+    try {
+      // Find package.json in search paths
+      for (const searchPath of this.config.searchPaths) {
+        const packageJsonPath = path.join(searchPath, packageName, "package.json");
+        if (fs.existsSync(packageJsonPath)) {
+          const packageJsonContent = fs.readFileSync(packageJsonPath, "utf-8");
+          const packageJson = JSON.parse(packageJsonContent);
+          const metadata = packageJson.ragdollExtension;
+
+          if (!metadata) return null;
+
+          return {
+            packageName,
+            id: metadata.id,
+            name: metadata.name,
+            description: metadata.description,
+            canDisable: metadata.canDisable ?? true,
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.warn(`[ExtensionManager] Failed to load metadata for ${packageName}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Check if an extension is disabled.
    */
-  private isExtensionDisabled(id: BuiltInExtensionId): boolean {
-    return this.config.disabledExtensions?.includes(id) ?? false;
+  private isExtensionDisabled(extensionId: string): boolean {
+    return this.config.disabledExtensions?.includes(extensionId) ?? false;
   }
 
   /**
    * Subscribe to state channels from registered extensions.
+   * Generically forwards all state changes to the renderer via the onStateChange callback.
    */
   private subscribeToStateChannels(): void {
     const channels = this.registry.getStateChannels();
 
     for (const { extensionId, channel } of channels) {
-      if (extensionId === "tasks" && channel.id === "tasks:state") {
-        const unsubscribe = channel.subscribe((state) => {
-          const taskEvent: TaskEvent = {
-            type: "state:changed",
-            state: state as TaskState,
-            timestamp: Date.now(),
-          };
-          this.config.onTaskStateChange?.(taskEvent);
-        });
-        this.stateChannelUnsubscribers.push(unsubscribe);
-      } else if (extensionId === "pomodoro" && channel.id === "pomodoro:state") {
-        const unsubscribe = channel.subscribe((state) => {
-          const pomodoroEvent: PomodoroEvent = {
-            type: "state:changed",
-            state: state as any,
-            timestamp: Date.now(),
-          };
-          this.config.onPomodoroStateChange?.(pomodoroEvent);
-        });
-        this.stateChannelUnsubscribers.push(unsubscribe);
-      }
+      const unsubscribe = channel.subscribe((state) => {
+        // Forward state change to renderer via generic callback
+        this.config.onStateChange?.(extensionId, channel.id, state);
+      });
+      this.stateChannelUnsubscribers.push(unsubscribe);
     }
   }
 
-  /**
-   * Register the built-in extensions.
-   */
-  private async registerBuiltInExtensions(): Promise<void> {
-    const host = this.createHostEnvironment();
-
-    // Character extension - forwards to renderer for UI updates
-    if (!this.isExtensionDisabled("character")) {
-      const characterExtension = createExtension({
-        id: "character",
-        name: "Character",
-        version: "1.1.0",
-        description: "Facial expressions and animations",
-        requiredCapabilities: ["ipc"],
-        createRuntime: (h) => createCharacterRuntime(undefined, h),
-      });
-      await this.registry.register(characterExtension, { host });
-    }
-
-    // Pomodoro extension
-    if (!this.isExtensionDisabled("pomodoro")) {
-      const pomodoroExtension = createExtension({
-        id: "pomodoro",
-        name: "Pomodoro Timer",
-        version: "1.1.0",
-        description: "Pomodoro-style focus sessions",
-        requiredCapabilities: ["notifications"],
-        createRuntime: (h) => createPomodoroRuntime({ sessionDuration: 30, breakDuration: 5 }, h),
-      });
-      await this.registry.register(pomodoroExtension, { host });
-    }
-
-    // Tasks extension
-    if (!this.isExtensionDisabled("tasks")) {
-      const taskExtension = createExtension({
-        id: "tasks",
-        name: "Task Manager",
-        version: "1.1.0",
-        description: "Task tracking and management",
-        requiredCapabilities: [],
-        createRuntime: (h) => createTaskRuntime({ initialState: this.config.initialTaskState }, h),
-      });
-      await this.registry.register(taskExtension, { host });
-    }
-
-    // Spotify extension - optional, only if configured and not disabled
-    if (this.config.spotify && !this.isExtensionDisabled("spotify")) {
-      this.spotifyManager = createSpotifyManager({
-        clientId: this.config.spotify.clientId,
-        redirectUri: this.config.spotify.redirectUri,
-        initialTokens: this.config.spotify.initialTokens,
-        onStateChange: (event) => {
-          this.config.onSpotifyStateChange?.(event);
-        },
-      });
-
-      // TODO: Update createSpotifyExtension to use new API
-      // For now, Spotify manager is managed manually
-    }
-  }
 
   // ===========================================================================
   // Public API - Tools
@@ -466,10 +351,10 @@ export class ExtensionManager {
   // ===========================================================================
 
   /**
-   * Get metadata for all available built-in extensions.
+   * Get metadata for all loaded extensions.
    */
-  getAvailableExtensions(): readonly BuiltInExtensionInfo[] {
-    return BUILT_IN_EXTENSIONS;
+  getAvailableExtensions(): readonly ExtensionInfo[] {
+    return this.loadedExtensions;
   }
 
   /**
@@ -480,169 +365,44 @@ export class ExtensionManager {
   }
 
   // ===========================================================================
-  // Public API - Task State (via state channel)
+  // Public API - State Channels (generic access)
   // ===========================================================================
 
   /**
-   * Get current task state.
+   * Get all state channels from all extensions.
    */
-  getTaskState(): TaskState | null {
-    const channel = this.registry.getStateChannel("tasks:state");
-    if (!channel) return null;
-    return channel.channel.getState() as TaskState;
+  getAllStateChannels(): Array<{
+    extensionId: string;
+    channelId: string;
+    state: unknown;
+  }> {
+    const channels = this.registry.getStateChannels();
+    return channels.map(({ extensionId, channel }) => ({
+      extensionId,
+      channelId: channel.id,
+      state: channel.getState(),
+    }));
   }
 
   /**
-   * Load task state (e.g., from storage on startup).
+   * Get state from a specific channel.
    */
-  loadTaskState(state: TaskState): void {
-    // Task state is now managed by the extension itself via host storage
-    // This is a compatibility method that doesn't do anything
-    console.warn("[ExtensionManager] loadTaskState is deprecated - tasks extension manages its own state");
-  }
-
-  // ===========================================================================
-  // Public API - Pomodoro State (via state channel)
-  // ===========================================================================
-
-  /**
-   * Get current pomodoro state.
-   */
-  getPomodoroState(): {
-    phase: string;
-    remainingSeconds: number;
-    isBreak: boolean;
-    sessionsCompleted: number;
-  } | null {
-    const channel = this.registry.getStateChannel("pomodoro:state");
-    if (!channel) return null;
-    const state = channel.channel.getState() as any;
-    return {
-      phase: state.state,
-      remainingSeconds: state.remainingTime,
-      isBreak: state.isBreak,
-      sessionsCompleted: state.sessionsCompleted ?? 0,
-    };
-  }
-
-  // ===========================================================================
-  // Public API - Spotify Manager
-  // ===========================================================================
-
-  /**
-   * Get the Spotify manager instance.
-   */
-  getSpotifyManager(): SpotifyManager | null {
-    return this.spotifyManager;
+  getStateChannelState(channelId: string): unknown | null {
+    const entry = this.registry.getStateChannel(channelId);
+    if (!entry) return null;
+    return entry.channel.getState();
   }
 
   /**
-   * Check if Spotify is enabled.
+   * Subscribe to a specific state channel.
    */
-  isSpotifyEnabled(): boolean {
-    return this.spotifyManager !== null;
-  }
-
-  /**
-   * Get Spotify authorization URL for OAuth flow (PKCE).
-   */
-  async getSpotifyAuthUrl(state?: string): Promise<string | null> {
-    if (!this.spotifyManager) return null;
-    return this.spotifyManager.getAuthorizationUrl(state);
-  }
-
-  /**
-   * Exchange authorization code for Spotify tokens.
-   */
-  async exchangeSpotifyCode(code: string): Promise<SpotifyTokens | null> {
-    if (!this.spotifyManager) return null;
-    return this.spotifyManager.exchangeCode(code);
-  }
-
-  /**
-   * Get Spotify access token for Web Playback SDK.
-   */
-  getSpotifyAccessToken(): string | null {
-    return this.spotifyManager?.getAccessToken() ?? null;
-  }
-
-  /**
-   * Get Spotify tokens for persistence.
-   */
-  getSpotifyTokens(): SpotifyTokens | null {
-    return this.spotifyManager?.getTokens() ?? null;
-  }
-
-  /**
-   * Load Spotify tokens (e.g., from storage on startup).
-   */
-  loadSpotifyTokens(tokens: SpotifyTokens): void {
-    this.spotifyManager?.loadTokens(tokens);
-  }
-
-  /**
-   * Check if Spotify is authenticated.
-   */
-  isSpotifyAuthenticated(): boolean {
-    return this.spotifyManager?.isAuthenticated() ?? false;
-  }
-
-  /**
-   * Update Spotify playback state from Web Playback SDK.
-   */
-  updateSpotifyPlaybackState(playback: SpotifyPlaybackState): void {
-    this.spotifyManager?.updatePlaybackState(playback);
-  }
-
-  /**
-   * Fetch current playback state from Spotify REST API.
-   */
-  async getSpotifyPlaybackState(): Promise<SpotifyPlaybackState | null> {
-    if (!this.spotifyManager || !this.spotifyManager.isAuthenticated()) {
-      return null;
-    }
-
-    try {
-      return await this.spotifyManager.getPlaybackState();
-    } catch (error) {
-      console.error("[ExtensionManager] Failed to get playback state:", error);
-      return null;
-    }
-  }
-
-  /**
-   * Disconnect Spotify.
-   */
-  disconnectSpotify(): void {
-    this.spotifyManager?.disconnect();
-  }
-
-  /**
-   * Resume or start Spotify playback.
-   */
-  async spotifyPlay(): Promise<void> {
-    await this.spotifyManager?.play();
-  }
-
-  /**
-   * Pause Spotify playback.
-   */
-  async spotifyPause(): Promise<void> {
-    await this.spotifyManager?.pause();
-  }
-
-  /**
-   * Skip to next track.
-   */
-  async spotifyNext(): Promise<void> {
-    await this.spotifyManager?.skipToNext();
-  }
-
-  /**
-   * Skip to previous track.
-   */
-  async spotifyPrevious(): Promise<void> {
-    await this.spotifyManager?.skipToPrevious();
+  subscribeToStateChannel(
+    channelId: string,
+    callback: (state: unknown) => void
+  ): (() => void) | null {
+    const entry = this.registry.getStateChannel(channelId);
+    if (!entry) return null;
+    return entry.channel.subscribe(callback);
   }
 
   // ===========================================================================
@@ -799,9 +559,27 @@ export class ExtensionManager {
 
   /**
    * Discover and load all extension packages from search paths.
+   * Filters out disabled extensions.
    */
   async discoverAndLoadPackages(): Promise<LoadResult[]> {
-    return this.loader.discoverAndLoad();
+    const packages = await this.loader.discoverPackages();
+    const results: LoadResult[] = [];
+
+    for (const packageName of packages) {
+      // Get metadata to check if disabled
+      const metadata = this.getPackageMetadata(packageName);
+
+      if (metadata && this.isExtensionDisabled(metadata.id)) {
+        continue;
+      }
+
+      // Load the package with extension-specific config if provided
+      const config = this.config.extensionConfigs?.[metadata?.id ?? ""];
+      const result = await this.loader.loadPackage(packageName, config);
+      results.push(result);
+    }
+
+    return results;
   }
 
   /**
@@ -864,8 +642,8 @@ export class ExtensionManager {
       unsubscribe();
     }
     this.stateChannelUnsubscribers = [];
+    this.loadedExtensions = [];
     await this.registry.destroy();
-    this.spotifyManager = null;
     this.initialized = false;
   }
 }

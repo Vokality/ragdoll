@@ -302,5 +302,26 @@ export function createRuntime(
 }
 
 export { createRuntime as createPomodoroRuntime };
-export { createPomodoroUISlot, type PomodoroUISlotOptions } from "./ui.js";
-export default createRuntime;
+// NOTE: UI exports removed to avoid pulling React into main process
+// export { createPomodoroUISlot, type PomodoroUISlotOptions } from "./ui.js";
+
+import {
+  createExtension,
+  type RagdollExtension,
+} from "@vokality/ragdoll-extensions/core";
+
+/**
+ * Create the pomodoro extension.
+ */
+function createPomodoroExtension(config?: Record<string, unknown>): RagdollExtension {
+  return createExtension({
+    id: DEFAULT_EXTENSION_ID,
+    name: "Pomodoro Timer",
+    version: "0.1.0",
+    description: "Pomodoro-style focus sessions and notifications",
+    createRuntime: (host, _context) => createRuntime(config as PomodoroRuntimeOptions | undefined, host),
+  });
+}
+
+export { createPomodoroExtension as createExtension };
+export default createPomodoroExtension;

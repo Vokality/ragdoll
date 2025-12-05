@@ -43,7 +43,15 @@ export type {
   // Extension types
   ExtensionTool,
   ExtensionContext,
+  ExtensionManifest,
+  ExtensionRuntimeContribution,
+  ExtensionServiceDefinition,
+  ExtensionServiceHandler,
+  ExtensionServiceContext,
+  ExtensionStateChannel,
   RagdollExtension,
+  ExtensionCapabilityType,
+  ExtensionContributionMetadata,
 
   // Registry types
   RegistryEventType,
@@ -54,7 +62,15 @@ export type {
   // Factory types
   ExtensionConfig,
 
-  // Notification types
+  // Host environment types
+  ExtensionHostEnvironment,
+  ExtensionHostCapability,
+  HostStorageCapability,
+  HostLoggerCapability,
+  HostTimersCapability,
+  HostSchedulerCapability,
+  HostIpcBridge,
+  HostScheduleOptions,
   NotificationRequest,
   NotificationCallback,
 } from "./types.js";

@@ -8,12 +8,8 @@ import {
 } from "electron";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import type { TaskState } from "@vokality/ragdoll-extension-tasks";
-import { getExtensionManager, BUILT_IN_EXTENSIONS, type ExtensionManager } from "./services/extension-manager.js";
-import {
-  createStorageRepository,
-  cloneTaskState,
-} from "./infrastructure/storage-repository.js";
+import { getExtensionManager, type ExtensionManager } from "./services/extension-manager.js";
+import { createStorageRepository } from "./infrastructure/storage-repository.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,15 +31,20 @@ let mainWindow: BrowserWindow | null = null;
 let extensionManager: ExtensionManager | null = null;
 
 async function createWindow(): Promise<void> {
-  const initialTaskState = storageRepo.getTaskState();
   const storage = storageRepo.read();
-  const spotifyClientId = storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID;
-  const spotifyTokens = storage.spotifyTokens;
-
   const disabledExtensions = storage.settings?.disabledExtensions ?? [];
+
+  // Extension search paths (workspace packages)
+  const workspaceRoot = path.resolve(__dirname, "../../../..");
+  const searchPaths = [
+    path.join(workspaceRoot, "node_modules"),
+    path.join(workspaceRoot, "packages"),
+  ];
+
   extensionManager = getExtensionManager({
     userDataPath: USER_DATA_PATH,
-    initialTaskState,
+    searchPaths,
+    autoDiscover: true,
     disabledExtensions,
     onToolExecution: (name, args) => {
       logExtensions("Tool executed", { name, args });
@@ -51,37 +52,15 @@ async function createWindow(): Promise<void> {
         mainWindow.webContents.send("chat:function-call", name, args);
       }
     },
-    onTaskStateChange: (event) => {
-      logExtensions("Task state event", {
-        type: event.type,
-        taskCount: event.state.tasks?.length ?? 0,
-      });
-      storageRepo.update((draft) => {
-        draft.tasks = cloneTaskState(event.state);
-      });
-
+    onStateChange: (extensionId, channelId, state) => {
+      logExtensions("State change", { extensionId, channelId });
+      // Forward to renderer via generic IPC channel
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("tasks:state-changed", event);
-      }
-    },
-    onPomodoroStateChange: (event) => {
-      logExtensions("Pomodoro state event", {
-        type: event.type,
-        phase: event.state.phase,
-        remainingMs: event.state.remainingMs,
-      });
-      // Notify renderer of pomodoro state change
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("pomodoro:state-changed", event);
-      }
-    },
-    onSpotifyStateChange: (event) => {
-      logExtensions("Spotify state event", {
-        type: event.type,
-      });
-      // Notify renderer of Spotify state change
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("spotify:state-changed", event);
+        mainWindow.webContents.send("extension-state:changed", {
+          extensionId,
+          channelId,
+          state,
+        });
       }
     },
     onNotification: (notification) => {
@@ -94,14 +73,6 @@ async function createWindow(): Promise<void> {
         }).show();
       }
     },
-    // Spotify config - only enabled if client ID is configured
-    spotify: spotifyClientId
-      ? {
-          clientId: spotifyClientId,
-          redirectUri: "lumen://spotify-callback",
-          initialTokens: spotifyTokens,
-        }
-      : undefined,
   });
   await extensionManager.initialize();
   logExtensions("Extension manager initialized", extensionManager.getStats());
@@ -141,89 +112,18 @@ async function createWindow(): Promise<void> {
   });
 }
 
-// Register custom protocol for OAuth callbacks
-if (process.defaultApp) {
-  // Development: register with path to electron
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("lumen", process.execPath, [path.resolve(process.argv[1])]);
-  }
-
-} else {
-  // Production
-  app.setAsDefaultProtocolClient("lumen");
-}
-
-// Handle protocol URLs on macOS
-app.on("open-url", async (event, url) => {
-  event.preventDefault();
-  await handleProtocolUrl(url);
-});
-
-// Handle protocol URLs on Windows/Linux (single instance)
+// Handle single instance (prevent multiple windows)
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
+  app.on("second-instance", async (_event, _commandLine, _workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
-    // Handle the protocol URL from command line (Windows/Linux)
-    const url = commandLine.find((arg) => arg.startsWith("lumen://"));
-    if (url) {
-      await handleProtocolUrl(url);
-    }
   });
-}
-
-/**
- * Handle lumen:// protocol URLs
- */
-async function handleProtocolUrl(url: string): Promise<void> {
-  console.log("[Protocol] Received URL:", url);
-
-  try {
-    const parsed = new URL(url);
-
-    // Handle Spotify OAuth callback: lumen://spotify-callback?code=...
-    if (parsed.hostname === "spotify-callback" || parsed.pathname === "//spotify-callback") {
-      const code = parsed.searchParams.get("code");
-      const error = parsed.searchParams.get("error");
-
-      if (error) {
-        console.error("[Protocol] Spotify auth error:", error);
-        mainWindow?.webContents.send("spotify:auth-error", error);
-        return;
-      }
-
-      if (code) {
-        console.log("[Protocol] Exchanging Spotify code...");
-        const tokens = await extensionManager?.exchangeSpotifyCode(code);
-
-        if (tokens) {
-          storageRepo.update((draft) => {
-            draft.spotifyTokens = tokens;
-          });
-
-          console.log("[Protocol] Spotify tokens saved, notifying renderer...");
-          mainWindow?.webContents.send("spotify:auth-success");
-
-          // Focus the window
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-          }
-        } else {
-          console.error("[Protocol] Failed to exchange code");
-          mainWindow?.webContents.send("spotify:auth-error", "Failed to exchange authorization code");
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[Protocol] Error handling URL:", err);
-  }
 }
 
 // App lifecycle
@@ -345,11 +245,12 @@ ipcMain.handle("settings:set", async (_, settings: { theme?: string; variant?: s
 });
 
 // ============================================
-// IPC Handlers - Extensions (Built-in)
+// IPC Handlers - Extensions
 // ============================================
 
 ipcMain.handle("extensions:get-available", async () => {
-  return BUILT_IN_EXTENSIONS;
+  if (!extensionManager) return [];
+  return extensionManager.getAvailableExtensions();
 });
 
 ipcMain.handle("extensions:get-disabled", async () => {
@@ -362,6 +263,20 @@ ipcMain.handle("extensions:set-disabled", async (_, disabledExtensions: string[]
     draft.settings = { ...draft.settings, disabledExtensions };
   });
   return { success: true, requiresRestart: true };
+});
+
+// ============================================
+// IPC Handlers - Extension State Channels
+// ============================================
+
+ipcMain.handle("extensions:get-all-state-channels", async () => {
+  if (!extensionManager) return [];
+  return extensionManager.getAllStateChannels();
+});
+
+ipcMain.handle("extensions:get-state-channel", async (_, channelId: string) => {
+  if (!extensionManager) return null;
+  return extensionManager.getStateChannelState(channelId);
 });
 
 // ============================================
@@ -388,139 +303,7 @@ ipcMain.handle("chat:save-conversation", async (_, conversation: Array<{ role: "
 });
 
 // ============================================
-// IPC Handlers - Tasks
-// ============================================
-
-ipcMain.handle("tasks:get-state", async (): Promise<TaskState> => {
-  let state: TaskState | null = null;
-  if (extensionManager) {
-    state = extensionManager.getTaskState();
-  }
-  const result = state ?? storageRepo.getTaskState();
-  logExtensions("IPC tasks:get-state", {
-    usedManager: !!state,
-    taskCount: result.tasks.length,
-  });
-  return result;
-});
-
-
-// Pomodoro state handler
-ipcMain.handle("pomodoro:get-state", async () => {
-  if (!extensionManager) {
-    logExtensions("IPC pomodoro:get-state", { available: false });
-    return null;
-  }
-  const state = extensionManager.getPomodoroState();
-  logExtensions("IPC pomodoro:get-state", {
-    available: !!state,
-    phase: state?.phase,
-  });
-  return state;
-});
-
-// ============================================
-// IPC Handlers - Spotify
-// ============================================
-
-ipcMain.handle("spotify:is-enabled", async () => {
-  return extensionManager?.isSpotifyEnabled() ?? false;
-});
-
-ipcMain.handle("spotify:is-authenticated", async () => {
-  return extensionManager?.isSpotifyAuthenticated() ?? false;
-});
-
-ipcMain.handle("spotify:get-auth-url", async (_, state?: string) => {
-  return extensionManager?.getSpotifyAuthUrl(state) ?? null;
-});
-
-ipcMain.handle("spotify:exchange-code", async (_, code: string) => {
-  try {
-    const tokens = await extensionManager?.exchangeSpotifyCode(code);
-    if (tokens) {
-      storageRepo.update((draft) => {
-        draft.spotifyTokens = tokens;
-      });
-      return { success: true, tokens };
-    }
-    return { success: false, error: "Failed to exchange code" };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-});
-
-ipcMain.handle("spotify:get-access-token", async () => {
-  return extensionManager?.getSpotifyAccessToken() ?? null;
-});
-
-ipcMain.handle("spotify:get-playback-state", async () => {
-  return extensionManager?.getSpotifyPlaybackState() ?? null;
-});
-
-ipcMain.handle("spotify:update-playback-state", async (_, playback) => {
-  extensionManager?.updateSpotifyPlaybackState(playback);
-  return { success: true };
-});
-
-ipcMain.handle("spotify:disconnect", async () => {
-  extensionManager?.disconnectSpotify();
-  storageRepo.update((draft) => {
-    delete draft.spotifyTokens;
-  });
-  return { success: true };
-});
-
-ipcMain.handle("spotify:get-client-id", async () => {
-  const storage = storageRepo.read();
-  return storage.spotifyClientId || process.env.SPOTIFY_CLIENT_ID || null;
-});
-
-ipcMain.handle("spotify:set-client-id", async (_, clientId: string) => {
-  storageRepo.update((draft) => {
-    draft.spotifyClientId = clientId;
-  });
-  return { success: true };
-});
-
-ipcMain.handle("spotify:play", async () => {
-  try {
-    await extensionManager?.spotifyPlay();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-});
-
-ipcMain.handle("spotify:pause", async () => {
-  try {
-    await extensionManager?.spotifyPause();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-});
-
-ipcMain.handle("spotify:next", async () => {
-  try {
-    await extensionManager?.spotifyNext();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-});
-
-ipcMain.handle("spotify:previous", async () => {
-  try {
-    await extensionManager?.spotifyPrevious();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-});
-
-// ============================================
-// IPC Handlers - Extensions
+// IPC Handlers - Extension Package Management
 // ============================================
 
 ipcMain.handle("extensions:get-stats", async () => {

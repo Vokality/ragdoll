@@ -351,9 +351,9 @@ export class ExtensionLoader {
     }
 
     try {
-      // Read package.json to get metadata
-      const packageJson = await this.readPackageJson(packageName);
-      if (!packageJson) {
+      // Read package.json to get metadata and resolve package path
+      const { packageJson, packagePath } = await this.readPackageJsonWithPath(packageName);
+      if (!packageJson || !packagePath) {
         return {
           packageName,
           extensionId: "",
@@ -365,9 +365,13 @@ export class ExtensionLoader {
       // Determine extension configuration
       const extensionConfig = this.resolveExtensionConfig(packageJson, config);
 
-      // Import the module
+      // Resolve the entry point
+      const entryPoint = this.resolveEntryPoint(packageJson);
+      const fullModulePath = this.joinPath(packagePath, entryPoint);
+
+      // Import the module using the full resolved path
       const moduleExports = (await this.config.importModule(
-        packageName
+        fullModulePath
       )) as ExtensionModuleExports;
 
       // Extract the extension
@@ -480,11 +484,11 @@ export class ExtensionLoader {
   // ===========================================================================
 
   /**
-   * Read and parse package.json for a package.
+   * Read and parse package.json for a package, returning both the parsed JSON and the package path.
    */
-  private async readPackageJson(
+  private async readPackageJsonWithPath(
     packageName: string
-  ): Promise<ExtensionPackageJson | null> {
+  ): Promise<{ packageJson: ExtensionPackageJson | null; packagePath: string | null }> {
     // Try to find the package in search paths
     for (const searchPath of this.config.searchPaths) {
       const packagePath = this.joinPath(searchPath, ...packageName.split("/"));
@@ -493,14 +497,54 @@ export class ExtensionLoader {
       if (await this.config.pathExists(packageJsonPath)) {
         try {
           const content = await this.config.readFile(packageJsonPath);
-          return JSON.parse(content) as ExtensionPackageJson;
+          const packageJson = JSON.parse(content) as ExtensionPackageJson;
+          return { packageJson, packagePath };
         } catch {
           continue;
         }
       }
     }
 
-    return null;
+    return { packageJson: null, packagePath: null };
+  }
+
+  /**
+   * Resolve the entry point file for a package based on its package.json.
+   * Checks in order: exports, module, main, or defaults to "index.js".
+   */
+  private resolveEntryPoint(packageJson: ExtensionPackageJson): string {
+    // Check exports field (modern packages)
+    if (packageJson.exports) {
+      if (typeof packageJson.exports === "string") {
+        return packageJson.exports;
+      }
+      // If exports is an object, try common patterns
+      if (typeof packageJson.exports === "object") {
+        const exportsObj = packageJson.exports as Record<string, unknown>;
+        if (typeof exportsObj["."] === "string") {
+          return exportsObj["."];
+        }
+        if (typeof exportsObj["import"] === "string") {
+          return exportsObj["import"];
+        }
+        if (typeof exportsObj["default"] === "string") {
+          return exportsObj["default"];
+        }
+      }
+    }
+
+    // Check module field (ES modules)
+    if (packageJson.module) {
+      return packageJson.module;
+    }
+
+    // Check main field (CommonJS or fallback)
+    if (packageJson.main) {
+      return packageJson.main;
+    }
+
+    // Default to index.js
+    return "index.js";
   }
 
   /**

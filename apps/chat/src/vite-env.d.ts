@@ -1,49 +1,24 @@
 /// <reference types="vite/client" />
-import type { TaskState, PomodoroState, TaskEvent, PomodoroEvent } from "@vokality/ragdoll-extensions";
 
 // Extension types for renderer
-interface BuiltInExtensionInfo {
+interface ExtensionInfo {
+  packageName: string;
   id: string;
   name: string;
   description: string;
   canDisable: boolean;
 }
 
-// Spotify types for renderer
-interface SpotifyPlaybackState {
-  isPlaying: boolean;
-  track: {
-    id: string;
-    name: string;
-    uri: string;
-    durationMs: number;
-    artists: Array<{ id: string; name: string; uri: string }>;
-    album: {
-      id: string;
-      name: string;
-      uri: string;
-      images: Array<{ url: string; height: number | null; width: number | null }>;
-    };
-    artworkUrl: string | null;
-  } | null;
-  progressMs: number;
-  device: {
-    id: string;
-    name: string;
-    type: string;
-    isActive: boolean;
-    volumePercent: number;
-  } | null;
-  shuffleState: boolean;
-  repeatState: "off" | "track" | "context";
-  timestamp: number;
+interface StateChannelInfo {
+  extensionId: string;
+  channelId: string;
+  state: unknown;
 }
 
-interface SpotifyTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-  scope: string;
+interface StateChannelChangeEvent {
+  extensionId: string;
+  channelId: string;
+  state: unknown;
 }
 
 // ElectronAPI type definition
@@ -74,16 +49,8 @@ interface ElectronAPI {
   getSettings: () => Promise<{ theme?: string; variant?: string }>;
   setSettings: (settings: { theme?: string; variant?: string }) => Promise<{ success: boolean }>;
 
-  // Tasks
-  getTaskState: () => Promise<TaskState>;
-  onTaskStateChanged: (callback: (event: TaskEvent) => void) => () => void;
-
-  // Pomodoro
-  getPomodoroState: () => Promise<PomodoroState | null>;
-  onPomodoroStateChanged: (callback: (event: PomodoroEvent) => void) => () => void;
-
   // Extensions
-  getAvailableExtensions: () => Promise<BuiltInExtensionInfo[]>;
+  getAvailableExtensions: () => Promise<ExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
   executeExtensionTool: (
@@ -91,21 +58,10 @@ interface ElectronAPI {
     args?: Record<string, unknown>
   ) => Promise<{ success: boolean; error?: string }>;
 
-  // Spotify
-  spotifyIsEnabled: () => Promise<boolean>;
-  spotifyIsAuthenticated: () => Promise<boolean>;
-  spotifyGetAuthUrl: (state?: string) => Promise<string | null>;
-  spotifyExchangeCode: (code: string) => Promise<{ success: boolean; tokens?: SpotifyTokens; error?: string }>;
-  spotifyGetAccessToken: () => Promise<string | null>;
-  spotifyGetPlaybackState: () => Promise<SpotifyPlaybackState | null>;
-  spotifyUpdatePlaybackState: (playback: SpotifyPlaybackState) => Promise<{ success: boolean }>;
-  spotifyDisconnect: () => Promise<{ success: boolean }>;
-  spotifyGetClientId: () => Promise<string | null>;
-  spotifySetClientId: (clientId: string) => Promise<{ success: boolean }>;
-  spotifyPlay: () => Promise<{ success: boolean; error?: string }>;
-  spotifyPause: () => Promise<{ success: boolean; error?: string }>;
-  spotifyNext: () => Promise<{ success: boolean; error?: string }>;
-  spotifyPrevious: () => Promise<{ success: boolean; error?: string }>;
+  // Extension State Channels (generic)
+  getAllStateChannels: () => Promise<StateChannelInfo[]>;
+  getStateChannel: (channelId: string) => Promise<unknown | null>;
+  onStateChannelChanged: (callback: (event: StateChannelChangeEvent) => void) => () => void;
 
   // Platform
   platform: string;

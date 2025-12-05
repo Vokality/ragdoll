@@ -297,6 +297,11 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
 // Extension Factory
 // =============================================================================
 
+import {
+  createExtension,
+  type RagdollExtension,
+} from "@vokality/ragdoll-extensions/core";
+
 const DEFAULT_EXTENSION_ID = "character";
 
 export interface CharacterRuntimeOptions {
@@ -344,4 +349,19 @@ export function createRuntime(
 }
 
 export { createRuntime as createCharacterRuntime };
-export default createRuntime;
+
+/**
+ * Create the character extension.
+ */
+function createCharacterExtension(_config?: Record<string, unknown>): RagdollExtension {
+  return createExtension({
+    id: DEFAULT_EXTENSION_ID,
+    name: "Character",
+    version: "0.1.0",
+    description: "Facial expressions and animations",
+    createRuntime: (host, _context) => createRuntime(undefined, host),
+  });
+}
+
+export { createCharacterExtension as createExtension };
+export default createCharacterExtension;
