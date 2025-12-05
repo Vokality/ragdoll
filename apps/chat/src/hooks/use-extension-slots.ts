@@ -16,12 +16,26 @@ import { createSlotState } from "@vokality/ragdoll-extensions";
  * @returns Array of extension UI slots ready to render
  */
 export function useExtensionSlots(): ExtensionUISlot[] {
+  // Guard for environments where preload hasn't exposed slot APIs yet
+  const electronAPI = (window as any)?.electronAPI;
+  const slotsApiAvailable =
+    electronAPI &&
+    typeof electronAPI.getExtensionSlots === "function" &&
+    typeof electronAPI.getSlotState === "function" &&
+    typeof electronAPI.onSlotStateChanged === "function" &&
+    typeof electronAPI.executeSlotAction === "function";
+
   const [slots, setSlots] = useState<ExtensionUISlot[]>([]);
   const slotStateStores = useRef<Map<string, ReturnType<typeof createSlotState>>>(new Map());
   const slotMeta = useRef<Map<string, { extensionId: string; slotId: string; label: string; icon: string | { type: "component" }; priority: number }>>(new Map());
 
   // Load initial state and subscribe to changes
   useEffect(() => {
+    if (!slotsApiAvailable) {
+      console.warn("Slot APIs not available in preload; extension slots disabled.");
+      return;
+    }
+
     // Load slot definitions and initial state
     const loadSlots = async () => {
       const metas = await window.electronAPI.getExtensionSlots();
