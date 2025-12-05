@@ -34,6 +34,10 @@
     "./ui": {
       "types": "./dist/ui/index.d.ts",
       "import": "./dist/ui/index.js"
+    },
+    "./ui/state": {
+      "types": "./dist/ui/state.d.ts",
+      "import": "./dist/ui/state.js"
     }
   },
   "files": [

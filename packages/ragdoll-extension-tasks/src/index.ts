@@ -21,8 +21,8 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
-} from "@vokality/ragdoll-extensions";
-import { createSlotState } from "@vokality/ragdoll-extensions/ui";
+} from "@vokality/ragdoll-extensions/core";
+import { createSlotState } from "@vokality/ragdoll-extensions/ui/state";
 import {
   TaskManager,
   createTaskManager,

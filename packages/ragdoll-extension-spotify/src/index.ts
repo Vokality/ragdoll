@@ -9,14 +9,14 @@
  * - getSpotifyPlayback: Get current playback state
  */
 
-import { createExtension } from "@vokality/ragdoll-extensions";
+import { createExtension } from "@vokality/ragdoll-extensions/core";
 import type {
   ExtensionHostEnvironment,
   ExtensionRuntimeContribution,
   ExtensionTool,
   ValidationResult,
   RagdollExtension,
-} from "@vokality/ragdoll-extensions";
+} from "@vokality/ragdoll-extensions/core";
 import {
   SpotifyManager,
   createSpotifyManager,
@@ -470,7 +470,9 @@ export function createStatefulSpotifyExtension(
   return { extension, manager };
 }
 
-export { createSpotifyUISlot, createSpotifySlot, SpotifyPanelComponent } from "./ui.js";
+// NOTE: UI exports removed to avoid pulling React into main process
+// Import from "@vokality/ragdoll-extension-spotify/ui" for React components:
+// export { createSpotifyUISlot, createSpotifySlot, SpotifyPanelComponent } from "./ui.js";
 export type {
   SpotifyPlaybackControls,
   SpotifySetupActions,

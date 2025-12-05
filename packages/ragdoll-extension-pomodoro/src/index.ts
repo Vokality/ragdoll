@@ -15,7 +15,7 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
-} from "@vokality/ragdoll-extensions";
+} from "@vokality/ragdoll-extensions/core";
 import {
   PomodoroManager,
   createPomodoroManager,
@@ -24,7 +24,7 @@ import {
   type PomodoroEvent,
   type PomodoroEventCallback,
 } from "./pomodoro-manager.js";
-import { createSlotState } from "@vokality/ragdoll-extensions/ui";
+import { createSlotState } from "@vokality/ragdoll-extensions/ui/state";
 
 // =============================================================================
 // Constants

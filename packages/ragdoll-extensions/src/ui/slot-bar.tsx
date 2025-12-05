@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useMemo, type CSSProperties } from "react";
 import { SlotButton } from "./slot-button.js";
-import { SlotPanelBase } from "./slot-panel.js";
+import { SlotPanel } from "./slot-panel.js";
 import { useVisibleSlots } from "./hooks.js";
 import type { ExtensionUISlot } from "./types.js";
 
@@ -89,10 +89,9 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
 
       {/* Render active slot's panel */}
       {activeSlot && (
-        <SlotPanelBase
-          isOpen={true}
+        <SlotPanel
+          slot={activeSlot}
           onClose={handleClosePanel}
-          panel={activeSlot.state.getState().panel}
         />
       )}
     </>

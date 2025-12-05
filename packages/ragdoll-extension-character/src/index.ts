@@ -14,7 +14,7 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
-} from "@vokality/ragdoll-extensions";
+} from "@vokality/ragdoll-extensions/core";
 
 // =============================================================================
 // Constants

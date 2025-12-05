@@ -1,6 +1,29 @@
 import { useState, useEffect, useRef } from "react";
-import type { ExtensionUISlot } from "@vokality/ragdoll-extensions";
+import type { ExtensionUISlot, SlotIcon, PresetIconName } from "@vokality/ragdoll-extensions";
 import { createSlotState } from "@vokality/ragdoll-extensions";
+
+/**
+ * Slot metadata received from main process via IPC.
+ * Icons are serialized as strings (preset names) since component functions can't cross IPC.
+ */
+interface SlotMetadata {
+  extensionId: string;
+  slotId: string;
+  label: string;
+  icon: string | { type: "component" };
+  priority: number;
+}
+
+/**
+ * Convert serialized icon (from IPC) to SlotIcon type.
+ */
+function toSlotIcon(icon: string | { type: "component" }): SlotIcon {
+  if (typeof icon === "string") {
+    return icon as PresetIconName;
+  }
+  // Component icons can't be serialized - fall back to a default
+  return "star";
+}
 
 /**
  * Generic hook that manages extension slots by subscribing to state channel changes.
@@ -17,7 +40,7 @@ import { createSlotState } from "@vokality/ragdoll-extensions";
  */
 export function useExtensionSlots(): ExtensionUISlot[] {
   // Guard for environments where preload hasn't exposed slot APIs yet
-  const electronAPI = (window as any)?.electronAPI;
+  const electronAPI = window.electronAPI;
   const slotsApiAvailable =
     electronAPI &&
     typeof electronAPI.getExtensionSlots === "function" &&
@@ -27,7 +50,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
 
   const [slots, setSlots] = useState<ExtensionUISlot[]>([]);
   const slotStateStores = useRef<Map<string, ReturnType<typeof createSlotState>>>(new Map());
-  const slotMeta = useRef<Map<string, { extensionId: string; slotId: string; label: string; icon: string | { type: "component" }; priority: number }>>(new Map());
+  const slotMetaRef = useRef<Map<string, SlotMetadata>>(new Map());
 
   // Load initial state and subscribe to changes
   useEffect(() => {
@@ -40,7 +63,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
     const loadSlots = async () => {
       const metas = await window.electronAPI.getExtensionSlots();
       metas.forEach((meta) => {
-        slotMeta.current.set(meta.slotId, meta);
+        slotMetaRef.current.set(meta.slotId, meta);
       });
 
       const stores = new Map<string, ReturnType<typeof createSlotState>>(slotStateStores.current);
@@ -61,10 +84,10 @@ export function useExtensionSlots(): ExtensionUISlot[] {
 
       slotStateStores.current = stores;
       setSlots(
-        Array.from(slotMeta.current.values()).map((meta) => ({
+        Array.from(slotMetaRef.current.values()).map((meta) => ({
           id: meta.slotId,
           label: meta.label,
-          icon: meta.icon,
+          icon: toSlotIcon(meta.icon),
           priority: meta.priority,
           state: stores.get(meta.slotId)!,
         }))
@@ -76,7 +99,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
     // Subscribe to slot state changes (generic)
     const unsubscribeSlot = window.electronAPI.onSlotStateChanged((event) => {
       const stores = slotStateStores.current;
-      const meta = slotMeta.current.get(event.slotId);
+      const meta = slotMetaRef.current.get(event.slotId);
       if (!meta) {
         return;
       }
@@ -87,7 +110,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
           {
             id: meta.slotId,
             label: meta.label,
-            icon: meta.icon,
+            icon: toSlotIcon(meta.icon),
             priority: meta.priority,
             state: stores.get(meta.slotId)!,
           },
@@ -100,7 +123,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
     return () => {
       unsubscribeSlot();
     };
-  }, []);
+  }, [slotsApiAvailable]);
 
   return slots;
 }
