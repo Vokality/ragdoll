@@ -76,6 +76,45 @@ export type {
 } from "./types.js";
 
 // =============================================================================
+// Config Schema Types
+// =============================================================================
+
+export type {
+  // Config field types
+  ConfigField,
+  ConfigSchema,
+  ConfigValues,
+  ExtensionConfigStatus,
+
+  // OAuth types
+  OAuthConfig,
+  OAuthTokens,
+  OAuthConnectionStatus,
+  OAuthState,
+  OAuthEventType,
+  OAuthEvent,
+  OAuthEventCallback,
+  HostOAuthCapability,
+} from "./types/config-schema.js";
+
+// Re-export Zod schema utilities
+export {
+  ConfigFieldSchema,
+  ConfigSchemaSchema,
+  OAuthConfigSchema,
+  OAuthTokensSchema,
+  OAuthStateSchema,
+  configSchemaToZod,
+  validateConfigValues,
+  getMissingRequiredFields,
+  applyConfigDefaults,
+  z,
+} from "./types/config-schema.js";
+
+// Host config capability
+export type { HostConfigCapability } from "./types/host-environment.js";
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -94,6 +133,8 @@ export { ExtensionRegistry, createRegistry } from "./registry.js";
 export { ExtensionLoader, createLoader } from "./loader.js";
 export type {
   ExtensionPackageJson,
+  ExtensionPackageManifest,
+  ExtensionPackageInfo,
   LoadResult,
   ExtensionLoaderConfig,
 } from "./loader.js";

@@ -11,6 +11,7 @@ import type {
   HostSchedulerCapability,
   HostStorageCapability,
   HostTimersCapability,
+  HostConfigCapability,
   NotificationCallback,
   NotificationRequest,
 } from "./types/host-environment.js";
@@ -317,6 +318,37 @@ export type {
   HostSchedulerCapability,
   HostStorageCapability,
   HostTimersCapability,
+  HostConfigCapability,
   NotificationCallback,
   NotificationRequest,
 };
+
+// Re-export config schema types
+export type {
+  ConfigField,
+  ConfigSchema,
+  ConfigValues,
+  ExtensionConfigStatus,
+  OAuthConfig,
+  OAuthTokens,
+  OAuthConnectionStatus,
+  OAuthState,
+  OAuthEventType,
+  OAuthEvent,
+  OAuthEventCallback,
+  HostOAuthCapability,
+} from "./types/config-schema.js";
+
+// Re-export Zod schema utilities
+export {
+  ConfigFieldSchema,
+  ConfigSchemaSchema,
+  OAuthConfigSchema,
+  OAuthTokensSchema,
+  OAuthStateSchema,
+  configSchemaToZod,
+  validateConfigValues,
+  getMissingRequiredFields,
+  applyConfigDefaults,
+  z,
+} from "./types/config-schema.js";

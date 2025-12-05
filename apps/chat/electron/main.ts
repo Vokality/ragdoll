@@ -84,6 +84,8 @@ async function createWindow(): Promise<void> {
         }).show();
       }
     },
+    openExternal: (url: string) => shell.openExternal(url),
+    oauthRedirectBase: "lumen://oauth",
   });
   await extensionManager.initialize();
   logExtensions("Extension manager initialized", extensionManager.getStats());
@@ -139,17 +141,88 @@ async function createWindow(): Promise<void> {
   });
 }
 
+// Register custom protocol for OAuth callbacks (lumen://oauth/:extensionId?code=xxx)
+const PROTOCOL_SCHEME = "lumen";
+if (process.defaultApp) {
+  // During development, we need to register ourselves as the default handler
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  }
+} else {
+  // In production
+  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
+}
+
+/**
+ * Handle OAuth callback URLs (lumen://oauth/:extensionId?code=xxx)
+ */
+function handleOAuthUrl(url: string): void {
+  try {
+    const parsed = new URL(url);
+    // Expected format: lumen://oauth/extensionId?code=xxx
+    if (parsed.host !== "oauth") {
+      logExtensions("Ignoring non-OAuth URL:", url);
+      return;
+    }
+
+    const extensionId = parsed.pathname.slice(1); // Remove leading /
+    const code = parsed.searchParams.get("code");
+    const error = parsed.searchParams.get("error");
+
+    if (error) {
+      console.error(`OAuth error for ${extensionId}:`, error);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("oauth:error", { extensionId, error });
+      }
+      return;
+    }
+
+    if (code && extensionId && extensionManager) {
+      logExtensions(`OAuth callback for ${extensionId}`);
+      extensionManager.handleOAuthCallback(extensionId, code).then(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("oauth:success", { extensionId });
+          mainWindow.focus();
+        }
+      }).catch((err) => {
+        console.error(`OAuth callback failed for ${extensionId}:`, err);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("oauth:error", {
+            extensionId,
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Failed to parse OAuth URL:", err);
+  }
+}
+
 // Handle single instance (prevent multiple windows)
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on("second-instance", async (_event, _commandLine, _workingDirectory) => {
+  app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+
+    // Handle deep link on Windows/Linux (protocol URL passed as argument)
+    const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`));
+    if (url) {
+      handleOAuthUrl(url);
+    }
+  });
+
+  // Handle deep link on macOS
+  app.on("open-url", (_event, url) => {
+    handleOAuthUrl(url);
   });
 }
 
@@ -296,6 +369,11 @@ ipcMain.handle("extensions:set-disabled", async (_, disabledExtensions: string[]
   return { success: true, requiresRestart: true };
 });
 
+ipcMain.handle("extensions:get-discovered", async () => {
+  if (!extensionManager) return [];
+  return extensionManager.getDiscoveredExtensions();
+});
+
 // ============================================
 // IPC Handlers - Extension State Channels
 // ============================================
@@ -309,6 +387,77 @@ ipcMain.handle("extensions:get-state-channel", async (_, channelId: string) => {
   if (!extensionManager) return null;
   return extensionManager.getStateChannelState(channelId);
 });
+
+// ============================================
+// IPC Handlers - Extension OAuth
+// ============================================
+
+ipcMain.handle("extensions:oauth-get-state", async (_, extensionId: string) => {
+  if (!extensionManager) return null;
+  return extensionManager.getOAuthState(extensionId);
+});
+
+ipcMain.handle("extensions:oauth-start-flow", async (_, extensionId: string) => {
+  if (!extensionManager) {
+    return { success: false, error: "Extension manager not initialized" };
+  }
+  try {
+    await extensionManager.startOAuthFlow(extensionId);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+});
+
+ipcMain.handle("extensions:oauth-disconnect", async (_, extensionId: string) => {
+  if (!extensionManager) {
+    return { success: false, error: "Extension manager not initialized" };
+  }
+  try {
+    await extensionManager.disconnectOAuth(extensionId);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+});
+
+// ============================================
+// IPC Handlers - Extension Config
+// ============================================
+
+ipcMain.handle("extensions:config-get-status", async (_, extensionId: string) => {
+  if (!extensionManager) return null;
+  return extensionManager.getConfigStatus(extensionId);
+});
+
+ipcMain.handle("extensions:config-get-schema", async (_, extensionId: string) => {
+  if (!extensionManager) return null;
+  return extensionManager.getConfigSchema(extensionId);
+});
+
+ipcMain.handle(
+  "extensions:config-set-value",
+  async (_, extensionId: string, key: string, value: string | number | boolean) => {
+    if (!extensionManager) {
+      return { success: false, error: "Extension manager not initialized" };
+    }
+    try {
+      await extensionManager.setConfigValue(extensionId, key, value);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+);
 
 // ============================================
 // IPC Handlers - Conversation

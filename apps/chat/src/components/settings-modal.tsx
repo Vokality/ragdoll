@@ -1,10 +1,13 @@
 import { useState, useEffect, type CSSProperties } from "react";
+import { ExtensionConfigModal } from "./extension-config-modal";
 
 interface BuiltInExtensionInfo {
   id: string;
   name: string;
   description: string;
   canDisable: boolean;
+  hasConfigSchema: boolean;
+  hasOAuth: boolean;
 }
 
 interface SettingsModalProps {
@@ -44,6 +47,7 @@ export function SettingsModal({
   const [availableExtensions, setAvailableExtensions] = useState<BuiltInExtensionInfo[]>([]);
   const [disabledExtensions, setDisabledExtensions] = useState<string[]>([]);
   const [pendingChanges, setPendingChanges] = useState(false);
+  const [configModalExtension, setConfigModalExtension] = useState<BuiltInExtensionInfo | null>(null);
 
   // Load extension data when modal opens
   useEffect(() => {
@@ -54,8 +58,9 @@ export function SettingsModal({
 
   const loadExtensionData = async () => {
     try {
+      // Use getDiscoveredExtensions to include unconfigured extensions
       const [available, disabled] = await Promise.all([
-        window.electronAPI.getAvailableExtensions(),
+        window.electronAPI.getDiscoveredExtensions(),
         window.electronAPI.getDisabledExtensions(),
       ]);
       setAvailableExtensions(available);
@@ -100,6 +105,29 @@ export function SettingsModal({
 
   // Filter to only show extensions that can be disabled
   const toggleableExtensions = availableExtensions.filter((ext) => ext.canDisable);
+
+  // Filter to show extensions that need configuration (OAuth or Config)
+  const configurableExtensions = availableExtensions.filter(
+    (ext) => ext.hasConfigSchema || ext.hasOAuth
+  );
+
+  // If config modal is open, render only that
+  if (configModalExtension) {
+    return (
+      <ExtensionConfigModal
+        isOpen={true}
+        onClose={() => setConfigModalExtension(null)}
+        extensionId={configModalExtension.id}
+        extensionName={configModalExtension.name}
+        hasOAuth={configModalExtension.hasOAuth}
+        hasConfig={configModalExtension.hasConfigSchema}
+        onConfigured={() => {
+          setPendingChanges(true);
+          loadExtensionData(); // Reload extension data after configuration
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -211,6 +239,31 @@ export function SettingsModal({
             </section>
           )}
 
+          {/* Configurable Extensions Section */}
+          {configurableExtensions.length > 0 && (
+            <section style={styles.section}>
+              <h3 style={styles.sectionTitle}>Integrations</h3>
+              <div style={styles.extensionList}>
+                {configurableExtensions.map((extension) => (
+                  <div key={extension.id} style={styles.extensionRow}>
+                    <div style={styles.extensionInfo}>
+                      <span style={styles.extensionName}>{extension.name}</span>
+                      <span style={styles.extensionDescription}>{extension.description}</span>
+                    </div>
+                    <button
+                      onClick={() => setConfigModalExtension(extension)}
+                      className="btn-secondary"
+                      style={styles.configButton}
+                    >
+                      <SettingsIcon />
+                      Configure
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Danger Zone */}
           <section style={styles.section}>
             <h3 style={styles.sectionTitle}>Data</h3>
@@ -245,6 +298,15 @@ function InfoIcon() {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }
@@ -445,5 +507,13 @@ const styles: Record<string, CSSProperties> = {
   dangerButtonConfirm: {
     background: "var(--error)",
     color: "white",
+  },
+  configButton: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "8px 12px",
+    fontSize: "12px",
+    flexShrink: 0,
   },
 };

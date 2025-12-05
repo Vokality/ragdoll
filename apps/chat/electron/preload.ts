@@ -67,6 +67,74 @@ export interface SlotChangeEvent {
   state: SlotState;
 }
 
+// OAuth types
+export interface OAuthState {
+  status: "disconnected" | "connecting" | "connected" | "error" | "expired";
+  isAuthenticated: boolean;
+  expiresAt?: number;
+  error?: string;
+}
+
+export interface OAuthEvent {
+  extensionId: string;
+  error?: string;
+}
+
+// Config types
+export interface ConfigFieldBase {
+  type: string;
+  label: string;
+  description?: string;
+  required?: boolean;
+}
+
+export interface ConfigFieldString extends ConfigFieldBase {
+  type: "string";
+  default?: string;
+  placeholder?: string;
+  secret?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+}
+
+export interface ConfigFieldNumber extends ConfigFieldBase {
+  type: "number";
+  default?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export interface ConfigFieldBoolean extends ConfigFieldBase {
+  type: "boolean";
+  default?: boolean;
+}
+
+export interface ConfigFieldSelect extends ConfigFieldBase {
+  type: "select";
+  default?: string;
+  options: Array<{ value: string; label: string }>;
+}
+
+export type ConfigField = ConfigFieldString | ConfigFieldNumber | ConfigFieldBoolean | ConfigFieldSelect;
+
+export interface ConfigSchema {
+  [key: string]: ConfigField;
+}
+
+export interface ExtensionConfigStatus {
+  isConfigured: boolean;
+  missingFields: string[];
+  values: Record<string, unknown>;
+}
+
+// Extended extension info with OAuth/Config flags
+export interface ExtensionInfoExtended extends ExtensionInfo {
+  hasConfigSchema: boolean;
+  hasOAuth: boolean;
+}
+
 // Types for the API
 export interface ElectronAPI {
   // Auth
@@ -101,6 +169,7 @@ export interface ElectronAPI {
   getExtensionSlots: () => Promise<SlotInfo[]>;
   getSlotState: (slotId: string) => Promise<SlotState | null>;
   getAvailableExtensions: () => Promise<ExtensionInfo[]>;
+  getDiscoveredExtensions: () => Promise<ExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
   discoverPackages: () => Promise<string[]>;
@@ -125,6 +194,22 @@ export interface ElectronAPI {
     slotId: string,
     actionType: string,
     actionId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // Extension OAuth
+  getOAuthState: (extensionId: string) => Promise<OAuthState | null>;
+  startOAuthFlow: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  disconnectOAuth: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  onOAuthSuccess: (callback: (event: OAuthEvent) => void) => () => void;
+  onOAuthError: (callback: (event: OAuthEvent) => void) => () => void;
+
+  // Extension Config
+  getConfigStatus: (extensionId: string) => Promise<ExtensionConfigStatus | null>;
+  getConfigSchema: (extensionId: string) => Promise<ConfigSchema | null>;
+  setConfigValue: (
+    extensionId: string,
+    key: string,
+    value: string | number | boolean
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Platform
@@ -183,6 +268,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getExtensionSlots: () => ipcRenderer.invoke("extensions:get-slots"),
   getSlotState: (slotId: string) => ipcRenderer.invoke("extensions:get-slot-state", slotId),
   getAvailableExtensions: () => ipcRenderer.invoke("extensions:get-available"),
+  getDiscoveredExtensions: () => ipcRenderer.invoke("extensions:get-discovered"),
   getDisabledExtensions: () => ipcRenderer.invoke("extensions:get-disabled"),
   setDisabledExtensions: (extensionIds: string[]) =>
     ipcRenderer.invoke("extensions:set-disabled", extensionIds),
@@ -218,6 +304,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   executeSlotAction: (slotId: string, actionType: string, actionId: string) =>
     ipcRenderer.invoke("extensions:execute-slot-action", slotId, actionType, actionId),
+
+  // Extension OAuth
+  getOAuthState: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:oauth-get-state", extensionId),
+  startOAuthFlow: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:oauth-start-flow", extensionId),
+  disconnectOAuth: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:oauth-disconnect", extensionId),
+  onOAuthSuccess: (callback: (event: OAuthEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: OAuthEvent) => callback(event);
+    ipcRenderer.on("oauth:success", handler);
+    return () => {
+      ipcRenderer.removeListener("oauth:success", handler);
+    };
+  },
+  onOAuthError: (callback: (event: OAuthEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: OAuthEvent) => callback(event);
+    ipcRenderer.on("oauth:error", handler);
+    return () => {
+      ipcRenderer.removeListener("oauth:error", handler);
+    };
+  },
+
+  // Extension Config
+  getConfigStatus: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:config-get-status", extensionId),
+  getConfigSchema: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:config-get-schema", extensionId),
+  setConfigValue: (extensionId: string, key: string, value: string | number | boolean) =>
+    ipcRenderer.invoke("extensions:config-set-value", extensionId, key, value),
 
   // Platform
   platform: process.platform,

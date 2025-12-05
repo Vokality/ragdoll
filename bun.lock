@@ -121,6 +121,9 @@
     "packages/ragdoll-extensions": {
       "name": "@vokality/ragdoll-extensions",
       "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.1.13",
+      },
       "devDependencies": {
         "@types/react": "^19.1.8",
         "typescript": "~5.9.3",

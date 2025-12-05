@@ -7,21 +7,29 @@
  * - skipSpotify: Skip to next or previous track
  * - searchSpotify: Search for tracks, albums, artists, or playlists
  * - getSpotifyPlayback: Get current playback state
+ *
+ * This extension requires the host to provide OAuth capability.
+ * Configure OAuth requirements in package.json.
  */
 
 import { createExtension } from "@vokality/ragdoll-extensions/core";
 import type {
-  ExtensionHostEnvironment,
-  ExtensionRuntimeContribution,
   ExtensionTool,
   ValidationResult,
   RagdollExtension,
+  HostOAuthCapability,
 } from "@vokality/ragdoll-extensions/core";
-import {
-  SpotifyManager,
-  createSpotifyManager,
-  type SpotifyManagerConfig,
-} from "./spotify-manager.js";
+import type {
+  SpotifyPlaybackState,
+  SpotifySearchResults,
+  SpotifyTrack,
+  SpotifyArtist,
+  SpotifyAlbum,
+  PlaySpotifyArgs,
+  PauseSpotifyArgs,
+  SkipSpotifyArgs,
+  SearchSpotifyArgs,
+} from "./types.js";
 
 // Re-export types
 export type {
@@ -33,52 +41,20 @@ export type {
   SpotifyPlaybackState,
   SpotifyPlaylist,
   SpotifySearchResults,
-  SpotifyTokens,
-  SpotifyConnectionStatus,
-  SpotifyState,
-  SpotifyEventType,
-  SpotifyEvent,
-  SpotifyEventCallback,
   PlaySpotifyArgs,
   PauseSpotifyArgs,
   SearchSpotifyArgs,
   GetSpotifyPlaybackArgs,
   SkipSpotifyArgs,
-  SpotifyToolHandler,
-  SpotifyToolResult,
-  SpotifyExtensionOptions,
-  StatefulSpotifyExtensionOptions,
 } from "./types.js";
 
-export {
-  EMPTY_PLAYBACK_STATE,
-  INITIAL_SPOTIFY_STATE,
-} from "./types.js";
-
-// Re-export manager
-export { SpotifyManager, createSpotifyManager };
-export type { SpotifyManagerConfig };
-
-// =============================================================================
-// Tool Argument Types (local for extension)
-// =============================================================================
-
-import type {
-  PlaySpotifyArgs,
-  PauseSpotifyArgs,
-  SearchSpotifyArgs,
-  SkipSpotifyArgs,
-  SpotifyToolHandler,
-  SpotifyExtensionOptions,
-  SpotifyEventCallback,
-} from "./types.js";
+export { EMPTY_PLAYBACK_STATE } from "./types.js";
 
 // =============================================================================
 // Validators
 // =============================================================================
 
 function validatePlay(args: Record<string, unknown>): ValidationResult {
-  // uri is optional, deviceId is optional
   if (args.uri !== undefined && typeof args.uri !== "string") {
     return { valid: false, error: "uri must be a string" };
   }
@@ -126,15 +102,11 @@ function validateSearch(args: Record<string, unknown>): ValidationResult {
   return { valid: true };
 }
 
-function validateNoArgs(): ValidationResult {
-  return { valid: true };
-}
-
 // =============================================================================
 // Tool Definitions
 // =============================================================================
 
-function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
+function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
   return [
     {
       definition: {
@@ -157,7 +129,25 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.playSpotify(args as PlaySpotifyArgs),
+      handler: async (args) => {
+        const { uri, deviceId } = args as PlaySpotifyArgs;
+        try {
+          await api.play({ uri, deviceId });
+          const playback = await api.getPlaybackState();
+          return {
+            success: true,
+            data: {
+              message: uri ? `Now playing: ${uri}` : "Playback resumed",
+              playback,
+            },
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to play",
+          };
+        }
+      },
       validate: validatePlay,
     },
     {
@@ -177,7 +167,18 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.pauseSpotify(args as PauseSpotifyArgs),
+      handler: async (args) => {
+        const { deviceId } = args as PauseSpotifyArgs;
+        try {
+          await api.pause(deviceId);
+          return { success: true, data: { message: "Playback paused" } };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to pause",
+          };
+        }
+      },
       validate: validatePause,
     },
     {
@@ -203,7 +204,26 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.skipSpotify(args as unknown as SkipSpotifyArgs),
+      handler: async (args) => {
+        const { direction, deviceId } = args as unknown as SkipSpotifyArgs;
+        try {
+          if (direction === "next") {
+            await api.skipToNext(deviceId);
+          } else {
+            await api.skipToPrevious(deviceId);
+          }
+          const playback = await api.getPlaybackState();
+          return {
+            success: true,
+            data: { message: `Skipped to ${direction} track`, playback },
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to skip",
+          };
+        }
+      },
       validate: validateSkip,
     },
     {
@@ -236,7 +256,18 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.searchSpotify(args as unknown as SearchSpotifyArgs),
+      handler: async (args) => {
+        const { query, types, limit } = args as unknown as SearchSpotifyArgs;
+        try {
+          const results = await api.search(query, types ?? ["track"], limit ?? 5);
+          return { success: true, data: results };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Search failed",
+          };
+        }
+      },
       validate: validateSearch,
     },
     {
@@ -251,8 +282,18 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (_args, _ctx) => handler.getSpotifyPlayback({}),
-      validate: validateNoArgs,
+      handler: async () => {
+        try {
+          const playback = await api.getPlaybackState();
+          return { success: true, data: playback };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Failed to get playback state",
+          };
+        }
+      },
+      validate: () => ({ valid: true }),
     },
   ];
 }
@@ -261,221 +302,279 @@ function createSpotifyTools(handler: SpotifyToolHandler): ExtensionTool[] {
 // Extension Factory
 // =============================================================================
 
-export interface SpotifyRuntimeOptions extends SpotifyExtensionOptions {}
-
-export function createRuntime(
-  options: SpotifyRuntimeOptions | undefined,
-  _host: ExtensionHostEnvironment
-): ExtensionRuntimeContribution {
-  if (!options?.handler) {
-    throw new Error("Spotify runtime requires a handler option.");
-  }
-  return {
-    tools: createSpotifyTools(options.handler),
-  };
-}
-
-export { createRuntime as createSpotifyRuntime };
-export default createRuntime;
-
 /**
- * Create a Spotify extension with the provided handler.
+ * Create the Spotify extension.
  *
- * @example
- * ```ts
- * const spotifyExtension = createSpotifyExtension({
- *   handler: {
- *     playSpotify: async ({ uri }) => {
- *       await spotifyManager.play({ uri });
- *       return { success: true };
- *     },
- *     pauseSpotify: async () => {
- *       await spotifyManager.pause();
- *       return { success: true };
- *     },
- *     // ... other handlers
- *   },
- * });
- *
- * await registry.register(spotifyExtension);
- * ```
+ * This extension requires the host to provide OAuth capability.
+ * The host handles OAuth flow and token management based on
+ * the oauth configuration in package.json.
  */
-export function createSpotifyExtension(
-  options: SpotifyExtensionOptions
-): RagdollExtension {
-  const { handler, id = "spotify" } = options;
-
+export function createSpotifyExtension(): RagdollExtension {
   return createExtension({
-    id,
+    id: "spotify",
     name: "Spotify",
     version: "1.0.0",
-    tools: createSpotifyTools(handler),
+    requiredCapabilities: ["oauth"],
+
+    createRuntime: async (host) => {
+      if (!host.oauth) {
+        throw new Error(
+          "Spotify extension requires OAuth capability. " +
+          "Ensure the host is configured to provide OAuth for this extension."
+        );
+      }
+
+      const api = createSpotifyApiClient(host.oauth);
+
+      return {
+        tools: createSpotifyTools(api),
+      };
+    },
   });
 }
 
+// Default export for extension loader
+export default createSpotifyExtension;
+
 // =============================================================================
-// Stateful Extension Factory
+// Spotify API Client
 // =============================================================================
 
-export interface StatefulSpotifyOptions {
-  /** Optional extension ID override (default: "spotify") */
-  id?: string;
-  /** Spotify Client ID */
-  clientId: string;
-  /** Redirect URI for OAuth (e.g., "lumen://spotify-callback") */
-  redirectUri: string;
-  /** Callback when state changes */
-  onStateChange?: SpotifyEventCallback;
+interface SpotifyApiClient {
+  play(options?: { uri?: string; deviceId?: string }): Promise<void>;
+  pause(deviceId?: string): Promise<void>;
+  skipToNext(deviceId?: string): Promise<void>;
+  skipToPrevious(deviceId?: string): Promise<void>;
+  getPlaybackState(): Promise<SpotifyPlaybackState>;
+  search(query: string, types: string[], limit: number): Promise<SpotifySearchResults>;
 }
 
-/**
- * Create a stateful Spotify extension with built-in SpotifyManager.
- *
- * This version manages OAuth PKCE flow, tokens, and API calls internally.
- * No client secret is needed - uses PKCE for secure authorization.
- *
- * @example
- * ```ts
- * const { extension, manager } = createStatefulSpotifyExtension({
- *   clientId: "your-spotify-client-id",
- *   redirectUri: "lumen://spotify-callback",
- *   onStateChange: (event) => {
- *     mainWindow?.webContents.send("spotify:state-changed", event.state);
- *   },
- * });
- *
- * await registry.register(extension);
- *
- * // Start OAuth flow
- * const authUrl = await manager.getAuthorizationUrl();
- * ```
- */
-export function createStatefulSpotifyExtension(
-  options: StatefulSpotifyOptions
-): { extension: RagdollExtension; manager: SpotifyManager } {
-  const {
-    id = "spotify",
-    clientId,
-    redirectUri,
-    onStateChange,
-  } = options;
-
-  // Create the manager
-  const manager = createSpotifyManager({
-    clientId,
-    redirectUri,
-    onStateChange,
-  });
-
-  // Create handler that uses the manager
-  const handler: SpotifyToolHandler = {
-    playSpotify: async ({ uri, deviceId }) => {
-      try {
-        await manager.play({ uri, deviceId });
-        const playback = await manager.getPlaybackState();
-        return {
-          success: true,
-          data: {
-            message: uri ? `Now playing: ${uri}` : "Playback resumed",
-            playback,
-          },
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Failed to play",
-        };
-      }
-    },
-
-    pauseSpotify: async ({ deviceId }) => {
-      try {
-        await manager.pause(deviceId);
-        return {
-          success: true,
-          data: { message: "Playback paused" },
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Failed to pause",
-        };
-      }
-    },
-
-    skipSpotify: async ({ direction, deviceId }) => {
-      try {
-        if (direction === "next") {
-          await manager.skipToNext(deviceId);
-        } else {
-          await manager.skipToPrevious(deviceId);
-        }
-        const playback = await manager.getPlaybackState();
-        return {
-          success: true,
-          data: {
-            message: `Skipped to ${direction} track`,
-            playback,
-          },
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Failed to skip",
-        };
-      }
-    },
-
-    searchSpotify: async ({ query, types, limit }) => {
-      try {
-        const results = await manager.search(query, types ?? ["track"], limit ?? 5);
-        return {
-          success: true,
-          data: results,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Search failed",
-        };
-      }
-    },
-
-    getSpotifyPlayback: async () => {
-      try {
-        const playback = await manager.getPlaybackState();
-        return {
-          success: true,
-          data: playback,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Failed to get playback state",
-        };
-      }
-    },
+function createSpotifyApiClient(oauth: HostOAuthCapability): SpotifyApiClient {
+  const EMPTY_PLAYBACK: SpotifyPlaybackState = {
+    isPlaying: false,
+    track: null,
+    progressMs: 0,
+    device: null,
+    shuffleState: false,
+    repeatState: "off",
+    timestamp: Date.now(),
   };
 
-  const extension = createExtension({
-    id,
-    name: "Spotify",
-    version: "1.0.0",
-    tools: createSpotifyTools(handler),
-    onDestroy: () => {
-      manager.destroy();
-    },
-  });
+  async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const accessToken = await oauth.getAccessToken();
+    if (!accessToken) {
+      throw new Error("Not authenticated with Spotify");
+    }
 
-  return { extension, manager };
+    const response = await fetch(`https://api.spotify.com/v1${endpoint}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+
+    if (response.status === 401) {
+      throw new Error("Spotify authentication expired");
+    }
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Spotify API error: ${response.status} - ${error}`);
+    }
+
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return response.json();
+  }
+
+  function mapTrack(track: ApiTrack): SpotifyTrack {
+    return {
+      id: track.id,
+      name: track.name,
+      uri: track.uri,
+      durationMs: track.duration_ms,
+      artists: track.artists.map(mapArtist),
+      album: mapAlbum(track.album),
+      artworkUrl: track.album.images[0]?.url ?? null,
+    };
+  }
+
+  function mapArtist(artist: ApiArtist): SpotifyArtist {
+    return { id: artist.id, name: artist.name, uri: artist.uri };
+  }
+
+  function mapAlbum(album: ApiAlbum): SpotifyAlbum {
+    return {
+      id: album.id,
+      name: album.name,
+      uri: album.uri,
+      images: album.images.map((img) => ({
+        url: img.url,
+        height: img.height,
+        width: img.width,
+      })),
+    };
+  }
+
+  return {
+    async play(options = {}) {
+      const { uri, deviceId } = options;
+      const params = deviceId ? `?device_id=${deviceId}` : "";
+      const body: Record<string, unknown> = {};
+
+      if (uri) {
+        if (uri.includes(":track:")) {
+          body.uris = [uri];
+        } else {
+          body.context_uri = uri;
+        }
+      }
+
+      await apiRequest(`/me/player/play${params}`, {
+        method: "PUT",
+        body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+      });
+    },
+
+    async pause(deviceId) {
+      const params = deviceId ? `?device_id=${deviceId}` : "";
+      await apiRequest(`/me/player/pause${params}`, { method: "PUT" });
+    },
+
+    async skipToNext(deviceId) {
+      const params = deviceId ? `?device_id=${deviceId}` : "";
+      await apiRequest(`/me/player/next${params}`, { method: "POST" });
+    },
+
+    async skipToPrevious(deviceId) {
+      const params = deviceId ? `?device_id=${deviceId}` : "";
+      await apiRequest(`/me/player/previous${params}`, { method: "POST" });
+    },
+
+    async getPlaybackState(): Promise<SpotifyPlaybackState> {
+      try {
+        const data = await apiRequest<ApiPlaybackState | null>("/me/player");
+        if (!data) return EMPTY_PLAYBACK;
+
+        return {
+          isPlaying: data.is_playing,
+          track: data.item ? mapTrack(data.item) : null,
+          progressMs: data.progress_ms ?? 0,
+          device: data.device
+            ? {
+                id: data.device.id,
+                name: data.device.name,
+                type: data.device.type,
+                isActive: data.device.is_active,
+                volumePercent: data.device.volume_percent,
+              }
+            : null,
+          shuffleState: data.shuffle_state,
+          repeatState: data.repeat_state,
+          timestamp: Date.now(),
+        };
+      } catch {
+        return EMPTY_PLAYBACK;
+      }
+    },
+
+    async search(query, types, limit): Promise<SpotifySearchResults> {
+      const params = new URLSearchParams({
+        q: query,
+        type: types.join(","),
+        limit: limit.toString(),
+      });
+
+      const data = await apiRequest<ApiSearchResponse>(`/search?${params.toString()}`);
+
+      return {
+        tracks: data.tracks?.items.map(mapTrack) ?? [],
+        albums: data.albums?.items.map(mapAlbum) ?? [],
+        artists: data.artists?.items.map(mapArtist) ?? [],
+        playlists: data.playlists?.items.map((p) => ({
+          id: p.id,
+          name: p.name,
+          uri: p.uri,
+          description: p.description,
+          images: p.images.map((img) => ({
+            url: img.url,
+            height: img.height,
+            width: img.width,
+          })),
+          owner: { id: p.owner.id, displayName: p.owner.display_name },
+          tracksTotal: p.tracks.total,
+        })) ?? [],
+      };
+    },
+  };
 }
 
-// NOTE: UI exports removed to avoid pulling React into main process
-// Import from "@vokality/ragdoll-extension-spotify/ui" for React components:
-// export { createSpotifyUISlot, createSpotifySlot, SpotifyPanelComponent } from "./ui.js";
-export type {
-  SpotifyPlaybackControls,
-  SpotifySetupActions,
-  SpotifyUISlotOptions,
-  SpotifyUISlotResult,
-} from "./ui-types.js";
+// =============================================================================
+// Spotify API Types (internal)
+// =============================================================================
+
+interface ApiImage {
+  url: string;
+  height: number | null;
+  width: number | null;
+}
+
+interface ApiArtist {
+  id: string;
+  name: string;
+  uri: string;
+}
+
+interface ApiAlbum {
+  id: string;
+  name: string;
+  uri: string;
+  images: ApiImage[];
+}
+
+interface ApiTrack {
+  id: string;
+  name: string;
+  uri: string;
+  duration_ms: number;
+  artists: ApiArtist[];
+  album: ApiAlbum;
+}
+
+interface ApiDevice {
+  id: string;
+  name: string;
+  type: string;
+  is_active: boolean;
+  volume_percent: number;
+}
+
+interface ApiPlaylist {
+  id: string;
+  name: string;
+  uri: string;
+  description: string | null;
+  images: ApiImage[];
+  owner: { id: string; display_name: string | null };
+  tracks: { total: number };
+}
+
+interface ApiPlaybackState {
+  is_playing: boolean;
+  item: ApiTrack | null;
+  progress_ms: number;
+  device: ApiDevice | null;
+  shuffle_state: boolean;
+  repeat_state: "off" | "track" | "context";
+}
+
+interface ApiSearchResponse {
+  tracks?: { items: ApiTrack[] };
+  albums?: { items: ApiAlbum[] };
+  artists?: { items: ApiArtist[] };
+  playlists?: { items: ApiPlaylist[] };
+}

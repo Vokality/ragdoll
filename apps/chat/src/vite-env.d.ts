@@ -7,6 +7,8 @@ interface ExtensionInfo {
   name: string;
   description: string;
   canDisable: boolean;
+  hasConfigSchema: boolean;
+  hasOAuth: boolean;
 }
 
 interface ExtensionStats {
@@ -67,6 +69,68 @@ interface SlotChangeEvent {
   state: SlotState;
 }
 
+// OAuth types
+interface OAuthState {
+  status: "disconnected" | "connecting" | "connected" | "error" | "expired";
+  isAuthenticated: boolean;
+  expiresAt?: number;
+  error?: string;
+}
+
+interface OAuthEvent {
+  extensionId: string;
+  error?: string;
+}
+
+// Config types
+interface ConfigFieldBase {
+  type: string;
+  label: string;
+  description?: string;
+  required?: boolean;
+}
+
+interface ConfigFieldString extends ConfigFieldBase {
+  type: "string";
+  default?: string;
+  placeholder?: string;
+  secret?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+}
+
+interface ConfigFieldNumber extends ConfigFieldBase {
+  type: "number";
+  default?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+interface ConfigFieldBoolean extends ConfigFieldBase {
+  type: "boolean";
+  default?: boolean;
+}
+
+interface ConfigFieldSelect extends ConfigFieldBase {
+  type: "select";
+  default?: string;
+  options: Array<{ value: string; label: string }>;
+}
+
+type ConfigField = ConfigFieldString | ConfigFieldNumber | ConfigFieldBoolean | ConfigFieldSelect;
+
+interface ConfigSchema {
+  [key: string]: ConfigField;
+}
+
+interface ExtensionConfigStatus {
+  isConfigured: boolean;
+  missingFields: string[];
+  values: Record<string, unknown>;
+}
+
 // ElectronAPI type definition
 interface ElectronAPI {
   // Auth
@@ -101,6 +165,7 @@ interface ElectronAPI {
   getExtensionSlots: () => Promise<SlotInfo[]>;
   getSlotState: (slotId: string) => Promise<SlotState | null>;
   getAvailableExtensions: () => Promise<ExtensionInfo[]>;
+  getDiscoveredExtensions: () => Promise<ExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
   discoverPackages: () => Promise<string[]>;
@@ -125,6 +190,22 @@ interface ElectronAPI {
     slotId: string,
     actionType: string,
     actionId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // Extension OAuth
+  getOAuthState: (extensionId: string) => Promise<OAuthState | null>;
+  startOAuthFlow: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  disconnectOAuth: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  onOAuthSuccess: (callback: (event: OAuthEvent) => void) => () => void;
+  onOAuthError: (callback: (event: OAuthEvent) => void) => () => void;
+
+  // Extension Config
+  getConfigStatus: (extensionId: string) => Promise<ExtensionConfigStatus | null>;
+  getConfigSchema: (extensionId: string) => Promise<ConfigSchema | null>;
+  setConfigValue: (
+    extensionId: string,
+    key: string,
+    value: string | number | boolean
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Platform

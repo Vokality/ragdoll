@@ -31,11 +31,47 @@ import type {
   RegisterOptions,
   RegistryCapabilityEvent,
   RagdollExtension,
+  ConfigSchema,
+  OAuthConfig,
 } from "./types.js";
 
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * Extended ragdollExtension field in package.json
+ */
+export interface ExtensionPackageManifest {
+  /** Custom extension ID (defaults to package name) */
+  id?: string;
+  /** Human-readable name */
+  name?: string;
+  /** Short description */
+  description?: string;
+  /** Entry point (relative to package root) */
+  entry?: string;
+  /** Whether users can disable this extension */
+  canDisable?: boolean;
+  /** Capabilities this extension provides */
+  capabilities?: Array<"tools" | "slots" | "services" | "stateChannels">;
+  /** Host capabilities required by this extension */
+  requiredCapabilities?: string[];
+  /** Configuration passed to createExtension() (legacy) */
+  config?: Record<string, unknown>;
+
+  /**
+   * Configuration schema - defines what config the extension needs
+   * The host will prompt users for these values and pass them to the extension
+   */
+  configSchema?: ConfigSchema;
+
+  /**
+   * OAuth configuration - if present, the host handles OAuth flow
+   * and provides tokens to the extension via host.oauth
+   */
+  oauth?: OAuthConfig;
+}
 
 /**
  * Metadata from a package.json that identifies a ragdoll extension
@@ -46,14 +82,23 @@ export interface ExtensionPackageJson {
   main?: string;
   module?: string;
   exports?: Record<string, unknown> | string;
-  ragdollExtension?:
-    | boolean
-    | {
-        /** Custom extension ID (defaults to package name) */
-        id?: string;
-        /** Configuration passed to createExtension() */
-        config?: Record<string, unknown>;
-      };
+  ragdollExtension?: boolean | ExtensionPackageManifest;
+}
+
+/**
+ * Parsed extension package info (includes config/oauth requirements)
+ */
+export interface ExtensionPackageInfo {
+  packageName: string;
+  packagePath: string;
+  extensionId: string;
+  name: string;
+  description?: string;
+  version: string;
+  canDisable: boolean;
+  configSchema?: ConfigSchema;
+  oauth?: OAuthConfig;
+  requiredCapabilities?: string[];
 }
 
 /**
@@ -64,6 +109,8 @@ export interface LoadResult {
   extensionId: string;
   success: boolean;
   error?: string;
+  /** Package info including config/oauth requirements */
+  packageInfo?: ExtensionPackageInfo;
 }
 
 /**
@@ -195,6 +242,7 @@ export class ExtensionLoader {
   private registry: ExtensionRegistry;
   private config: NormalizedLoaderConfig;
   private loadedPackages: Map<string, string> = new Map(); // packageName -> extensionId
+  private packageInfoCache: Map<string, ExtensionPackageInfo> = new Map(); // packageName -> info
   private registryDisposers: Array<() => void> = [];
 
   constructor(registry: ExtensionRegistry, config: ExtensionLoaderConfig = {}) {
@@ -347,6 +395,7 @@ export class ExtensionLoader {
         packageName,
         extensionId: this.loadedPackages.get(packageName)!,
         success: true,
+        packageInfo: this.packageInfoCache.get(packageName),
       };
     }
 
@@ -360,6 +409,12 @@ export class ExtensionLoader {
           success: false,
           error: `Package '${packageName}' not found or invalid`,
         };
+      }
+
+      // Extract and cache package info
+      const packageInfo = this.extractPackageInfo(packageName, packagePath, packageJson) ?? undefined;
+      if (packageInfo) {
+        this.packageInfoCache.set(packageName, packageInfo);
       }
 
       // Determine extension configuration
@@ -415,6 +470,7 @@ export class ExtensionLoader {
         packageName,
         extensionId,
         success: true,
+        packageInfo,
       };
     } catch (error) {
       return {
@@ -479,9 +535,77 @@ export class ExtensionLoader {
     return this.loadedPackages.has(packageName);
   }
 
+  /**
+   * Get package info for an extension without loading it.
+   * Returns configuration requirements (configSchema, oauth, etc.)
+   */
+  async getPackageInfo(packageName: string): Promise<ExtensionPackageInfo | null> {
+    // Check cache first
+    if (this.packageInfoCache.has(packageName)) {
+      return this.packageInfoCache.get(packageName)!;
+    }
+
+    const { packageJson, packagePath } = await this.readPackageJsonWithPath(packageName);
+    if (!packageJson || !packagePath) {
+      return null;
+    }
+
+    const info = this.extractPackageInfo(packageName, packagePath, packageJson);
+    if (info) {
+      this.packageInfoCache.set(packageName, info);
+    }
+    return info;
+  }
+
+  /**
+   * Get all cached package info.
+   */
+  getAllPackageInfo(): ExtensionPackageInfo[] {
+    return Array.from(this.packageInfoCache.values());
+  }
+
+  /**
+   * Get package info for a loaded extension by its ID.
+   */
+  getPackageInfoById(extensionId: string): ExtensionPackageInfo | undefined {
+    for (const info of this.packageInfoCache.values()) {
+      if (info.extensionId === extensionId) {
+        return info;
+      }
+    }
+    return undefined;
+  }
+
   // ===========================================================================
   // Private Helpers
   // ===========================================================================
+
+  /**
+   * Extract package info from package.json
+   */
+  private extractPackageInfo(
+    packageName: string,
+    packagePath: string,
+    packageJson: ExtensionPackageJson
+  ): ExtensionPackageInfo | null {
+    const ragdollExt = packageJson.ragdollExtension;
+    if (!ragdollExt) return null;
+
+    const manifest = typeof ragdollExt === "boolean" ? {} : ragdollExt;
+
+    return {
+      packageName,
+      packagePath,
+      extensionId: manifest.id ?? packageName,
+      name: manifest.name ?? packageJson.name,
+      description: manifest.description,
+      version: packageJson.version,
+      canDisable: manifest.canDisable ?? true,
+      configSchema: manifest.configSchema,
+      oauth: manifest.oauth,
+      requiredCapabilities: manifest.requiredCapabilities,
+    };
+  }
 
   /**
    * Read and parse package.json for a package, returning both the parsed JSON and the package path.
