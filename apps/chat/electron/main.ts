@@ -64,6 +64,16 @@ async function createWindow(): Promise<void> {
         });
       }
     },
+    onSlotStateChange: (extensionId, slotId, state) => {
+      logExtensions("Slot state change", { extensionId, slotId });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("extension-slot:changed", {
+          extensionId,
+          slotId,
+          state,
+        });
+      }
+    },
     onNotification: (notification) => {
       logExtensions("Notification", notification.title ?? notification.body);
       if (Notification.isSupported()) {
@@ -340,6 +350,28 @@ ipcMain.handle("extensions:get-tools", async () => {
   }
   return extensionManager.getTools();
 });
+
+ipcMain.handle("extensions:get-slots", async () => {
+  if (!extensionManager) {
+    return [];
+  }
+  return extensionManager.getAllSlots();
+});
+
+ipcMain.handle("extensions:get-slot-state", async (_event, slotId: string) => {
+  if (!extensionManager) return null;
+  return extensionManager.getSlotState(slotId);
+});
+
+ipcMain.handle(
+  "extensions:execute-slot-action",
+  async (_event, slotId: string, actionType: string, actionId: string) => {
+    if (!extensionManager) {
+      return { success: false, error: "Extension manager not initialized" };
+    }
+    return extensionManager.executeSlotAction(slotId, actionType, actionId);
+  }
+);
 
 ipcMain.handle("extensions:discover-packages", async () => {
   if (!extensionManager) {

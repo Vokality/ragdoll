@@ -24,6 +24,7 @@ import {
   type PomodoroEvent,
   type PomodoroEventCallback,
 } from "./pomodoro-manager.js";
+import { createSlotState } from "@vokality/ragdoll-extensions/ui";
 
 // =============================================================================
 // Constants
@@ -296,11 +297,140 @@ export function createRuntime(
     },
   };
 
+  const formatTime = (ms: number): string => {
+    const totalSeconds = Math.ceil(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const deriveSlotState = (state: PomodoroStateData) => {
+    const { state: phase, remainingTime, isBreak, sessionsCompleted: completed = 0 } = state;
+    const remainingMs = remainingTime * 1000;
+    const badge = phase === "running" || phase === "paused" ? formatTime(remainingMs) : null;
+
+    const items: any[] = [];
+
+    const getPhaseLabel = (): string => {
+      if (isBreak) {
+        return phase === "running" ? "Break time" : "Break paused";
+      }
+      switch (phase) {
+        case "running":
+          return "Focus time";
+        case "paused":
+          return "Paused";
+        case "idle":
+          return "Ready to start";
+        default:
+          return "Timer";
+      }
+    };
+
+    const getPhaseStatus = (): string => {
+      if (phase === "running") {
+        return isBreak ? "success" : "active";
+      }
+      if (phase === "paused") {
+        return "warning";
+      }
+      return "default";
+    };
+
+    items.push({
+      id: "status",
+      label: getPhaseLabel(),
+      sublabel: phase !== "idle" ? `${formatTime(remainingMs)} remaining` : `${manager.getSessionDurationMinutes()} min session`,
+      status: getPhaseStatus(),
+    });
+
+    if (completed > 0) {
+      items.push({
+        id: "sessions",
+        label: `${completed} session${completed === 1 ? "" : "s"} completed`,
+        status: "success",
+      });
+    }
+
+    const actions: any[] = [];
+
+    if (phase === "idle") {
+      actions.push({
+        id: "start",
+        label: "Start Focus",
+        variant: "primary",
+        onClick: () => {
+          manager.start();
+        },
+      });
+    } else if (phase === "running") {
+      actions.push({
+        id: "pause",
+        label: "Pause",
+        variant: "secondary",
+        onClick: () => {
+          manager.pause();
+        },
+      });
+      actions.push({
+        id: "reset",
+        label: "Reset",
+        variant: "danger",
+        onClick: () => {
+          manager.reset();
+        },
+      });
+    } else if (phase === "paused") {
+      actions.push({
+        id: "resume",
+        label: "Resume",
+        variant: "primary",
+        onClick: () => {
+          manager.start();
+        },
+      });
+      actions.push({
+        id: "reset",
+        label: "Reset",
+        variant: "danger",
+        onClick: () => {
+          manager.reset();
+        },
+      });
+    }
+
+    return {
+      badge,
+      visible: true,
+      panel: {
+        type: "list" as const,
+        title: isBreak ? "Break Time" : "Focus Timer",
+        items,
+        actions,
+      },
+    };
+  };
+
+  const slotState = createSlotState(deriveSlotState(mapPomodoroState(manager)));
+  const unsubscribeSlot = manager.onStateChange((event) => {
+    slotState.replaceState(deriveSlotState(mapPomodoroState(manager)));
+  });
+
   return {
     tools: createPomodoroTools(handler),
     stateChannels: [stateChannel],
+    slots: [
+      {
+        id: `${extensionId}.main`,
+        label: "Timer",
+        icon: "timer",
+        priority: 90,
+        state: slotState,
+      },
+    ],
     dispose: () => {
       unsubscribe();
+      unsubscribeSlot();
       stateListeners.clear();
       manager.destroy();
     },

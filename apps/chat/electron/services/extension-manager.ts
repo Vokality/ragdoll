@@ -72,6 +72,8 @@ export interface ExtensionManagerConfig {
 
   /** Generic callback when any extension state channel changes (for sync to renderer) */
   onStateChange?: StateChangeCallback;
+  /** Callback when any UI slot state changes (for sync to renderer) */
+  onSlotStateChange?: (extensionId: string, slotId: string, state: unknown) => void;
 
   /** Callback to show system notifications (provided by host environment) */
   onNotification?: NotificationCallback;
@@ -119,6 +121,7 @@ export class ExtensionManager {
   private config: ExtensionManagerConfig;
   private initialized = false;
   private stateChannelUnsubscribers: Array<() => void> = [];
+  private slotStateUnsubscribers: Array<() => void> = [];
   private storageMap = new Map<string, Map<string, unknown>>();
   private loadedExtensions: ExtensionInfo[] = [];
 
@@ -233,6 +236,8 @@ export class ExtensionManager {
 
     // Subscribe to state channels
     this.subscribeToStateChannels();
+    // Subscribe to slot state changes
+    this.subscribeToSlots();
 
     this.initialized = true;
   }
@@ -289,6 +294,24 @@ export class ExtensionManager {
         this.config.onStateChange?.(extensionId, channel.id, state);
       });
       this.stateChannelUnsubscribers.push(unsubscribe);
+    }
+  }
+
+  /**
+   * Subscribe to slot state changes and forward them generically.
+   */
+  private subscribeToSlots(): void {
+    const slots = this.registry.getSlots();
+
+    for (const { extensionId, slot } of slots) {
+      const unsubscribe = slot.state.subscribe(() => {
+        const state = slot.state.getState();
+        this.config.onSlotStateChange?.(extensionId, slot.id, {
+          ...state,
+          panel: this.serializePanel(state.panel),
+        });
+      });
+      this.slotStateUnsubscribers.push(unsubscribe);
     }
   }
 
@@ -642,6 +665,10 @@ export class ExtensionManager {
       unsubscribe();
     }
     this.stateChannelUnsubscribers = [];
+    for (const unsubscribe of this.slotStateUnsubscribers) {
+      unsubscribe();
+    }
+    this.slotStateUnsubscribers = [];
     this.loadedExtensions = [];
     await this.registry.destroy();
     this.initialized = false;

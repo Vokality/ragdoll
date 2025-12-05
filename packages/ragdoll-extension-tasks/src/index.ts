@@ -22,6 +22,7 @@ import type {
   ToolResult,
   ValidationResult,
 } from "@vokality/ragdoll-extensions";
+import { createSlotState } from "@vokality/ragdoll-extensions/ui";
 import {
   TaskManager,
   createTaskManager,
@@ -527,11 +528,95 @@ export async function createRuntime(
     },
   };
 
+  // Build UI slot state derived from manager state for generic hosts
+  const deriveSlotState = (taskState: TaskState) => {
+    const { tasks, activeTaskId } = taskState;
+    const activeTasks = tasks.filter((t) => t.status !== "done");
+    const completedTasks = tasks.filter((t) => t.status === "done");
+
+    const sections: any[] = [];
+
+    if (activeTasks.length > 0) {
+      sections.push({
+        id: "active",
+        title: "Active",
+        items: activeTasks.map((task) => ({
+          id: task.id,
+          label: task.text,
+          sublabel: task.blockedReason,
+          status: task.id === activeTaskId ? "active" : task.status === "blocked" ? "error" : "default",
+          checkable: true,
+          checked: false,
+          onToggle: () => {
+            manager.updateTaskStatus(task.id, "done");
+          },
+          onClick: () => {
+            manager.setActiveTask(task.id);
+          },
+        })),
+      });
+    }
+
+    if (completedTasks.length > 0) {
+      sections.push({
+        id: "completed",
+        title: "Completed",
+        items: completedTasks.map((task) => ({
+          id: task.id,
+          label: task.text,
+          status: "success",
+          checkable: true,
+          checked: true,
+          onToggle: () => {
+            manager.updateTaskStatus(task.id, "todo");
+          },
+        })),
+        collapsible: true,
+        defaultCollapsed: activeTasks.length > 3,
+        actions: [
+          {
+            id: "clear-completed",
+            label: "Clear all",
+            onClick: () => {
+              manager.clearCompletedTasks();
+            },
+          },
+        ],
+      });
+    }
+
+    return {
+      badge: activeTasks.length || null,
+      visible: true,
+      panel: {
+        type: "list" as const,
+        title: "Tasks",
+        emptyMessage: "No tasks yet",
+        sections,
+      },
+    };
+  };
+
+  const slotState = createSlotState(deriveSlotState(manager.getState()));
+  const unsubscribeSlot = manager.onStateChange((event) => {
+    slotState.replaceState(deriveSlotState(event.state));
+  });
+
   return {
     tools: createTaskTools(handler),
     stateChannels: [stateChannel],
+    slots: [
+      {
+        id: `${extensionId}.main`,
+        label: "Tasks",
+        icon: "checklist",
+        priority: 100,
+        state: slotState,
+      },
+    ],
     dispose: () => {
       unsubscribeManager();
+      unsubscribeSlot();
       stateListeners.clear();
       manager.removeAllListeners();
     },

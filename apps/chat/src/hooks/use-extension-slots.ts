@@ -1,298 +1,141 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ExtensionUISlot } from "@vokality/ragdoll-extensions";
 import { createSlotState } from "@vokality/ragdoll-extensions";
-import { useRef } from "react";
 
 /**
  * Generic hook that manages extension slots by subscribing to state channel changes.
  *
  * This hook:
- * 1. Loads all state channels from extensions on mount
- * 2. Subscribes to generic state channel changes from the main process
- * 3. Creates UI slots dynamically based on state channel data
- * 4. Forwards all actions to main process via executeExtensionTool
+ * 1. Loads slot contributions from extensions on mount
+ * 2. Subscribes to generic slot state changes from the main process
+ * 3. Creates UI slots dynamically from extension-provided state
+ * 4. Forwards slot actions back to the main process
  *
  * Extensions define their state shape and the hook renders based on that shape.
  *
  * @returns Array of extension UI slots ready to render
  */
 export function useExtensionSlots(): ExtensionUISlot[] {
-  // Map of state channels: channelId -> state
-  const [stateChannels, setStateChannels] = useState<Map<string, unknown>>(new Map());
-  // Persist slot stores so subscribers stay attached across renders
-  const tasksSlotRef = useRef<ExtensionUISlot | null>(null);
-  const tasksStateStoreRef = useRef<ReturnType<typeof createSlotState> | null>(null);
-  const pomodoroSlotRef = useRef<ExtensionUISlot | null>(null);
-  const pomodoroStateStoreRef = useRef<ReturnType<typeof createSlotState> | null>(null);
+  const [slots, setSlots] = useState<ExtensionUISlot[]>([]);
+  const slotStateStores = useRef<Map<string, ReturnType<typeof createSlotState>>>(new Map());
+  const slotMeta = useRef<Map<string, { extensionId: string; slotId: string; label: string; icon: string | { type: "component" }; priority: number }>>(new Map());
 
   // Load initial state and subscribe to changes
   useEffect(() => {
-    // Load all state channels on mount
-    window.electronAPI.getAllStateChannels().then((channels) => {
-      const channelMap = new Map<string, unknown>();
-      channels.forEach(({ channelId, state }) => {
-        channelMap.set(channelId, state);
+    // Load slot definitions and initial state
+    const loadSlots = async () => {
+      const metas = await window.electronAPI.getExtensionSlots();
+      metas.forEach((meta) => {
+        slotMeta.current.set(meta.slotId, meta);
       });
-      setStateChannels(channelMap);
-    });
 
-    // Subscribe to state channel changes (generic)
-    const unsubscribe = window.electronAPI.onStateChannelChanged((event) => {
-      setStateChannels((prev) => {
-        const next = new Map(prev);
-        next.set(event.channelId, event.state);
-        return next;
-      });
+      const stores = new Map<string, ReturnType<typeof createSlotState>>(slotStateStores.current);
+
+      for (const meta of metas) {
+        const rawState = (await window.electronAPI.getSlotState(meta.slotId)) ?? {
+          badge: null,
+          visible: false,
+          panel: { type: "list", title: meta.label, items: [] },
+        };
+        const hydratedState = attachActionHandlers(meta.slotId, rawState);
+        if (stores.has(meta.slotId)) {
+          stores.get(meta.slotId)!.replaceState(hydratedState);
+        } else {
+          stores.set(meta.slotId, createSlotState(hydratedState));
+        }
+      }
+
+      slotStateStores.current = stores;
+      setSlots(
+        Array.from(slotMeta.current.values()).map((meta) => ({
+          id: meta.slotId,
+          label: meta.label,
+          icon: meta.icon,
+          priority: meta.priority,
+          state: stores.get(meta.slotId)!,
+        }))
+      );
+    };
+
+    void loadSlots();
+
+    // Subscribe to slot state changes (generic)
+    const unsubscribeSlot = window.electronAPI.onSlotStateChanged((event) => {
+      const stores = slotStateStores.current;
+      const meta = slotMeta.current.get(event.slotId);
+      if (!meta) {
+        return;
+      }
+      if (!stores.has(event.slotId)) {
+        stores.set(event.slotId, createSlotState(attachActionHandlers(event.slotId, event.state)));
+        setSlots((prev) => [
+          ...prev,
+          {
+            id: meta.slotId,
+            label: meta.label,
+            icon: meta.icon,
+            priority: meta.priority,
+            state: stores.get(meta.slotId)!,
+          },
+        ]);
+      } else {
+        stores.get(event.slotId)!.replaceState(attachActionHandlers(event.slotId, event.state));
+      }
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeSlot();
     };
   }, []);
-
-  // Build slots from state channels
-  const slots: ExtensionUISlot[] = [];
-
-  // Tasks slot (if tasks state channel exists)
-  const tasksState = stateChannels.get("tasks:state") as any;
-  if (tasksState) {
-    if (!tasksStateStoreRef.current) {
-      tasksStateStoreRef.current = createSlotState(deriveTasksSlotState(tasksState));
-    } else {
-      tasksStateStoreRef.current.replaceState(deriveTasksSlotState(tasksState));
-    }
-    tasksSlotRef.current = tasksSlotRef.current ?? {
-      id: "tasks.main",
-      label: "Tasks",
-      icon: "checklist",
-      priority: 100,
-      state: tasksStateStoreRef.current,
-    };
-    slots.push(tasksSlotRef.current);
-  }
-
-  // Pomodoro slot (if pomodoro state channel exists)
-  const pomodoroState = stateChannels.get("pomodoro:state") as any;
-  if (pomodoroState) {
-    if (!pomodoroStateStoreRef.current) {
-      pomodoroStateStoreRef.current = createSlotState(derivePomodoroSlotState(pomodoroState));
-    } else {
-      pomodoroStateStoreRef.current.replaceState(derivePomodoroSlotState(pomodoroState));
-    }
-    pomodoroSlotRef.current = pomodoroSlotRef.current ?? {
-      id: "pomodoro.main",
-      label: "Timer",
-      icon: "timer",
-      priority: 90,
-      state: pomodoroStateStoreRef.current,
-    };
-    slots.push(pomodoroSlotRef.current);
-  }
 
   return slots;
 }
 
 // =============================================================================
-// Slot Factories (Extension-Specific Rendering Logic)
+// Helpers
 // =============================================================================
 
-/**
- * Creates a tasks slot from tasks state channel data.
- *
- * NOTE: This function contains extension-specific rendering logic.
- * In a future iteration, this could be moved to the extension package itself
- * and provided to the renderer as a browser-safe UI definition.
- */
-function deriveTasksSlotState(state: any) {
-  const { tasks = [], activeTaskId = null } = state;
-  const activeTasks = tasks.filter((t: any) => t.status !== "done");
-  const completedTasks = tasks.filter((t: any) => t.status === "done");
-
-  const sections: any[] = [];
-
-  if (activeTasks.length > 0) {
-    sections.push({
-      id: "active",
-      title: "Active",
-      items: activeTasks.map((task: any) => ({
-        id: task.id,
-        label: task.text,
-        sublabel: task.blockedReason,
-        status: task.id === activeTaskId ? "active" : task.status === "blocked" ? "error" : "default",
-        checkable: true,
-        checked: false,
-        onToggle: () => {
-          window.electronAPI.executeExtensionTool("updateTaskStatus", { taskId: task.id, status: "done" });
-        },
-        onClick: () => {
-          window.electronAPI.executeExtensionTool("setActiveTask", { taskId: task.id });
-        },
-      })),
-    });
+function attachActionHandlers(slotId: string, state: any) {
+  const panel = state?.panel;
+  if (!panel || panel.type !== "list") {
+    return state;
   }
 
-  if (completedTasks.length > 0) {
-    sections.push({
-      id: "completed",
-      title: "Completed",
-      items: completedTasks.map((task: any) => ({
-        id: task.id,
-        label: task.text,
-        status: "success",
-        checkable: true,
-        checked: true,
-        onToggle: () => {
-          window.electronAPI.executeExtensionTool("updateTaskStatus", { taskId: task.id, status: "todo" });
-        },
-      })),
-      collapsible: true,
-      defaultCollapsed: activeTasks.length > 3,
-      actions: [
-        {
-          id: "clear-completed",
-          label: "Clear all",
-          onClick: () => {
-            window.electronAPI.executeExtensionTool("clearCompletedTasks", {});
-          },
-        },
-      ],
-    });
-  }
-
-  return {
-    badge: activeTasks.length || null,
-    // Always show the slot so users can add/inspect tasks even when empty
-    visible: true,
+  const withHandlers = {
+    ...state,
     panel: {
-      type: "list",
-      title: "Tasks",
-      emptyMessage: "No tasks yet",
-      sections,
+      ...panel,
+      actions: panel.actions?.map((action: any) => ({
+        ...action,
+        onClick: () => window.electronAPI.executeSlotAction(slotId, "panel-action", action.id),
+      })),
+      sections: panel.sections?.map((section: any) => ({
+        ...section,
+        actions: section.actions?.map((action: any) => ({
+          ...action,
+          onClick: () => window.electronAPI.executeSlotAction(slotId, "section-action", action.id),
+        })),
+        items: section.items?.map((item: any) => ({
+          ...item,
+          onClick: item.onClick
+            ? () => window.electronAPI.executeSlotAction(slotId, "item-click", item.id)
+            : undefined,
+          onToggle: item.checkable
+            ? () => window.electronAPI.executeSlotAction(slotId, "item-toggle", item.id)
+            : undefined,
+        })),
+      })),
+      items: panel.items?.map((item: any) => ({
+        ...item,
+        onClick: item.onClick
+          ? () => window.electronAPI.executeSlotAction(slotId, "item-click", item.id)
+          : undefined,
+        onToggle: item.checkable
+          ? () => window.electronAPI.executeSlotAction(slotId, "item-toggle", item.id)
+          : undefined,
+      })),
     },
   };
-}
 
-/**
- * Creates a pomodoro slot from pomodoro state channel data.
- *
- * NOTE: This function contains extension-specific rendering logic.
- * In a future iteration, this could be moved to the extension package itself
- * and provided to the renderer as a browser-safe UI definition.
- */
-function derivePomodoroSlotState(state: any) {
-  const { state: phase = "idle", remainingTime = 30 * 60, isBreak = false, sessionsCompleted = 0 } = state;
-
-  // Keep the slot visible even when idle so the start button is discoverable
-  const visible = true;
-  const remainingMs = remainingTime * 1000;
-
-  const formatTime = (ms: number): string => {
-    const totalSeconds = Math.ceil(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  };
-
-  const badge = (phase === "running" || phase === "paused") ? formatTime(remainingMs) : null;
-
-  const items: any[] = [];
-
-  const getPhaseLabel = (): string => {
-    if (isBreak) {
-      return phase === "running" ? "Break time" : "Break paused";
-    }
-    switch (phase) {
-      case "running":
-        return "Focus time";
-      case "paused":
-        return "Paused";
-      case "idle":
-        return "Ready to start";
-      default:
-        return "Timer";
-    }
-  };
-
-  const getPhaseStatus = (): string => {
-    if (phase === "running") {
-      return isBreak ? "success" : "active";
-    }
-    if (phase === "paused") {
-      return "warning";
-    }
-    return "default";
-  };
-
-  items.push({
-    id: "status",
-    label: getPhaseLabel(),
-    sublabel: phase !== "idle" ? `${formatTime(remainingMs)} remaining` : "30 min session",
-    status: getPhaseStatus(),
-  });
-
-  if (sessionsCompleted > 0) {
-    items.push({
-      id: "sessions",
-      label: `${sessionsCompleted} session${sessionsCompleted === 1 ? "" : "s"} completed`,
-      status: "success",
-    });
-  }
-
-  const actions: any[] = [];
-
-  if (phase === "idle") {
-    actions.push({
-      id: "start",
-      label: "Start Focus",
-      variant: "primary",
-      onClick: () => {
-        window.electronAPI.executeExtensionTool("startPomodoro", {});
-      },
-    });
-  } else if (phase === "running") {
-    actions.push({
-      id: "pause",
-      label: "Pause",
-      variant: "secondary",
-      onClick: () => {
-        window.electronAPI.executeExtensionTool("pausePomodoro", {});
-      },
-    });
-    actions.push({
-      id: "reset",
-      label: "Reset",
-      variant: "danger",
-      onClick: () => {
-        window.electronAPI.executeExtensionTool("resetPomodoro", {});
-      },
-    });
-  } else if (phase === "paused") {
-    actions.push({
-      id: "resume",
-      label: "Resume",
-      variant: "primary",
-      onClick: () => {
-        window.electronAPI.executeExtensionTool("startPomodoro", {});
-      },
-    });
-    actions.push({
-      id: "reset",
-      label: "Reset",
-      variant: "danger",
-      onClick: () => {
-        window.electronAPI.executeExtensionTool("resetPomodoro", {});
-      },
-    });
-  }
-
-  return {
-    badge,
-    visible,
-    panel: {
-      type: "list",
-      title: isBreak ? "Break Time" : "Focus Timer",
-      items,
-      actions,
-    },
-  };
+  return withHandlers;
 }

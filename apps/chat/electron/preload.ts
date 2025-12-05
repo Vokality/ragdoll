@@ -47,6 +47,26 @@ export interface StateChannelChangeEvent {
   state: unknown;
 }
 
+export interface SlotInfo {
+  extensionId: string;
+  slotId: string;
+  label: string;
+  icon: string | { type: "component" };
+  priority: number;
+}
+
+export interface SlotState {
+  badge: number | string | null;
+  visible: boolean;
+  panel: unknown;
+}
+
+export interface SlotChangeEvent {
+  extensionId: string;
+  slotId: string;
+  state: SlotState;
+}
+
 // Types for the API
 export interface ElectronAPI {
   // Auth
@@ -78,6 +98,8 @@ export interface ElectronAPI {
   // Extensions
   getExtensionStats: () => Promise<ExtensionStats>;
   getExtensionTools: () => Promise<ToolDefinition[]>;
+  getExtensionSlots: () => Promise<SlotInfo[]>;
+  getSlotState: (slotId: string) => Promise<SlotState | null>;
   getAvailableExtensions: () => Promise<ExtensionInfo[]>;
   getDisabledExtensions: () => Promise<string[]>;
   setDisabledExtensions: (extensionIds: string[]) => Promise<{ success: boolean; requiresRestart: boolean }>;
@@ -96,6 +118,14 @@ export interface ElectronAPI {
   getAllStateChannels: () => Promise<StateChannelInfo[]>;
   getStateChannel: (channelId: string) => Promise<unknown | null>;
   onStateChannelChanged: (callback: (event: StateChannelChangeEvent) => void) => () => void;
+
+  // Extension Slots (generic)
+  onSlotStateChanged: (callback: (event: SlotChangeEvent) => void) => () => void;
+  executeSlotAction: (
+    slotId: string,
+    actionType: string,
+    actionId: string
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Platform
   platform: string;
@@ -150,6 +180,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Extensions
   getExtensionStats: () => ipcRenderer.invoke("extensions:get-stats"),
   getExtensionTools: () => ipcRenderer.invoke("extensions:get-tools"),
+  getExtensionSlots: () => ipcRenderer.invoke("extensions:get-slots"),
+  getSlotState: (slotId: string) => ipcRenderer.invoke("extensions:get-slot-state", slotId),
   getAvailableExtensions: () => ipcRenderer.invoke("extensions:get-available"),
   getDisabledExtensions: () => ipcRenderer.invoke("extensions:get-disabled"),
   setDisabledExtensions: (extensionIds: string[]) =>
@@ -176,6 +208,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("extension-state:changed", handler);
     };
   },
+
+  onSlotStateChanged: (callback: (event: SlotChangeEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: SlotChangeEvent) => callback(event);
+    ipcRenderer.on("extension-slot:changed", handler);
+    return () => {
+      ipcRenderer.removeListener("extension-slot:changed", handler);
+    };
+  },
+  executeSlotAction: (slotId: string, actionType: string, actionId: string) =>
+    ipcRenderer.invoke("extensions:execute-slot-action", slotId, actionType, actionId),
 
   // Platform
   platform: process.platform,
