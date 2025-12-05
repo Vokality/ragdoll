@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ExtensionUISlot } from "@vokality/ragdoll-extensions";
 import { createSlotState } from "@vokality/ragdoll-extensions";
+import { useRef } from "react";
 
 /**
  * Generic hook that manages extension slots by subscribing to state channel changes.
@@ -18,6 +19,11 @@ import { createSlotState } from "@vokality/ragdoll-extensions";
 export function useExtensionSlots(): ExtensionUISlot[] {
   // Map of state channels: channelId -> state
   const [stateChannels, setStateChannels] = useState<Map<string, unknown>>(new Map());
+  // Persist slot stores so subscribers stay attached across renders
+  const tasksSlotRef = useRef<ExtensionUISlot | null>(null);
+  const tasksStateStoreRef = useRef<ReturnType<typeof createSlotState> | null>(null);
+  const pomodoroSlotRef = useRef<ExtensionUISlot | null>(null);
+  const pomodoroStateStoreRef = useRef<ReturnType<typeof createSlotState> | null>(null);
 
   // Load initial state and subscribe to changes
   useEffect(() => {
@@ -50,13 +56,37 @@ export function useExtensionSlots(): ExtensionUISlot[] {
   // Tasks slot (if tasks state channel exists)
   const tasksState = stateChannels.get("tasks:state") as any;
   if (tasksState) {
-    slots.push(createTasksSlot(tasksState));
+    if (!tasksStateStoreRef.current) {
+      tasksStateStoreRef.current = createSlotState(deriveTasksSlotState(tasksState));
+    } else {
+      tasksStateStoreRef.current.replaceState(deriveTasksSlotState(tasksState));
+    }
+    tasksSlotRef.current = tasksSlotRef.current ?? {
+      id: "tasks.main",
+      label: "Tasks",
+      icon: "checklist",
+      priority: 100,
+      state: tasksStateStoreRef.current,
+    };
+    slots.push(tasksSlotRef.current);
   }
 
   // Pomodoro slot (if pomodoro state channel exists)
   const pomodoroState = stateChannels.get("pomodoro:state") as any;
   if (pomodoroState) {
-    slots.push(createPomodoroSlot(pomodoroState));
+    if (!pomodoroStateStoreRef.current) {
+      pomodoroStateStoreRef.current = createSlotState(derivePomodoroSlotState(pomodoroState));
+    } else {
+      pomodoroStateStoreRef.current.replaceState(derivePomodoroSlotState(pomodoroState));
+    }
+    pomodoroSlotRef.current = pomodoroSlotRef.current ?? {
+      id: "pomodoro.main",
+      label: "Timer",
+      icon: "timer",
+      priority: 90,
+      state: pomodoroStateStoreRef.current,
+    };
+    slots.push(pomodoroSlotRef.current);
   }
 
   return slots;
@@ -73,7 +103,7 @@ export function useExtensionSlots(): ExtensionUISlot[] {
  * In a future iteration, this could be moved to the extension package itself
  * and provided to the renderer as a browser-safe UI definition.
  */
-function createTasksSlot(state: any): ExtensionUISlot {
+function deriveTasksSlotState(state: any) {
   const { tasks = [], activeTaskId = null } = state;
   const activeTasks = tasks.filter((t: any) => t.status !== "done");
   const completedTasks = tasks.filter((t: any) => t.status === "done");
@@ -129,23 +159,16 @@ function createTasksSlot(state: any): ExtensionUISlot {
     });
   }
 
-  const slotState = createSlotState({
+  return {
     badge: activeTasks.length || null,
-    visible: tasks.length > 0,
+    // Always show the slot so users can add/inspect tasks even when empty
+    visible: true,
     panel: {
       type: "list",
       title: "Tasks",
       emptyMessage: "No tasks yet",
       sections,
     },
-  });
-
-  return {
-    id: "tasks.main",
-    label: "Tasks",
-    icon: "checklist",
-    priority: 100,
-    state: slotState,
   };
 }
 
@@ -156,10 +179,11 @@ function createTasksSlot(state: any): ExtensionUISlot {
  * In a future iteration, this could be moved to the extension package itself
  * and provided to the renderer as a browser-safe UI definition.
  */
-function createPomodoroSlot(state: any): ExtensionUISlot {
+function derivePomodoroSlotState(state: any) {
   const { state: phase = "idle", remainingTime = 30 * 60, isBreak = false, sessionsCompleted = 0 } = state;
 
-  const visible = phase !== "idle";
+  // Keep the slot visible even when idle so the start button is discoverable
+  const visible = true;
   const remainingMs = remainingTime * 1000;
 
   const formatTime = (ms: number): string => {
@@ -261,7 +285,7 @@ function createPomodoroSlot(state: any): ExtensionUISlot {
     });
   }
 
-  const slotState = createSlotState({
+  return {
     badge,
     visible,
     panel: {
@@ -270,13 +294,5 @@ function createPomodoroSlot(state: any): ExtensionUISlot {
       items,
       actions,
     },
-  });
-
-  return {
-    id: "pomodoro.main",
-    label: "Timer",
-    icon: "timer",
-    priority: 90,
-    state: slotState,
   };
 }

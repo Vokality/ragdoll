@@ -138,6 +138,7 @@ export async function sendChatMessage(
         id: string;
         name: string;
         arguments: string;
+        result?: string;
       }> = [];
 
       let streamFinishedReason: string | null = null;
@@ -206,6 +207,19 @@ export async function sendChatMessage(
             } else if (handledInRenderer) {
               onFunctionCall(currentToolCall.name, args);
             }
+
+            // Record the outcome so the model can react (e.g., retry or explain failure)
+            completedToolCalls[completedToolCalls.length - 1] = {
+              ...completedToolCalls[completedToolCalls.length - 1],
+              result: JSON.stringify({
+                args,
+                result: {
+                  success: result.success,
+                  error: result.error,
+                  data: result.data,
+                },
+              }),
+            };
           } catch (error) {
             console.error("Failed to parse/execute tool call:", error);
           }
@@ -230,16 +244,10 @@ export async function sendChatMessage(
             ],
           });
 
-          const toolResultSummary = JSON.stringify({
-            status: "success",
-            tool: call.name,
-            handledInRenderer: true,
-          });
-
           messages.push({
             role: "tool",
             tool_call_id: toolCallId,
-            content: toolResultSummary,
+            content: call.result ?? call.arguments,
           });
         }
         shouldContinue = true;

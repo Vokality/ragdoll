@@ -29,6 +29,7 @@ const logExtensions = (...args: unknown[]): void => {
 
 let mainWindow: BrowserWindow | null = null;
 let extensionManager: ExtensionManager | null = null;
+let statePoller: ReturnType<typeof setInterval> | null = null;
 
 async function createWindow(): Promise<void> {
   const storage = storageRepo.read();
@@ -76,6 +77,22 @@ async function createWindow(): Promise<void> {
   });
   await extensionManager.initialize();
   logExtensions("Extension manager initialized", extensionManager.getStats());
+
+  // Periodically broadcast state channels to keep renderer timers (like Pomodoro) in sync
+  if (statePoller) {
+    clearInterval(statePoller);
+  }
+  statePoller = setInterval(() => {
+    if (!extensionManager || !mainWindow || mainWindow.isDestroyed()) return;
+    const channels = extensionManager.getAllStateChannels();
+    channels.forEach(({ extensionId, channelId, state }) => {
+      mainWindow?.webContents.send("extension-state:changed", {
+        extensionId,
+        channelId,
+        state,
+      });
+    });
+  }, 1000);
 
   mainWindow = new BrowserWindow({
     width: 480,
@@ -138,6 +155,10 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  if (statePoller) {
+    clearInterval(statePoller);
+    statePoller = null;
+  }
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -379,6 +400,17 @@ ipcMain.handle(
     try {
       const result = await extensionManager.executeTool(toolName, args ?? {});
       logExtensions("Tool execution result", { toolName, success: result.success });
+      // After executing a tool, broadcast the latest state for all channels to keep the UI in sync
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const channels = extensionManager.getAllStateChannels();
+        channels.forEach(({ extensionId, channelId, state }) => {
+          mainWindow?.webContents.send("extension-state:changed", {
+            extensionId,
+            channelId,
+            state,
+          });
+        });
+      }
       return result;
     } catch (error) {
       console.error("Failed to execute tool", toolName, error);

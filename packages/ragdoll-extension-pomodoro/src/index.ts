@@ -86,30 +86,36 @@ export interface PomodoroToolHandler {
 // =============================================================================
 
 function validateStartPomodoro(args: Record<string, unknown>): ValidationResult {
+  const coerceNumber = (value: unknown): number | undefined => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+      return Number(value);
+    }
+    return undefined;
+  };
+
+  const sessionDuration = coerceNumber(args.sessionDuration);
   if (args.sessionDuration !== undefined) {
-    const sd = args.sessionDuration;
-    if (
-      typeof sd !== "number" ||
-      !VALID_SESSION_DURATIONS.includes(sd as SessionDuration)
-    ) {
+    if (sessionDuration === undefined || !VALID_SESSION_DURATIONS.includes(sessionDuration as SessionDuration)) {
       return {
         valid: false,
-        error: `Invalid sessionDuration '${sd}'. Valid: ${VALID_SESSION_DURATIONS.join(", ")} minutes`,
+        error: `Invalid sessionDuration '${args.sessionDuration}'. Valid: ${VALID_SESSION_DURATIONS.join(", ")} minutes`,
       };
     }
+    args.sessionDuration = sessionDuration;
   }
+
+  const breakDuration = coerceNumber(args.breakDuration);
   if (args.breakDuration !== undefined) {
-    const bd = args.breakDuration;
-    if (
-      typeof bd !== "number" ||
-      !VALID_BREAK_DURATIONS.includes(bd as BreakDuration)
-    ) {
+    if (breakDuration === undefined || !VALID_BREAK_DURATIONS.includes(breakDuration as BreakDuration)) {
       return {
         valid: false,
-        error: `Invalid breakDuration '${bd}'. Valid: ${VALID_BREAK_DURATIONS.join(", ")} minutes`,
+        error: `Invalid breakDuration '${args.breakDuration}'. Valid: ${VALID_BREAK_DURATIONS.join(", ")} minutes`,
       };
     }
+    args.breakDuration = breakDuration;
   }
+
   return { valid: true };
 }
 
