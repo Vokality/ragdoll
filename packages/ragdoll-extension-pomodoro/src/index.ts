@@ -412,7 +412,7 @@ export function createRuntime(
   };
 
   const slotState = createSlotState(deriveSlotState(mapPomodoroState(manager)));
-  const unsubscribeSlot = manager.onStateChange((event) => {
+  const unsubscribeSlot = manager.onStateChange(() => {
     slotState.replaceState(deriveSlotState(mapPomodoroState(manager)));
   });
 
