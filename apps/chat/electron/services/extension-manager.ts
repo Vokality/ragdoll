@@ -3,36 +3,48 @@
  *
  * Responsibilities:
  * - Manages the ExtensionRegistry lifecycle
- * - Registers built-in extensions with appropriate handlers
- * - Manages stateful extensions (tasks, pomodoro) in the main process
- * - Syncs state changes to the renderer via callbacks
+ * - Provides ExtensionHostEnvironment to extensions
+ * - Registers built-in extensions (character, tasks, pomodoro, spotify)
+ * - Syncs state changes to the renderer via IPC
  * - Provides tool definitions to the OpenAI service
  */
 
 import {
   createRegistry,
   createLoader,
-  createCharacterExtension,
-  createStatefulPomodoroExtension,
-  createStatefulTaskExtension,
-  createStatefulSpotifyExtension,
+  createExtension,
   type ExtensionRegistry,
   type ExtensionLoader,
   type ToolDefinition,
   type ToolResult,
   type LoadResult,
-  type CharacterToolHandler,
-  type TaskManager,
+  type ExtensionHostEnvironment,
+  type NotificationRequest,
+  type NotificationCallback,
+} from "@vokality/ragdoll-extensions";
+
+import {
+  createCharacterRuntime,
+} from "@vokality/ragdoll-extension-character";
+
+import {
+  createTaskRuntime,
   type TaskState,
   type TaskEvent,
-  type PomodoroManager,
+} from "@vokality/ragdoll-extension-tasks";
+
+import {
+  createPomodoroRuntime,
   type PomodoroEvent,
-  type NotificationCallback,
+} from "@vokality/ragdoll-extension-pomodoro";
+
+import {
+  createSpotifyManager,
   type SpotifyManager,
   type SpotifyEvent,
   type SpotifyTokens,
   type SpotifyPlaybackState,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extension-spotify";
 
 // =============================================================================
 // Types
@@ -115,6 +127,11 @@ export interface ExtensionManagerConfig {
    * Valid IDs: "character", "pomodoro", "tasks", "spotify"
    */
   disabledExtensions?: string[];
+
+  /**
+   * User data path for extension storage
+   */
+  userDataPath: string;
 }
 
 /** Built-in extension IDs */
@@ -179,50 +196,95 @@ export const BUILT_IN_EXTENSIONS: readonly BuiltInExtensionInfo[] = [
 
 /**
  * Manages extensions and provides a unified interface for tool access.
- *
- * @example
- * ```ts
- * const manager = new ExtensionManager({
- *   onToolExecution: (name, args) => {
- *     mainWindow?.webContents.send("chat:function-call", name, args);
- *   },
- *   onTaskStateChange: (event) => {
- *     mainWindow?.webContents.send("tasks:state-changed", event.state);
- *     saveTasksToStorage(event.state);
- *   },
- *   onPomodoroStateChange: (event) => {
- *     mainWindow?.webContents.send("pomodoro:state-changed", event.state);
- *   },
- *   initialTaskState: await loadTasksFromStorage(),
- * });
- *
- * await manager.initialize();
- *
- * // Get tools for OpenAI
- * const tools = manager.getTools();
- *
- * // Execute a tool
- * const result = await manager.executeTool("setMood", { mood: "smile" });
- * ```
  */
 export class ExtensionManager {
   private registry: ExtensionRegistry;
   private loader: ExtensionLoader;
   private config: ExtensionManagerConfig;
   private initialized = false;
-
-  // Stateful managers
-  private taskManager: TaskManager | null = null;
-  private pomodoroManager: PomodoroManager | null = null;
   private spotifyManager: SpotifyManager | null = null;
+  private stateChannelUnsubscribers: Array<() => void> = [];
+  private storageMap = new Map<string, Map<string, unknown>>();
 
-  constructor(config: ExtensionManagerConfig = {}) {
+  constructor(config: ExtensionManagerConfig) {
     this.config = config;
     this.registry = createRegistry();
+
+    const hostEnv = this.createHostEnvironment();
     this.loader = createLoader(this.registry, {
       searchPaths: config.searchPaths ?? [],
       continueOnError: true,
+      hostEnvironment: hostEnv,
     });
+  }
+
+  /**
+   * Create the host environment for extensions.
+   */
+  private createHostEnvironment(): ExtensionHostEnvironment {
+    const storage = {
+      read: async <T>(extensionId: string, key: string): Promise<T | undefined> => {
+        const extStorage = this.storageMap.get(extensionId);
+        if (!extStorage) return undefined;
+        return (extStorage.get(key) as T) ?? undefined;
+      },
+      write: async <T>(extensionId: string, key: string, value: T): Promise<void> => {
+        let extStorage = this.storageMap.get(extensionId);
+        if (!extStorage) {
+          extStorage = new Map();
+          this.storageMap.set(extensionId, extStorage);
+        }
+        extStorage.set(key, value);
+      },
+      delete: async (extensionId: string, key: string): Promise<void> => {
+        const extStorage = this.storageMap.get(extensionId);
+        if (extStorage) {
+          extStorage.delete(key);
+        }
+      },
+      list: async (extensionId: string): Promise<string[]> => {
+        const extStorage = this.storageMap.get(extensionId);
+        if (!extStorage) return [];
+        return Array.from(extStorage.keys());
+      },
+    };
+
+    const notifications = this.config.onNotification
+      ? (req: NotificationRequest) => {
+          this.config.onNotification?.(req);
+        }
+      : undefined;
+
+    const logger = {
+      debug: (...args: unknown[]) => console.debug("[Extension]", ...args),
+      info: (...args: unknown[]) => console.info("[Extension]", ...args),
+      warn: (...args: unknown[]) => console.warn("[Extension]", ...args),
+      error: (...args: unknown[]) => console.error("[Extension]", ...args),
+    };
+
+    const ipc = {
+      publish: (topic: string, payload: unknown) => {
+        if (this.config.onToolExecution && topic.startsWith("extension-tool:")) {
+          const data = payload as { extensionId: string; tool: string; args: Record<string, unknown> };
+          this.config.onToolExecution(data.tool, data.args);
+        }
+      },
+      subscribe: (_topic: string, _handler: (payload: unknown) => void): (() => void) => {
+        // Not implemented in main process - renderer will subscribe via IPC
+        return () => {};
+      },
+    };
+
+    return {
+      capabilities: new Set(["storage", "notifications", "ipc", "logger"]),
+      storage,
+      notifications,
+      logger,
+      ipc,
+      schedulePersistence: async (extensionId: string, reason: string) => {
+        logger.debug?.(`Persistence scheduled for ${extensionId}: ${reason}`);
+      },
+    };
   }
 
   /**
@@ -235,6 +297,9 @@ export class ExtensionManager {
 
     // Register built-in extensions
     await this.registerBuiltInExtensions();
+
+    // Subscribe to state channels
+    this.subscribeToStateChannels();
 
     // Auto-discover and load packages if configured
     if (this.config.autoDiscover && this.config.searchPaths?.length) {
@@ -252,104 +317,95 @@ export class ExtensionManager {
   }
 
   /**
-   * Register the built-in extensions.
-   *
-   * - Character extension: forwards to renderer (UI-based)
-   * - Pomodoro extension: stateful, managed in main process
-   * - Tasks extension: stateful, managed in main process
-   *
-   * Extensions in the `disabledExtensions` config will be skipped.
+   * Subscribe to state channels from registered extensions.
    */
-  private async registerBuiltInExtensions(): Promise<void> {
-    // Character extension - forwards to renderer for UI updates
-    if (!this.isExtensionDisabled("character")) {
-      const characterHandler = this.createCharacterForwardingHandler();
-      const characterExtension = createCharacterExtension({
-        handler: characterHandler,
-      });
-      await this.registry.register(characterExtension);
-    }
+  private subscribeToStateChannels(): void {
+    const channels = this.registry.getStateChannels();
 
-    // Pomodoro extension - stateful, managed here
-    if (!this.isExtensionDisabled("pomodoro")) {
-      const { extension: pomodoroExtension, manager: pomodoroManager } =
-        createStatefulPomodoroExtension({
-          sessionDuration: 30,
-          breakDuration: 5,
-          onStateChange: (event) => {
-            // Forward state changes to renderer
-            if (this.config.onPomodoroStateChange) {
-              this.config.onPomodoroStateChange(event);
-            }
-          },
-          onNotification: this.config.onNotification,
+    for (const { extensionId, channel } of channels) {
+      if (extensionId === "tasks" && channel.id === "tasks:state") {
+        const unsubscribe = channel.subscribe((state) => {
+          const taskEvent: TaskEvent = {
+            type: "state:changed",
+            state: state as TaskState,
+            timestamp: Date.now(),
+          };
+          this.config.onTaskStateChange?.(taskEvent);
         });
-      this.pomodoroManager = pomodoroManager;
-      await this.registry.register(pomodoroExtension);
-    }
-
-    // Tasks extension - stateful, managed here
-    if (!this.isExtensionDisabled("tasks")) {
-      const { extension: taskExtension, manager: taskManager } =
-        createStatefulTaskExtension({
-          initialState: this.config.initialTaskState,
-          onStateChange: (event) => {
-            // Forward state changes to renderer
-            if (this.config.onTaskStateChange) {
-              this.config.onTaskStateChange(event);
-            }
-          },
+        this.stateChannelUnsubscribers.push(unsubscribe);
+      } else if (extensionId === "pomodoro" && channel.id === "pomodoro:state") {
+        const unsubscribe = channel.subscribe((state) => {
+          const pomodoroEvent: PomodoroEvent = {
+            type: "state:changed",
+            state: state as any,
+            timestamp: Date.now(),
+          };
+          this.config.onPomodoroStateChange?.(pomodoroEvent);
         });
-      this.taskManager = taskManager;
-      await this.registry.register(taskExtension);
-    }
-
-    // Spotify extension - optional, only if configured and not disabled
-    if (this.config.spotify && !this.isExtensionDisabled("spotify")) {
-      const { extension: spotifyExtension, manager: spotifyManager } =
-        createStatefulSpotifyExtension({
-          clientId: this.config.spotify.clientId,
-          redirectUri: this.config.spotify.redirectUri,
-          onStateChange: (event) => {
-            if (this.config.onSpotifyStateChange) {
-              this.config.onSpotifyStateChange(event);
-            }
-          },
-        });
-      this.spotifyManager = spotifyManager;
-
-      // Load initial tokens if provided
-      if (this.config.spotify.initialTokens) {
-        spotifyManager.loadTokens(this.config.spotify.initialTokens);
+        this.stateChannelUnsubscribers.push(unsubscribe);
       }
-
-      await this.registry.register(spotifyExtension);
     }
   }
 
   /**
-   * Creates a handler that forwards character tool calls to the renderer.
+   * Register the built-in extensions.
    */
-  private createCharacterForwardingHandler(): CharacterToolHandler {
-    const forward = (
-      methodName: string,
-      args: Record<string, unknown>
-    ): ToolResult => {
-      if (this.config.onToolExecution) {
-        this.config.onToolExecution(methodName, args);
-      }
-      return {
-        success: true,
-        data: { handledInRenderer: true, tool: methodName },
-      };
-    };
+  private async registerBuiltInExtensions(): Promise<void> {
+    const host = this.createHostEnvironment();
 
-    return {
-      setMood: (args) => forward("setMood", args as unknown as Record<string, unknown>),
-      triggerAction: (args) => forward("triggerAction", args as unknown as Record<string, unknown>),
-      setHeadPose: (args) => forward("setHeadPose", args as unknown as Record<string, unknown>),
-      setSpeechBubble: (args) => forward("setSpeechBubble", args as unknown as Record<string, unknown>),
-    };
+    // Character extension - forwards to renderer for UI updates
+    if (!this.isExtensionDisabled("character")) {
+      const characterExtension = createExtension({
+        id: "character",
+        name: "Character",
+        version: "1.1.0",
+        description: "Facial expressions and animations",
+        requiredCapabilities: ["ipc"],
+        createRuntime: (h) => createCharacterRuntime(undefined, h),
+      });
+      await this.registry.register(characterExtension, { host });
+    }
+
+    // Pomodoro extension
+    if (!this.isExtensionDisabled("pomodoro")) {
+      const pomodoroExtension = createExtension({
+        id: "pomodoro",
+        name: "Pomodoro Timer",
+        version: "1.1.0",
+        description: "Pomodoro-style focus sessions",
+        requiredCapabilities: ["notifications"],
+        createRuntime: (h) => createPomodoroRuntime({ sessionDuration: 30, breakDuration: 5 }, h),
+      });
+      await this.registry.register(pomodoroExtension, { host });
+    }
+
+    // Tasks extension
+    if (!this.isExtensionDisabled("tasks")) {
+      const taskExtension = createExtension({
+        id: "tasks",
+        name: "Task Manager",
+        version: "1.1.0",
+        description: "Task tracking and management",
+        requiredCapabilities: [],
+        createRuntime: (h) => createTaskRuntime({ initialState: this.config.initialTaskState }, h),
+      });
+      await this.registry.register(taskExtension, { host });
+    }
+
+    // Spotify extension - optional, only if configured and not disabled
+    if (this.config.spotify && !this.isExtensionDisabled("spotify")) {
+      this.spotifyManager = createSpotifyManager({
+        clientId: this.config.spotify.clientId,
+        redirectUri: this.config.spotify.redirectUri,
+        initialTokens: this.config.spotify.initialTokens,
+        onStateChange: (event) => {
+          this.config.onSpotifyStateChange?.(event);
+        },
+      });
+
+      // TODO: Update createSpotifyExtension to use new API
+      // For now, Spotify manager is managed manually
+    }
   }
 
   // ===========================================================================
@@ -358,7 +414,6 @@ export class ExtensionManager {
 
   /**
    * Get all tool definitions in OpenAI format.
-   * Call this fresh on each chat request to get the latest tools.
    */
   getTools(): ToolDefinition[] {
     return this.registry.getAllTools();
@@ -412,7 +467,6 @@ export class ExtensionManager {
 
   /**
    * Get metadata for all available built-in extensions.
-   * Used by the UI to render extension toggles in settings.
    */
   getAvailableExtensions(): readonly BuiltInExtensionInfo[] {
     return BUILT_IN_EXTENSIONS;
@@ -426,40 +480,30 @@ export class ExtensionManager {
   }
 
   // ===========================================================================
-  // Public API - Task Manager
+  // Public API - Task State (via state channel)
   // ===========================================================================
-
-  /**
-   * Get the task manager instance.
-   */
-  getTaskManager(): TaskManager | null {
-    return this.taskManager;
-  }
 
   /**
    * Get current task state.
    */
   getTaskState(): TaskState | null {
-    return this.taskManager?.getState() ?? null;
+    const channel = this.registry.getStateChannel("tasks:state");
+    if (!channel) return null;
+    return channel.channel.getState() as TaskState;
   }
 
   /**
    * Load task state (e.g., from storage on startup).
    */
   loadTaskState(state: TaskState): void {
-    this.taskManager?.loadState(state);
+    // Task state is now managed by the extension itself via host storage
+    // This is a compatibility method that doesn't do anything
+    console.warn("[ExtensionManager] loadTaskState is deprecated - tasks extension manages its own state");
   }
 
   // ===========================================================================
-  // Public API - Pomodoro Manager
+  // Public API - Pomodoro State (via state channel)
   // ===========================================================================
-
-  /**
-   * Get the pomodoro manager instance.
-   */
-  getPomodoroManager(): PomodoroManager | null {
-    return this.pomodoroManager;
-  }
 
   /**
    * Get current pomodoro state.
@@ -470,13 +514,14 @@ export class ExtensionManager {
     isBreak: boolean;
     sessionsCompleted: number;
   } | null {
-    if (!this.pomodoroManager) return null;
-    const state = this.pomodoroManager.getState();
+    const channel = this.registry.getStateChannel("pomodoro:state");
+    if (!channel) return null;
+    const state = channel.channel.getState() as any;
     return {
-      phase: state.phase,
-      remainingSeconds: this.pomodoroManager.getRemainingSeconds(),
+      phase: state.state,
+      remainingSeconds: state.remainingTime,
       isBreak: state.isBreak,
-      sessionsCompleted: state.sessionsCompleted,
+      sessionsCompleted: state.sessionsCompleted ?? 0,
     };
   }
 
@@ -544,7 +589,6 @@ export class ExtensionManager {
 
   /**
    * Update Spotify playback state from Web Playback SDK.
-   * Called by renderer via IPC when SDK state changes.
    */
   updateSpotifyPlaybackState(playback: SpotifyPlaybackState): void {
     this.spotifyManager?.updatePlaybackState(playback);
@@ -552,7 +596,6 @@ export class ExtensionManager {
 
   /**
    * Fetch current playback state from Spotify REST API.
-   * Use this to get playback from any device, not just SDK-connected device.
    */
   async getSpotifyPlaybackState(): Promise<SpotifyPlaybackState | null> {
     if (!this.spotifyManager || !this.spotifyManager.isAuthenticated()) {
@@ -600,6 +643,122 @@ export class ExtensionManager {
    */
   async spotifyPrevious(): Promise<void> {
     await this.spotifyManager?.skipToPrevious();
+  }
+
+  // ===========================================================================
+  // Public API - UI Slots
+  // ===========================================================================
+
+  /**
+   * Get all UI slots from registered extensions.
+   * Returns serializable slot definitions (without functions/stores).
+   */
+  getAllSlots(): Array<{
+    extensionId: string;
+    slotId: string;
+    label: string;
+    icon: string | { type: "component" };
+    priority: number;
+  }> {
+    const slotContributions = this.registry.getSlots();
+    return slotContributions.map(({ extensionId, slot }) => ({
+      extensionId,
+      slotId: slot.id,
+      label: slot.label,
+      icon: typeof slot.icon === "string" ? slot.icon : { type: "component" as const },
+      priority: slot.priority ?? 0,
+    }));
+  }
+
+  /**
+   * Get current state snapshot for a specific slot.
+   */
+  getSlotState(slotId: string): {
+    badge: number | string | null;
+    visible: boolean;
+    panel: unknown;
+  } | null {
+    const slotEntry = this.registry.getSlot(slotId);
+    if (!slotEntry) return null;
+
+    const state = slotEntry.slot.state.getState();
+    return {
+      badge: state.badge,
+      visible: state.visible,
+      panel: this.serializePanel(state.panel),
+    };
+  }
+
+  /**
+   * Serialize panel config for IPC transport (remove functions).
+   */
+  private serializePanel(panel: unknown): unknown {
+    // Deep clone and remove functions
+    return JSON.parse(JSON.stringify(panel, (key, value) => {
+      if (typeof value === "function") return undefined;
+      return value;
+    }));
+  }
+
+  /**
+   * Execute a slot action (e.g., button click, checkbox toggle).
+   */
+  async executeSlotAction(
+    slotId: string,
+    actionType: string,
+    actionId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const slotEntry = this.registry.getSlot(slotId);
+    if (!slotEntry) {
+      return { success: false, error: `Slot not found: ${slotId}` };
+    }
+
+    try {
+      const state = slotEntry.slot.state.getState();
+      const panel = state.panel as any;
+
+      // Handle different action types
+      if (actionType === "panel-action" && panel.actions) {
+        const action = panel.actions.find((a: any) => a.id === actionId);
+        if (action?.onClick) {
+          await action.onClick();
+          return { success: true };
+        }
+      } else if (actionType === "item-toggle" && panel.sections) {
+        for (const section of panel.sections) {
+          const item = section.items.find((i: any) => i.id === actionId);
+          if (item?.onToggle) {
+            await item.onToggle();
+            return { success: true };
+          }
+        }
+      } else if (actionType === "item-click" && panel.sections) {
+        for (const section of panel.sections) {
+          const item = section.items.find((i: any) => i.id === actionId);
+          if (item?.onClick) {
+            await item.onClick();
+            return { success: true };
+          }
+        }
+      } else if (actionType === "section-action" && panel.sections) {
+        for (const section of panel.sections) {
+          if (section.actions) {
+            const action = section.actions.find((a: any) => a.id === actionId);
+            if (action?.onClick) {
+              await action.onClick();
+              return { success: true };
+            }
+          }
+        }
+      }
+
+      return { success: false, error: `Action not found: ${actionType}:${actionId}` };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   // ===========================================================================
@@ -701,9 +860,11 @@ export class ExtensionManager {
    * Clean up the extension manager.
    */
   async destroy(): Promise<void> {
+    for (const unsubscribe of this.stateChannelUnsubscribers) {
+      unsubscribe();
+    }
+    this.stateChannelUnsubscribers = [];
     await this.registry.destroy();
-    this.taskManager = null;
-    this.pomodoroManager = null;
     this.spotifyManager = null;
     this.initialized = false;
   }
@@ -721,8 +882,11 @@ let extensionManagerInstance: ExtensionManager | null = null;
 export function getExtensionManager(
   config?: ExtensionManagerConfig
 ): ExtensionManager {
-  if (!extensionManagerInstance) {
+  if (!extensionManagerInstance && config) {
     extensionManagerInstance = new ExtensionManager(config);
+  }
+  if (!extensionManagerInstance) {
+    throw new Error("ExtensionManager must be initialized with config first");
   }
   return extensionManagerInstance;
 }

@@ -1,196 +1,289 @@
 /**
- * Extension Registry - Central hub for managing extensions and tools.
- *
- * The registry is the core orchestrator of the extension system. It:
- * - Registers and unregisters extensions
- * - Aggregates tools from all registered extensions
- * - Routes tool execution to the appropriate handler
- * - Emits events when the tool set changes
+ * Event-driven extension registry that manages runtime contributions and capability maps.
  */
 
 import type {
-  RagdollExtension,
+  ExtensionContributionMetadata,
+  ExtensionContext,
+  ExtensionRuntimeContribution,
+  ExtensionServiceDefinition,
+  ExtensionStateChannel,
   ExtensionTool,
-  ToolDefinition,
-  ToolResult,
-  ValidationResult,
-  ToolExecutionContext,
+  RagdollExtension,
   RegisterOptions,
   RegistryEvent,
-  RegistryEventType,
   RegistryEventCallback,
+  RegistryEventType,
+  ToolDefinition,
+  ToolExecutionContext,
+  ToolResult,
+  ValidationResult,
 } from "./types.js";
+import type {
+  ExtensionHostCapability,
+  ExtensionHostEnvironment,
+} from "./types/host-environment.js";
+import type { ExtensionUISlot } from "./ui/types.js";
 
-/**
- * Internal state for a registered extension
- */
-interface RegisteredExtension {
-  extension: RagdollExtension;
-  instanceId: string;
-  registeredAt: number;
-}
-
-/**
- * Internal mapping of tool name to its owner and definition
- */
 interface ToolEntry {
   extensionId: string;
   tool: ExtensionTool;
 }
 
-/**
- * Extension Registry - manages extensions and provides unified tool access.
- *
- * @example
- * ```ts
- * const registry = new ExtensionRegistry();
- *
- * // Register an extension
- * await registry.register(myExtension);
- *
- * // Get all tools for OpenAI
- * const tools = registry.getAllTools();
- *
- * // Execute a tool
- * const result = await registry.executeTool("myTool", { arg: "value" });
- *
- * // Listen for changes
- * const unsubscribe = registry.onToolsChanged((event) => {
- *   console.log("Tools changed:", registry.getAllTools());
- * });
- * ```
- */
-export class ExtensionRegistry {
-  private extensions: Map<string, RegisteredExtension> = new Map();
-  private toolIndex: Map<string, ToolEntry> = new Map();
-  private listeners: Map<RegistryEventType, Set<RegistryEventCallback>> =
-    new Map();
-  private instanceCounter = 0;
+interface ServiceEntry {
+  extensionId: string;
+  definition: ExtensionServiceDefinition;
+}
 
-  /**
-   * Register an extension with the registry.
-   *
-   * @param extension - The extension to register
-   * @param options - Registration options
-   * @throws Error if extension ID already registered (unless replace: true)
-   * @throws Error if tool names conflict with existing tools
-   */
-  async register(
-    extension: RagdollExtension,
-    options: RegisterOptions = {}
-  ): Promise<void> {
-    const { config, replace = false } = options;
+interface StateChannelEntry {
+  extensionId: string;
+  channel: ExtensionStateChannel;
+}
 
-    // Check for existing registration
-    if (this.extensions.has(extension.id)) {
-      if (!replace) {
-        throw new Error(
-          `Extension '${extension.id}' is already registered. Use { replace: true } to override.`
-        );
-      }
-      // Unregister existing before replacing
-      await this.unregister(extension.id);
+interface SlotEntry {
+  extensionId: string;
+  slot: ExtensionUISlot;
+}
+
+interface RegisteredExtension {
+  extension: RagdollExtension;
+  host: ExtensionHostEnvironment;
+  context: ExtensionContext;
+  contribution: ExtensionRuntimeContribution;
+  registeredAt: number;
+  capabilities: {
+    tools: string[];
+    services: string[];
+    stateChannels: string[];
+    slots: string[];
+  };
+}
+
+class RegistryEventBus {
+  private listeners: Map<RegistryEventType, Set<RegistryEventCallback>> = new Map();
+
+  on(eventType: RegistryEventType, callback: RegistryEventCallback): () => void {
+    if (!this.listeners.has(eventType)) {
+      this.listeners.set(eventType, new Set());
     }
-
-    // Validate tool names don't conflict
-    for (const tool of extension.tools) {
-      const toolName = tool.definition.function.name;
-      const existing = this.toolIndex.get(toolName);
-      if (existing && existing.extensionId !== extension.id) {
-        throw new Error(
-          `Tool name '${toolName}' conflicts with extension '${existing.extensionId}'`
-        );
-      }
-    }
-
-    // Generate instance ID
-    const instanceId = `${extension.id}-${++this.instanceCounter}`;
-
-    // Initialize extension
-    if (extension.initialize) {
-      await extension.initialize({ instanceId, config });
-    }
-
-    // Register extension
-    const registered: RegisteredExtension = {
-      extension,
-      instanceId,
-      registeredAt: Date.now(),
+    this.listeners.get(eventType)!.add(callback);
+    return () => {
+      this.listeners.get(eventType)?.delete(callback);
     };
-    this.extensions.set(extension.id, registered);
-
-    // Index tools
-    for (const tool of extension.tools) {
-      const toolName = tool.definition.function.name;
-      this.toolIndex.set(toolName, {
-        extensionId: extension.id,
-        tool,
-      });
-    }
-
-    // Emit events
-    this.emit("extension:registered", extension.id);
-    this.emit("tools:changed", extension.id);
   }
 
-  /**
-   * Unregister an extension from the registry.
-   *
-   * @param extensionId - ID of the extension to unregister
-   * @returns true if the extension was unregistered, false if not found
-   */
+  async emit(event: RegistryEvent): Promise<void> {
+    const callbacks = this.listeners.get(event.type);
+    if (!callbacks || callbacks.size === 0) {
+      return;
+    }
+
+    const executions = Array.from(callbacks).map(async (callback) => {
+      try {
+        await callback(event);
+      } catch (error) {
+        console.error(`Error in registry event listener for '${event.type}':`, error);
+      }
+    });
+
+    await Promise.allSettled(executions);
+  }
+
+  getListenerCount(): number {
+    let count = 0;
+    for (const set of this.listeners.values()) {
+      count += set.size;
+    }
+    return count;
+  }
+
+  clear(eventType?: RegistryEventType): void {
+    if (eventType) {
+      this.listeners.delete(eventType);
+      return;
+    }
+    this.listeners.clear();
+  }
+}
+
+function ensureHostCapabilities(
+  extensionId: string,
+  required: ReadonlyArray<ExtensionHostCapability> | undefined,
+  host: ExtensionHostEnvironment,
+): void {
+  if (!required || required.length === 0) {
+    return;
+  }
+  const available = host.capabilities ?? new Set();
+  for (const capability of required) {
+    if (!available.has(capability)) {
+      throw new Error(
+        `Extension '${extensionId}' requires missing host capability '${capability}'. Update the host environment to provide it.`,
+      );
+    }
+  }
+}
+
+function assertHasCapabilities(extensionId: string, contribution: ExtensionRuntimeContribution): void {
+  const hasCapability = Boolean(
+    (contribution.tools && contribution.tools.length > 0) ||
+      (contribution.services && contribution.services.length > 0) ||
+      (contribution.stateChannels && contribution.stateChannels.length > 0) ||
+      (contribution.slots && contribution.slots.length > 0),
+  );
+  if (!hasCapability) {
+    throw new Error(`Extension '${extensionId}' did not register any tools, services, state channels, or slots.`);
+  }
+}
+
+function summarizeCapabilities(contribution: ExtensionRuntimeContribution): {
+  tools: string[];
+  services: string[];
+  stateChannels: string[];
+  slots: string[];
+} {
+  return {
+    tools: contribution.tools?.map((tool) => tool.definition.function.name) ?? [],
+    services: contribution.services?.map((service) => service.name) ?? [],
+    stateChannels: contribution.stateChannels?.map((channel) => channel.id) ?? [],
+    slots: contribution.slots?.map((slot) => slot.id) ?? [],
+  };
+}
+
+function getServiceKey(extensionId: string, serviceName: string): string {
+  return `${extensionId}::${serviceName}`;
+}
+
+function getChannelKey(channelId: string): string {
+  return channelId;
+}
+
+export class ExtensionRegistry {
+  private readonly extensions = new Map<string, RegisteredExtension>();
+  private readonly toolIndex = new Map<string, ToolEntry>();
+  private readonly serviceIndex = new Map<string, ServiceEntry>();
+  private readonly stateChannelIndex = new Map<string, StateChannelEntry>();
+  private readonly slotIndex = new Map<string, SlotEntry>();
+  private readonly eventBus = new RegistryEventBus();
+  private instanceCounter = 0;
+
+  async register(extension: RagdollExtension, options: RegisterOptions): Promise<void> {
+    const host = options.host;
+    if (!host) {
+      throw new Error("Extension host environment is required when registering an extension.");
+    }
+
+    const manifest = extension.manifest;
+    if (!manifest?.id) {
+      throw new Error("Extensions must define a manifest with an 'id'.");
+    }
+    const extensionId = manifest.id;
+
+    if (this.extensions.has(extensionId)) {
+      if (options.replace) {
+        await this.unregister(extensionId);
+      } else {
+        throw new Error(
+          `Extension '${extensionId}' is already registered. Use { replace: true } to override the existing instance.`,
+        );
+      }
+    }
+
+    ensureHostCapabilities(extensionId, manifest.requiredCapabilities, host);
+
+    const context: ExtensionContext = {
+      instanceId: `${extensionId}-${++this.instanceCounter}`,
+      createdAt: Date.now(),
+      config: options.config,
+    };
+
+    const contribution = await extension.activate(host, context);
+    assertHasCapabilities(extensionId, contribution);
+    this.ensureNoConflicts(extensionId, contribution);
+
+    const capabilities = this.indexContribution(extensionId, contribution);
+
+    this.extensions.set(extensionId, {
+      extension,
+      host,
+      context,
+      contribution,
+      registeredAt: Date.now(),
+      capabilities,
+    });
+
+    await this.eventBus.emit({
+      type: "extension:registered",
+      extensionId,
+      timestamp: Date.now(),
+    });
+    await this.eventBus.emit({
+      type: "tools:changed",
+      extensionId,
+      timestamp: Date.now(),
+    });
+  }
+
   async unregister(extensionId: string): Promise<boolean> {
     const registered = this.extensions.get(extensionId);
     if (!registered) {
       return false;
     }
 
-    // Destroy extension
-    if (registered.extension.destroy) {
-      await registered.extension.destroy();
+    this.removeContributionIndices(extensionId, registered.contribution);
+
+    if (registered.contribution.dispose) {
+      await registered.contribution.dispose();
     }
 
-    // Remove tools from index
-    for (const tool of registered.extension.tools) {
-      const toolName = tool.definition.function.name;
-      this.toolIndex.delete(toolName);
+    if (registered.extension.deactivate) {
+      await registered.extension.deactivate(registered.context);
     }
 
-    // Remove extension
     this.extensions.delete(extensionId);
 
-    // Emit events
-    this.emit("extension:unregistered", extensionId);
-    this.emit("tools:changed", extensionId);
+    await this.eventBus.emit({
+      type: "extension:unregistered",
+      extensionId,
+      timestamp: Date.now(),
+    });
+    await this.eventBus.emit({
+      type: "tools:changed",
+      extensionId,
+      timestamp: Date.now(),
+    });
 
     return true;
   }
 
-  /**
-   * Check if an extension is registered.
-   */
   has(extensionId: string): boolean {
     return this.extensions.has(extensionId);
   }
 
-  /**
-   * Get a registered extension by ID.
-   */
-  getExtension(extensionId: string): RagdollExtension | undefined {
+  getExtension(extensionId: string): RegisteredExtension["extension"] | undefined {
     return this.extensions.get(extensionId)?.extension;
   }
 
-  /**
-   * Get all registered extension IDs.
-   */
+  getContributionMetadata(extensionId: string): ExtensionContributionMetadata | undefined {
+    const registered = this.extensions.get(extensionId);
+    if (!registered) {
+      return undefined;
+    }
+
+    return {
+      extensionId,
+      manifest: registered.extension.manifest,
+      tools: registered.capabilities.tools,
+      services: registered.capabilities.services,
+      stateChannels: registered.capabilities.stateChannels,
+      slots: registered.capabilities.slots,
+    };
+  }
+
   getExtensionIds(): string[] {
     return Array.from(this.extensions.keys());
   }
 
-  /**
-   * Get all tool definitions from all registered extensions.
-   * Returns tools in OpenAI function-calling format.
-   */
   getAllTools(): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     for (const entry of this.toolIndex.values()) {
@@ -199,66 +292,58 @@ export class ExtensionRegistry {
     return tools;
   }
 
-  /**
-   * Get tool definitions from a specific extension.
-   */
   getToolsByExtension(extensionId: string): ToolDefinition[] {
-    const registered = this.extensions.get(extensionId);
-    if (!registered) {
-      return [];
-    }
-    return registered.extension.tools.map((t) => t.definition);
+    return (
+      this.extensions
+        .get(extensionId)
+        ?.contribution.tools?.map((tool) => tool.definition) ?? []
+    );
   }
 
-  /**
-   * Check if a tool exists.
-   */
+  getServices(): Array<{ extensionId: string; definition: ExtensionServiceDefinition }> {
+    return Array.from(this.serviceIndex.values()).map((entry) => ({
+      extensionId: entry.extensionId,
+      definition: entry.definition,
+    }));
+  }
+
+  getStateChannels(): Array<{ extensionId: string; channel: ExtensionStateChannel }> {
+    return Array.from(this.stateChannelIndex.values()).map((entry) => ({
+      extensionId: entry.extensionId,
+      channel: entry.channel,
+    }));
+  }
+
+  getStateChannel(channelId: string): { extensionId: string; channel: ExtensionStateChannel } | undefined {
+    const entry = this.stateChannelIndex.get(getChannelKey(channelId));
+    return entry ? { extensionId: entry.extensionId, channel: entry.channel } : undefined;
+  }
+
   hasTool(toolName: string): boolean {
     return this.toolIndex.has(toolName);
   }
 
-  /**
-   * Validate tool arguments.
-   *
-   * @param toolName - Name of the tool to validate for
-   * @param args - Arguments to validate
-   * @returns Validation result with success/error
-   */
-  validateTool(
-    toolName: string,
-    args: Record<string, unknown>
-  ): ValidationResult {
+  validateTool(toolName: string, args: Record<string, unknown>): ValidationResult {
     const entry = this.toolIndex.get(toolName);
     if (!entry) {
       return { valid: false, error: `Unknown tool: '${toolName}'` };
     }
-
     if (entry.tool.validate) {
       return entry.tool.validate(args);
     }
-
     return { valid: true };
   }
 
-  /**
-   * Execute a tool by name.
-   *
-   * @param toolName - Name of the tool to execute
-   * @param args - Arguments to pass to the tool
-   * @param metadata - Optional metadata for the execution context
-   * @returns Tool execution result
-   */
   async executeTool(
     toolName: string,
     args: Record<string, unknown>,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ): Promise<ToolResult> {
     const entry = this.toolIndex.get(toolName);
     if (!entry) {
       return { success: false, error: `Unknown tool: '${toolName}'` };
     }
 
-    // Validate if validator exists
     if (entry.tool.validate) {
       const validation = entry.tool.validate(args);
       if (!validation.valid) {
@@ -266,162 +351,274 @@ export class ExtensionRegistry {
       }
     }
 
-    // Build execution context
     const context: ToolExecutionContext = {
       extensionId: entry.extensionId,
       metadata,
     };
 
-    // Execute handler
     try {
       return await entry.tool.handler(args, context);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown error during tool execution";
-      return { success: false, error: message };
+      return {
+        success: false,
+        error: message,
+      };
     }
   }
 
-  // ===========================================================================
-  // Event System
-  // ===========================================================================
-
-  /**
-   * Subscribe to tools changed events.
-   * Called whenever extensions are registered or unregistered.
-   *
-   * @param callback - Function to call when tools change
-   * @returns Unsubscribe function
-   */
-  onToolsChanged(callback: RegistryEventCallback): () => void {
-    return this.on("tools:changed", callback);
-  }
-
-  /**
-   * Subscribe to extension registered events.
-   *
-   * @param callback - Function to call when an extension is registered
-   * @returns Unsubscribe function
-   */
-  onExtensionRegistered(callback: RegistryEventCallback): () => void {
-    return this.on("extension:registered", callback);
-  }
-
-  /**
-   * Subscribe to extension unregistered events.
-   *
-   * @param callback - Function to call when an extension is unregistered
-   * @returns Unsubscribe function
-   */
-  onExtensionUnregistered(callback: RegistryEventCallback): () => void {
-    return this.on("extension:unregistered", callback);
-  }
-
-  /**
-   * Subscribe to a registry event.
-   *
-   * @param eventType - Type of event to subscribe to
-   * @param callback - Function to call when the event occurs
-   * @returns Unsubscribe function
-   */
-  on(eventType: RegistryEventType, callback: RegistryEventCallback): () => void {
-    if (!this.listeners.has(eventType)) {
-      this.listeners.set(eventType, new Set());
-    }
-    this.listeners.get(eventType)!.add(callback);
-
-    return () => {
-      this.listeners.get(eventType)?.delete(callback);
-    };
-  }
-
-  /**
-   * Remove all listeners for an event type, or all listeners if no type specified.
-   */
-  off(eventType?: RegistryEventType): void {
-    if (eventType) {
-      this.listeners.delete(eventType);
-    } else {
-      this.listeners.clear();
-    }
-  }
-
-  /**
-   * Emit an event to all subscribers.
-   */
-  private emit(eventType: RegistryEventType, extensionId: string): void {
-    const callbacks = this.listeners.get(eventType);
-    if (!callbacks || callbacks.size === 0) {
-      return;
+  async invokeService(
+    extensionId: string,
+    serviceName: string,
+    payload: unknown,
+    metadata?: Record<string, unknown>,
+  ): Promise<unknown> {
+    const key = getServiceKey(extensionId, serviceName);
+    const entry = this.serviceIndex.get(key);
+    if (!entry) {
+      throw new Error(`Service '${serviceName}' is not registered for extension '${extensionId}'.`);
     }
 
-    const event: RegistryEvent = {
-      type: eventType,
+    const registered = this.extensions.get(extensionId);
+    if (!registered) {
+      throw new Error(`Extension '${extensionId}' is not registered.`);
+    }
+
+    return entry.definition.handler(payload, {
       extensionId,
-      timestamp: Date.now(),
-    };
-
-    for (const callback of callbacks) {
-      try {
-        callback(event);
-      } catch (error) {
-        // Don't let listener errors break the registry
-        console.error(
-          `Error in registry event listener for '${eventType}':`,
-          error
-        );
-      }
-    }
+      host: registered.host,
+      metadata,
+    });
   }
 
-  // ===========================================================================
-  // Lifecycle
-  // ===========================================================================
+  onToolsChanged(callback: RegistryEventCallback): () => void {
+    return this.eventBus.on("tools:changed", callback);
+  }
 
-  /**
-   * Unregister all extensions and clear all state.
-   */
+  onExtensionRegistered(callback: RegistryEventCallback): () => void {
+    return this.eventBus.on("extension:registered", callback);
+  }
+
+  onExtensionUnregistered(callback: RegistryEventCallback): () => void {
+    return this.eventBus.on("extension:unregistered", callback);
+  }
+
+  on(eventType: RegistryEventType, callback: RegistryEventCallback): () => void {
+    return this.eventBus.on(eventType, callback);
+  }
+
+  off(eventType?: RegistryEventType): void {
+    this.eventBus.clear(eventType);
+  }
+
   async destroy(): Promise<void> {
-    // Unregister all extensions (this will call their destroy methods)
-    const extensionIds = Array.from(this.extensions.keys());
-    for (const id of extensionIds) {
+    const ids = Array.from(this.extensions.keys());
+    for (const id of ids) {
       await this.unregister(id);
     }
-
-    // Clear listeners
-    this.listeners.clear();
+    this.eventBus.clear();
   }
 
-  /**
-   * Get registry statistics.
-   */
   getStats(): {
     extensionCount: number;
     toolCount: number;
     listenerCount: number;
   } {
-    let listenerCount = 0;
-    for (const listeners of this.listeners.values()) {
-      listenerCount += listeners.size;
-    }
-
     return {
       extensionCount: this.extensions.size,
       toolCount: this.toolIndex.size,
-      listenerCount,
+      listenerCount: this.eventBus.getListenerCount(),
     };
+  }
+
+  private ensureNoConflicts(extensionId: string, contribution: ExtensionRuntimeContribution): void {
+    if (contribution.tools) {
+      for (const tool of contribution.tools) {
+        const name = tool.definition.function.name;
+        const existing = this.toolIndex.get(name);
+        if (existing && existing.extensionId !== extensionId) {
+          throw new Error(
+            `Tool '${name}' from extension '${extensionId}' conflicts with extension '${existing.extensionId}'.`,
+          );
+        }
+      }
+    }
+
+    if (contribution.services) {
+      for (const service of contribution.services) {
+        const key = getServiceKey(extensionId, service.name);
+        if (this.serviceIndex.has(key)) {
+          throw new Error(
+            `Service '${service.name}' is already registered for extension '${extensionId}'.`,
+          );
+        }
+      }
+    }
+
+    if (contribution.stateChannels) {
+      for (const channel of contribution.stateChannels) {
+        const key = getChannelKey(channel.id);
+        const existing = this.stateChannelIndex.get(key);
+        if (existing && existing.extensionId !== extensionId) {
+          throw new Error(
+            `State channel '${channel.id}' conflicts with extension '${existing.extensionId}'. Channel IDs must be globally unique.`,
+          );
+        }
+      }
+    }
+  }
+
+  private indexContribution(
+    extensionId: string,
+    contribution: ExtensionRuntimeContribution,
+  ): RegisteredExtension["capabilities"] {
+    const capabilities = summarizeCapabilities(contribution);
+    const timestamp = Date.now();
+
+    if (contribution.tools) {
+      for (const tool of contribution.tools) {
+        const name = tool.definition.function.name;
+        this.toolIndex.set(name, { extensionId, tool });
+        void this.eventBus.emit({
+          type: "capability:registered",
+          extensionId,
+          capabilityId: name,
+          capabilityType: "tool",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.services) {
+      for (const service of contribution.services) {
+        const key = getServiceKey(extensionId, service.name);
+        this.serviceIndex.set(key, { extensionId, definition: service });
+        void this.eventBus.emit({
+          type: "capability:registered",
+          extensionId,
+          capabilityId: service.name,
+          capabilityType: "service",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.stateChannels) {
+      for (const channel of contribution.stateChannels) {
+        const key = getChannelKey(channel.id);
+        this.stateChannelIndex.set(key, { extensionId, channel });
+        void this.eventBus.emit({
+          type: "capability:registered",
+          extensionId,
+          capabilityId: channel.id,
+          capabilityType: "stateChannel",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.slots) {
+      for (const slot of contribution.slots) {
+        this.slotIndex.set(slot.id, { extensionId, slot });
+        void this.eventBus.emit({
+          type: "capability:registered",
+          extensionId,
+          capabilityId: slot.id,
+          capabilityType: "slot",
+          timestamp,
+        });
+      }
+    }
+
+    return capabilities;
+  }
+
+  private removeContributionIndices(extensionId: string, contribution: ExtensionRuntimeContribution): void {
+    const timestamp = Date.now();
+
+    if (contribution.tools) {
+      for (const tool of contribution.tools) {
+        const name = tool.definition.function.name;
+        this.toolIndex.delete(name);
+        void this.eventBus.emit({
+          type: "capability:removed",
+          extensionId,
+          capabilityId: name,
+          capabilityType: "tool",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.services) {
+      for (const service of contribution.services) {
+        const key = getServiceKey(extensionId, service.name);
+        this.serviceIndex.delete(key);
+        void this.eventBus.emit({
+          type: "capability:removed",
+          extensionId,
+          capabilityId: service.name,
+          capabilityType: "service",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.stateChannels) {
+      for (const channel of contribution.stateChannels) {
+        const key = getChannelKey(channel.id);
+        this.stateChannelIndex.delete(key);
+        void this.eventBus.emit({
+          type: "capability:removed",
+          extensionId,
+          capabilityId: channel.id,
+          capabilityType: "stateChannel",
+          timestamp,
+        });
+      }
+    }
+
+    if (contribution.slots) {
+      for (const slot of contribution.slots) {
+        this.slotIndex.delete(slot.id);
+        void this.eventBus.emit({
+          type: "capability:removed",
+          extensionId,
+          capabilityId: slot.id,
+          capabilityType: "slot",
+          timestamp,
+        });
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Slot Accessors
+  // ===========================================================================
+
+  /**
+   * Get all registered UI slots.
+   */
+  getSlots(): SlotEntry[] {
+    return Array.from(this.slotIndex.values());
+  }
+
+  /**
+   * Get a specific slot by ID.
+   */
+  getSlot(slotId: string): SlotEntry | undefined {
+    return this.slotIndex.get(slotId);
+  }
+
+  /**
+   * Check if a slot is registered.
+   */
+  hasSlot(slotId: string): boolean {
+    return this.slotIndex.has(slotId);
   }
 }
 
-/**
- * Create a new extension registry instance.
- *
- * @example
- * ```ts
- * const registry = createRegistry();
- * await registry.register(myExtension);
- * ```
- */
 export function createRegistry(): ExtensionRegistry {
   return new ExtensionRegistry();
 }

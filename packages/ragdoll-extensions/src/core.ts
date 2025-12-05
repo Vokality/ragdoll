@@ -83,113 +83,13 @@ export type {
 } from "./loader.js";
 
 // =============================================================================
-// Built-in Extensions
+// NOTE: Built-in extensions have been moved to standalone packages.
+// Import them directly from their packages:
+//
+//   import { createCharacterRuntime } from "@vokality/ragdoll-extension-character";
+//   import { createTaskRuntime } from "@vokality/ragdoll-extension-tasks";
+//   import { createPomodoroRuntime } from "@vokality/ragdoll-extension-pomodoro";
+//   import { createSpotifyRuntime } from "@vokality/ragdoll-extension-spotify";
+//
+// The framework package no longer re-exports extensions to avoid circular dependencies.
 // =============================================================================
-
-// Character extension
-export {
-  createCharacterExtension,
-  VALID_MOODS,
-  VALID_ACTIONS,
-  VALID_TONES,
-} from "./extensions/character/index.js";
-export type {
-  CharacterMood,
-  CharacterAction,
-  BubbleTone,
-  SetMoodArgs,
-  TriggerActionArgs,
-  SetHeadPoseArgs,
-  SetSpeechBubbleArgs,
-  CharacterToolHandler,
-  CharacterExtensionOptions,
-} from "./extensions/character/index.js";
-
-// Pomodoro extension
-export {
-  createPomodoroExtension,
-  createStatefulPomodoroExtension,
-  PomodoroManager,
-  createPomodoroManager,
-  VALID_SESSION_DURATIONS,
-  VALID_BREAK_DURATIONS,
-} from "./extensions/pomodoro/index.js";
-export type {
-  SessionDuration,
-  BreakDuration,
-  StartPomodoroArgs,
-  PausePomodoroArgs,
-  ResetPomodoroArgs,
-  GetPomodoroStateArgs,
-  PomodoroStateData,
-  PomodoroState,
-  PomodoroPhase,
-  PomodoroEvent,
-  PomodoroEventCallback,
-  PomodoroToolHandler,
-  PomodoroExtensionOptions,
-  StatefulPomodoroExtensionOptions,
-} from "./extensions/pomodoro/index.js";
-
-// Tasks extension (without UI)
-export {
-  createTaskExtension,
-  createStatefulTaskExtension,
-  TaskManager,
-  createTaskManager,
-  VALID_TASK_STATUSES,
-} from "./extensions/tasks/index.js";
-export type {
-  TaskStatus,
-  AddTaskArgs,
-  UpdateTaskStatusArgs,
-  SetActiveTaskArgs,
-  RemoveTaskArgs,
-  CompleteActiveTaskArgs,
-  ClearCompletedTasksArgs,
-  ClearAllTasksArgs,
-  ListTasksArgs,
-  Task,
-  TaskState,
-  TaskEvent,
-  TaskEventCallback,
-  TaskToolHandler,
-  TaskExtensionOptions,
-  StatefulTaskExtensionOptions,
-} from "./extensions/tasks/index.js";
-
-// Spotify extension (without UI)
-export {
-  createSpotifyExtension,
-  createStatefulSpotifyExtension,
-  SpotifyManager,
-  createSpotifyManager,
-  EMPTY_PLAYBACK_STATE,
-  INITIAL_SPOTIFY_STATE,
-} from "./extensions/spotify/index.js";
-export type {
-  SpotifyImage,
-  SpotifyArtist,
-  SpotifyAlbum,
-  SpotifyTrack,
-  SpotifyDevice,
-  SpotifyPlaybackState,
-  SpotifyPlaylist,
-  SpotifySearchResults,
-  SpotifyTokens,
-  SpotifyConnectionStatus,
-  SpotifyState,
-  SpotifyEventType,
-  SpotifyEvent,
-  SpotifyEventCallback,
-  PlaySpotifyArgs,
-  PauseSpotifyArgs,
-  SearchSpotifyArgs,
-  GetSpotifyPlaybackArgs,
-  SkipSpotifyArgs,
-  SpotifyToolHandler,
-  SpotifyToolResult,
-  SpotifyExtensionOptions,
-  StatefulSpotifyExtensionOptions,
-  SpotifyManagerConfig,
-} from "./extensions/spotify/index.js";

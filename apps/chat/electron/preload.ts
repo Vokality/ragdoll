@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { TaskState, PomodoroState } from "@vokality/ragdoll-extensions";
+import type { TaskState } from "@vokality/ragdoll-extension-tasks";
+import type { PomodoroState } from "@vokality/ragdoll-extension-pomodoro";
 
 // Types for extension management
 export interface LoadResult {

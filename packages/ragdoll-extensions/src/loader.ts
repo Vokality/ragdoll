@@ -24,7 +24,14 @@
  */
 
 import type { ExtensionRegistry } from "./registry.js";
-import type { RagdollExtension, RegisterOptions } from "./types.js";
+import type {
+  ExtensionContributionMetadata,
+  ExtensionHostEnvironment,
+  ExtensionManifest,
+  RegisterOptions,
+  RegistryCapabilityEvent,
+  RagdollExtension,
+} from "./types.js";
 
 // =============================================================================
 // Types
@@ -100,9 +107,29 @@ export interface ExtensionLoaderConfig {
   continueOnError?: boolean;
 
   /**
-   * Default options to pass when registering extensions.
+   * Default options to pass when registering extensions (aside from host/config).
    */
-  registerOptions?: RegisterOptions;
+  registerOptions?: Omit<RegisterOptions, "host" | "config"> & { config?: Record<string, unknown> };
+
+  /**
+   * Static host environment to provide to every extension.
+   */
+  hostEnvironment?: ExtensionHostEnvironment;
+
+  /**
+   * Resolve a host environment for a specific extension manifest.
+   */
+  getHostEnvironment?: (manifest: ExtensionManifest) => ExtensionHostEnvironment;
+
+  /**
+   * Called whenever an extension contribution is fully registered.
+   */
+  onContributionLoaded?: (metadata: ExtensionContributionMetadata) => void;
+
+  /**
+   * Called whenever a capability is registered with the registry.
+   */
+  onCapabilityRegistered?: (event: RegistryCapabilityEvent) => void;
 }
 
 /**
@@ -113,6 +140,20 @@ interface ExtensionModuleExports {
   extension?: RagdollExtension;
   createExtension?: (config?: Record<string, unknown>) => RagdollExtension;
 }
+
+type NormalizedLoaderConfig = {
+  searchPaths: string[];
+  readFile: (path: string) => Promise<string>;
+  readDir: (path: string) => Promise<string[]>;
+  pathExists: (path: string) => Promise<boolean>;
+  importModule: (modulePath: string) => Promise<unknown>;
+  continueOnError: boolean;
+  registerOptions: Omit<RegisterOptions, "host" | "config"> & { config?: Record<string, unknown> };
+  hostEnvironment?: ExtensionHostEnvironment;
+  getHostEnvironment?: (manifest: ExtensionManifest) => ExtensionHostEnvironment;
+  onContributionLoaded?: (metadata: ExtensionContributionMetadata) => void;
+  onCapabilityRegistered?: (event: RegistryCapabilityEvent) => void;
+};
 
 // =============================================================================
 // Default Implementations
@@ -152,8 +193,9 @@ async function defaultImportModule(modulePath: string): Promise<unknown> {
  */
 export class ExtensionLoader {
   private registry: ExtensionRegistry;
-  private config: Required<ExtensionLoaderConfig>;
+  private config: NormalizedLoaderConfig;
   private loadedPackages: Map<string, string> = new Map(); // packageName -> extensionId
+  private registryDisposers: Array<() => void> = [];
 
   constructor(registry: ExtensionRegistry, config: ExtensionLoaderConfig = {}) {
     this.registry = registry;
@@ -165,7 +207,28 @@ export class ExtensionLoader {
       importModule: config.importModule ?? defaultImportModule,
       continueOnError: config.continueOnError ?? true,
       registerOptions: config.registerOptions ?? {},
+      hostEnvironment: config.hostEnvironment,
+      getHostEnvironment: config.getHostEnvironment,
+      onContributionLoaded: config.onContributionLoaded,
+      onCapabilityRegistered: config.onCapabilityRegistered,
     };
+
+    if (this.config.onContributionLoaded) {
+      const dispose = this.registry.on("extension:registered", (event) => {
+        const metadata = this.registry.getContributionMetadata(event.extensionId);
+        if (metadata) {
+          this.config.onContributionLoaded?.(metadata);
+        }
+      });
+      this.registryDisposers.push(dispose);
+    }
+
+    if (this.config.onCapabilityRegistered) {
+      const dispose = this.registry.on("capability:registered", (event) => {
+        this.config.onCapabilityRegistered?.(event as RegistryCapabilityEvent);
+      });
+      this.registryDisposers.push(dispose);
+    }
   }
 
   /**
@@ -323,16 +386,23 @@ export class ExtensionLoader {
       }
 
       // Override extension ID if specified
-      const extensionId = extensionConfig.id ?? extension.id;
+      const extensionId = extensionConfig.id ?? extension.manifest.id;
 
       // Create wrapper extension if ID override is needed
       const finalExtension =
-        extensionId !== extension.id
+        extensionId !== extension.manifest.id
           ? this.createIdOverrideWrapper(extension, extensionId)
           : extension;
 
+      const host = this.resolveHostEnvironment(finalExtension.manifest);
+      const baseOptions = this.config.registerOptions ?? {};
+
       // Register with the registry
-      await this.registry.register(finalExtension, this.config.registerOptions);
+      await this.registry.register(finalExtension, {
+        ...baseOptions,
+        host,
+        config: extensionConfig.config ?? baseOptions.config,
+      });
 
       // Track loaded package
       this.loadedPackages.set(packageName, extensionId);
@@ -436,6 +506,24 @@ export class ExtensionLoader {
   /**
    * Resolve extension configuration from package.json and overrides.
    */
+  private resolveHostEnvironment(manifest: ExtensionManifest): ExtensionHostEnvironment {
+    if (this.config.getHostEnvironment) {
+      const env = this.config.getHostEnvironment(manifest);
+      if (env) {
+        return env;
+      }
+      throw new Error(
+        `Host environment resolver did not return a value for extension '${manifest.id}'.`
+      );
+    }
+    if (this.config.hostEnvironment) {
+      return this.config.hostEnvironment;
+    }
+    throw new Error(
+      `No host environment provided for extension '${manifest.id}'. Configure hostEnvironment or getHostEnvironment when creating the loader.`
+    );
+  }
+
   private resolveExtensionConfig(
     packageJson: ExtensionPackageJson,
     overrideConfig?: Record<string, unknown>
@@ -495,12 +583,13 @@ export class ExtensionLoader {
       return false;
     }
 
-    const ext = obj as Record<string, unknown>;
+    const ext = obj as RagdollExtension;
+    const manifest = ext.manifest;
     return (
-      typeof ext.id === "string" &&
-      typeof ext.name === "string" &&
-      typeof ext.version === "string" &&
-      Array.isArray(ext.tools)
+      typeof manifest?.id === "string" &&
+      typeof manifest.name === "string" &&
+      typeof manifest.version === "string" &&
+      typeof ext.activate === "function"
     );
   }
 
@@ -512,21 +601,20 @@ export class ExtensionLoader {
     newId: string
   ): RagdollExtension {
     return {
-      get id() {
-        return newId;
+      manifest: {
+        ...extension.manifest,
+        id: newId,
       },
-      get name() {
-        return extension.name;
-      },
-      get version() {
-        return extension.version;
-      },
-      get tools() {
-        return extension.tools;
-      },
-      initialize: extension.initialize?.bind(extension),
-      destroy: extension.destroy?.bind(extension),
+      activate: extension.activate.bind(extension),
+      deactivate: extension.deactivate?.bind(extension),
     };
+  }
+
+  dispose(): void {
+    for (const dispose of this.registryDisposers) {
+      dispose();
+    }
+    this.registryDisposers = [];
   }
 
   /**

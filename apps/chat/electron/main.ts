@@ -8,7 +8,7 @@ import {
 } from "electron";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import type { TaskState } from "@vokality/ragdoll-extensions";
+import type { TaskState } from "@vokality/ragdoll-extension-tasks";
 import { getExtensionManager, BUILT_IN_EXTENSIONS, type ExtensionManager } from "./services/extension-manager.js";
 import {
   createStorageRepository,
@@ -42,6 +42,7 @@ async function createWindow(): Promise<void> {
 
   const disabledExtensions = storage.settings?.disabledExtensions ?? [];
   extensionManager = getExtensionManager({
+    userDataPath: USER_DATA_PATH,
     initialTaskState,
     disabledExtensions,
     onToolExecution: (name, args) => {

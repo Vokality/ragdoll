@@ -1,9 +1,20 @@
 /**
  * Core types for the Ragdoll extension system.
- *
- * Extensions provide tools that AI agents can use. Tools are defined in
- * OpenAI function-calling format for broad compatibility.
  */
+
+import type {
+  ExtensionHostCapability,
+  ExtensionHostEnvironment,
+  HostIpcBridge,
+  HostLoggerCapability,
+  HostScheduleOptions,
+  HostSchedulerCapability,
+  HostStorageCapability,
+  HostTimersCapability,
+  NotificationCallback,
+  NotificationRequest,
+} from "./types/host-environment.js";
+import type { ExtensionUISlot } from "./ui/types.js";
 
 // =============================================================================
 // Tool Definition Types (OpenAI-compatible)
@@ -73,14 +84,14 @@ export interface ToolResult {
  */
 export type ToolHandler<TArgs = Record<string, unknown>> = (
   args: TArgs,
-  context: ToolExecutionContext
+  context: ToolExecutionContext,
 ) => Promise<ToolResult> | ToolResult;
 
 /**
  * Optional validator for tool arguments
  */
 export type ToolValidator<TArgs = Record<string, unknown>> = (
-  args: TArgs
+  args: TArgs,
 ) => ValidationResult;
 
 /**
@@ -115,27 +126,92 @@ export interface ExtensionTool<TArgs = Record<string, unknown>> {
 export interface ExtensionContext {
   /** Unique instance ID for this extension registration */
   instanceId: string;
+  /** Timestamp when this instance was created */
+  createdAt: number;
   /** Configuration passed during registration */
   config?: Record<string, unknown>;
 }
 
 /**
- * A Ragdoll extension that provides tools to AI agents
+ * Metadata describing an extension.
+ */
+export interface ExtensionManifest {
+  /** Unique identifier */
+  id: string;
+  /** Human-readable name */
+  name: string;
+  /** Semantic version */
+  version: string;
+  /** Optional description */
+  description?: string;
+  /** Capabilities that must be provided by the host environment */
+  requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+}
+
+/**
+ * Supported capability types tracked by the registry.
+ */
+export type ExtensionCapabilityType = "tool" | "service" | "stateChannel" | "slot";
+
+/**
+ * Context exposed to service handlers.
+ */
+export interface ExtensionServiceContext {
+  extensionId: string;
+  host: ExtensionHostEnvironment;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Handler signature for extension services.
+ */
+export type ExtensionServiceHandler<TPayload = unknown, TResult = unknown> = (
+  payload: TPayload,
+  context: ExtensionServiceContext,
+) => Promise<TResult> | TResult;
+
+/**
+ * Service definition exposed by an extension.
+ */
+export interface ExtensionServiceDefinition<TPayload = unknown, TResult = unknown> {
+  name: string;
+  description?: string;
+  inputSchema?: ToolParameterSchema;
+  handler: ExtensionServiceHandler<TPayload, TResult>;
+}
+
+/**
+ * State channel definition exposed by an extension.
+ */
+export interface ExtensionStateChannel<TState = unknown> {
+  id: string;
+  description?: string;
+  getState(): TState;
+  subscribe(listener: (state: TState) => void): () => void;
+}
+
+/**
+ * Runtime contribution produced when an extension is activated.
+ */
+export interface ExtensionRuntimeContribution {
+  tools?: ExtensionTool[];
+  services?: ExtensionServiceDefinition[];
+  stateChannels?: ExtensionStateChannel[];
+  slots?: ExtensionUISlot[];
+  metadata?: Record<string, unknown>;
+  dispose?: () => Promise<void> | void;
+}
+
+/**
+ * Extension contract. Extensions receive a host environment and return runtime contributions.
  */
 export interface RagdollExtension {
-  /** Unique identifier for this extension */
-  readonly id: string;
-  /** Human-readable name */
-  readonly name: string;
-  /** Semantic version */
-  readonly version: string;
-  /** Tools provided by this extension */
-  readonly tools: ExtensionTool[];
-
-  /** Called when extension is registered */
-  initialize?(context: ExtensionContext): Promise<void> | void;
-  /** Called when extension is unregistered */
-  destroy?(): Promise<void> | void;
+  readonly manifest: ExtensionManifest;
+  activate(
+    host: ExtensionHostEnvironment,
+    context: ExtensionContext,
+  ): Promise<ExtensionRuntimeContribution> | ExtensionRuntimeContribution;
+  deactivate?(context: ExtensionContext): Promise<void> | void;
 }
 
 // =============================================================================
@@ -143,80 +219,104 @@ export interface RagdollExtension {
 // =============================================================================
 
 /**
+ * Options for registering an extension with the registry.
+ */
+export interface RegisterOptions {
+  /** Host environment surface provided to the extension */
+  host: ExtensionHostEnvironment;
+  /** Configuration passed to the extension */
+  config?: Record<string, unknown>;
+  /** Whether to replace an existing extension */
+  replace?: boolean;
+}
+
+/**
+ * Metadata summary describing the capabilities contributed by an extension instance.
+ */
+export interface ExtensionContributionMetadata {
+  extensionId: string;
+  manifest: ExtensionManifest;
+  tools: string[];
+  services: string[];
+  stateChannels: string[];
+  slots: string[];
+}
+
+/**
  * Event types emitted by the extension registry
  */
 export type RegistryEventType =
   | "extension:registered"
   | "extension:unregistered"
-  | "tools:changed";
+  | "tools:changed"
+  | "capability:registered"
+  | "capability:removed";
 
-/**
- * Event payload for registry events
- */
-export interface RegistryEvent {
+export interface RegistryEventBase {
   type: RegistryEventType;
   extensionId: string;
   timestamp: number;
 }
 
+export interface RegistryBasicEvent extends RegistryEventBase {
+  type: "extension:registered" | "extension:unregistered" | "tools:changed";
+}
+
+export interface RegistryCapabilityEvent extends RegistryEventBase {
+  type: "capability:registered" | "capability:removed";
+  capabilityType: ExtensionCapabilityType;
+  capabilityId: string;
+}
+
+export type RegistryEvent = RegistryBasicEvent | RegistryCapabilityEvent;
+
 /**
  * Callback for registry event subscriptions
  */
-export type RegistryEventCallback = (event: RegistryEvent) => void;
-
-/**
- * Options for registering an extension
- */
-export interface RegisterOptions {
-  /** Configuration to pass to the extension */
-  config?: Record<string, unknown>;
-  /** Whether to replace an existing extension with the same ID */
-  replace?: boolean;
-}
+export type RegistryEventCallback = (event: RegistryEvent) => Promise<void> | void;
 
 // =============================================================================
 // Factory Types
 // =============================================================================
 
-// =============================================================================
-// Notification Types
-// =============================================================================
-
-/**
- * Request to show a system notification
- */
-export interface NotificationRequest {
-  /** Notification title */
-  title: string;
-  /** Notification body text */
-  body?: string;
-  /** Whether to suppress the notification sound */
-  silent?: boolean;
-}
-
-/**
- * Callback for showing system notifications
- */
-export type NotificationCallback = (notification: NotificationRequest) => void;
-
-// =============================================================================
-// Factory Types
-// =============================================================================
-
-/**
- * Configuration for creating an extension via factory
- */
 export interface ExtensionConfig {
-  /** Unique identifier for this extension */
   id: string;
-  /** Human-readable name */
   name: string;
-  /** Semantic version */
   version: string;
-  /** Tools provided by this extension */
-  tools: ExtensionTool[];
-  /** Called when extension is registered */
-  onInitialize?: (context: ExtensionContext) => Promise<void> | void;
-  /** Called when extension is unregistered */
-  onDestroy?: () => Promise<void> | void;
+  description?: string;
+  requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+  tools?: ExtensionTool[] | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionTool[]);
+  services?:
+    | ExtensionServiceDefinition[]
+    | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionServiceDefinition[]);
+  stateChannels?:
+    | ExtensionStateChannel[]
+    | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionStateChannel[]);
+  slots?: ExtensionUISlot[] | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionUISlot[]);
+  createRuntime?: (
+    host: ExtensionHostEnvironment,
+    context: ExtensionContext,
+  ) => Promise<ExtensionRuntimeContribution | void> | ExtensionRuntimeContribution | void;
+  onInitialize?: (
+    context: ExtensionContext,
+    host: ExtensionHostEnvironment,
+  ) => Promise<void> | void;
+  onDestroy?: (context: ExtensionContext) => Promise<void> | void;
 }
+
+// =============================================================================
+// Legacy Notification Type Re-exports (compatibility)
+// =============================================================================
+
+export type {
+  ExtensionHostCapability,
+  ExtensionHostEnvironment,
+  HostIpcBridge,
+  HostLoggerCapability,
+  HostScheduleOptions,
+  HostSchedulerCapability,
+  HostStorageCapability,
+  HostTimersCapability,
+  NotificationCallback,
+  NotificationRequest,
+};

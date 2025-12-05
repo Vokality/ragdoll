@@ -1,18 +1,15 @@
-import { useState, useCallback, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useCallback, useEffect, type CSSProperties } from "react";
 import type { CharacterController, FacialMood } from "@vokality/ragdoll";
-import { createElectronHostBridge, useExtensionSlots, SlotBar } from "@vokality/ragdoll-extensions";
+import { SlotBar } from "@vokality/ragdoll-extensions";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
 import { useChatApplication } from "../hooks/use-chat-application";
+import { useExtensionSlots } from "../hooks/use-extension-slots";
 
 interface ChatScreenProps {
   onLogout: () => void;
 }
-
-
-
-
 
 export function ChatScreen({ onLogout }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(null);
@@ -27,15 +24,8 @@ export function ChatScreen({ onLogout }: ChatScreenProps) {
     subscribeToFunctionCalls,
   } = useChatApplication();
 
-  const extensionHost = useMemo(
-    () =>
-      createElectronHostBridge({
-        api: window.electronAPI,
-        reload: () => window.location.reload(),
-      }),
-    []
-  );
-  const extensionSlots = useExtensionSlots(extensionHost);
+  // Get extension slots from extensions
+  const extensionSlots = useExtensionSlots();
 
   useEffect(() => {
     if (!controller) return;

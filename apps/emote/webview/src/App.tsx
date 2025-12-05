@@ -2,15 +2,18 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   RagdollCharacter,
   CharacterController,
-  PomodoroTimer,
-  TaskDrawer,
   getTheme,
   getDefaultTheme,
 } from "@vokality/ragdoll";
-import type { RagdollTheme, SpeechBubbleState } from "@vokality/ragdoll";
+import type { RagdollTheme } from "@vokality/ragdoll";
 import { SpeechBubble } from "./components/speech-bubble";
 import { StatusOverlay } from "./components/status-overlay";
 import type { ExtensionMessage, VSCodeAPI } from "./types";
+
+// TODO: Pomodoro and Tasks are now in @vokality/ragdoll-extensions
+// They need to be managed via the extension host, not the CharacterController
+
+type SpeechBubbleState = { text: string | null; tone: "default" | "whisper" | "shout" };
 
 // Get VS Code API (only available in webview context)
 let vscode: VSCodeAPI | null = null;
@@ -64,25 +67,22 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
       return typeof payload.themeId === "string";
     case "setVariant":
       return typeof payload.variantId === "string";
+    // Task and Pomodoro messages are forwarded but not handled in UI yet
     case "startPomodoro":
     case "pausePomodoro":
     case "resetPomodoro":
-      return true;
     case "addTask":
-      return typeof payload.text === "string";
     case "updateTaskStatus":
-      return (
-        typeof payload.taskId === "string" && typeof payload.status === "string"
-      );
     case "setActiveTask":
     case "removeTask":
-      return typeof payload.taskId === "string";
     case "completeActiveTask":
     case "clearCompletedTasks":
     case "clearAllTasks":
     case "expandTasks":
     case "collapseTasks":
     case "toggleTasks":
+    case "listTasks":
+    case "getPomodoroState":
       return true;
     default:
       return false;
@@ -153,11 +153,7 @@ export function App() {
         case "setSpeechBubble":
           setBubbleState({
             text: message.text,
-            tone: message.tone ?? "default",
-          });
-          ctrl.setSpeechBubble({
-            text: message.text,
-            tone: message.tone ?? "default",
+            tone: (message.tone ?? "default") as "default" | "whisper" | "shout",
           });
           break;
         case "setTheme": {
@@ -169,71 +165,24 @@ export function App() {
         case "setVariant":
           setVariant(message.variantId);
           break;
+        // TODO: Handle task and pomodoro messages via extension system
         case "startPomodoro":
-          ctrl.startPomodoro(message.sessionDuration, message.breakDuration);
-          break;
         case "pausePomodoro":
-          ctrl.pausePomodoro();
-          break;
         case "resetPomodoro":
-          ctrl.resetPomodoro();
-          break;
         case "addTask":
-          ctrl.addTask(message.text, message.status);
-          break;
         case "updateTaskStatus":
-          ctrl.updateTaskStatus(
-            message.taskId,
-            message.status,
-            message.blockedReason,
-          );
-          break;
         case "setActiveTask":
-          ctrl.setActiveTask(message.taskId);
-          break;
         case "removeTask":
-          ctrl.removeTask(message.taskId);
-          break;
         case "completeActiveTask":
-          ctrl.completeActiveTask();
-          break;
         case "clearCompletedTasks":
-          ctrl.clearCompletedTasks();
-          break;
         case "clearAllTasks":
-          ctrl.clearAllTasks();
-          break;
         case "expandTasks":
-          ctrl.expandTasks();
-          break;
         case "collapseTasks":
-          ctrl.collapseTasks();
-          break;
         case "toggleTasks":
-          ctrl.toggleTasks();
+        case "listTasks":
+        case "getPomodoroState":
+          console.log("Task/Pomodoro message received (not implemented yet):", message.type);
           break;
-        case "listTasks": {
-          // Send current tasks back to extension
-          const tasks = ctrl.getTasks();
-          vscode?.postMessage({ type: "tasksUpdate", tasks });
-          break;
-        }
-        case "getPomodoroState": {
-          // Send current pomodoro state back to extension
-          const pomodoroState = ctrl.getPomodoroState();
-          vscode?.postMessage({
-            type: "pomodoroStateUpdate",
-            state: {
-              state: pomodoroState.state,
-              remainingTime: pomodoroState.remainingTime,
-              isBreak: pomodoroState.isBreak,
-              sessionDuration: pomodoroState.sessionDuration,
-              breakDuration: pomodoroState.breakDuration,
-              elapsedTime: pomodoroState.elapsedTime,
-            },
-          });
-          break;
-        }
         default:
           console.warn("Unknown message type:", message);
       }
@@ -242,62 +191,6 @@ export function App() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
-
-  // Send task updates whenever tasks change
-  useEffect(() => {
-    if (!controller) {
-      return;
-    }
-
-    const taskController = controller.getTaskController();
-    const unsubscribe = taskController.onUpdate((state) => {
-      vscode?.postMessage({ type: "tasksUpdate", tasks: state.tasks });
-    });
-
-    // Send initial tasks
-    const initialState = taskController.getState();
-    vscode?.postMessage({ type: "tasksUpdate", tasks: initialState.tasks });
-
-    return unsubscribe;
-  }, [controller]);
-
-  // Send pomodoro state updates whenever it changes
-  useEffect(() => {
-    if (!controller) {
-      return;
-    }
-
-    const pomodoroController = controller.getPomodoroController();
-    const unsubscribe = pomodoroController.onUpdate((state) => {
-      vscode?.postMessage({
-        type: "pomodoroStateUpdate",
-        state: {
-          state: state.state,
-          remainingTime: state.remainingTime,
-          isBreak: state.isBreak,
-          sessionDuration: state.sessionDuration,
-          breakDuration: state.breakDuration,
-          elapsedTime: state.elapsedTime,
-        },
-      });
-    });
-
-    // Send initial state
-    const initialState = pomodoroController.getState();
-    vscode?.postMessage({
-      type: "pomodoroStateUpdate",
-      state: {
-        state: initialState.state,
-        remainingTime: initialState.remainingTime,
-        isBreak: initialState.isBreak,
-        sessionDuration: initialState.sessionDuration,
-        breakDuration: initialState.breakDuration,
-        elapsedTime: initialState.elapsedTime,
-      },
-    });
-
-    return unsubscribe;
-  }, [controller]);
 
   useEffect(() => {
     if (controller) {
@@ -327,15 +220,6 @@ export function App() {
           variant={variant}
         />
       </div>
-      {controller && (
-        <PomodoroTimer
-          controller={controller.getPomodoroController()}
-          theme={theme}
-        />
-      )}
-      {controller && (
-        <TaskDrawer controller={controller.getTaskController()} theme={theme} />
-      )}
       <SpeechBubble
         text={bubbleState.text}
         tone={bubbleState.tone}
