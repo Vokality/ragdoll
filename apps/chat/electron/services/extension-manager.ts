@@ -161,9 +161,7 @@ export class ExtensionManager {
     };
   }
 
-  private createStorageCapability(extensionId: string) {
-    const storagePath = path.join(this.config.userDataPath, "extensions", extensionId, "storage.json");
-
+  private createStorageCapability(_extensionId: string) {
     return {
       read: async <T>(extId: string, key: string): Promise<T | undefined> => {
         try {
@@ -185,7 +183,9 @@ export class ExtensionManager {
         if (fs.existsSync(filePath)) {
           try {
             data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-          } catch {}
+          } catch {
+            // Ignore parse errors, use empty data object
+          }
         }
         data[key] = value;
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
@@ -197,7 +197,9 @@ export class ExtensionManager {
           const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
           delete data[key];
           fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-        } catch {}
+        } catch {
+          // Ignore errors when deleting storage key
+        }
       },
       list: async (extId: string): Promise<string[]> => {
         const filePath = path.join(this.config.userDataPath, "extensions", extId, "storage.json");
@@ -212,7 +214,7 @@ export class ExtensionManager {
     };
   }
 
-  private createIpcCapability(extensionId: string) {
+  private createIpcCapability(_extensionId: string) {
     return {
       publish: (topic: string, payload: unknown) => {
         if (this.config.onToolExecution && topic.startsWith("extension-tool:")) {

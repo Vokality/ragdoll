@@ -29,7 +29,7 @@
     "dev:emote": "cd apps/emote && bun run dev",
     "dev:chat": "cd apps/chat && bun run electron:dev",
     "lint": "eslint .",
-    "typecheck": "bun run typecheck:ragdoll && bun run typecheck:extensions && bun run typecheck:demo && bun run typecheck:emote",
+    "typecheck": "bun run typecheck:ragdoll && bun run typecheck:extensions && bun run typecheck:chat",
     "typecheck:ragdoll": "cd packages/ragdoll && bunx tsc --noEmit",
     "typecheck:extensions": "cd packages/ragdoll-extensions && bunx tsc --noEmit",
     "typecheck:demo": "cd apps/demo && bunx tsc --noEmit",

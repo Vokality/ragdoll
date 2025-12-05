@@ -62,36 +62,6 @@ export function ExtensionConfigModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial data
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-    }
-  }, [isOpen, extensionId]);
-
-  // Listen for OAuth events
-  useEffect(() => {
-    if (!isOpen || !hasOAuth) return;
-
-    const unsubSuccess = window.electronAPI.onOAuthSuccess((event) => {
-      if (event.extensionId === extensionId) {
-        loadOAuthState();
-      }
-    });
-
-    const unsubError = window.electronAPI.onOAuthError((event) => {
-      if (event.extensionId === extensionId) {
-        setError(event.error ?? "OAuth authentication failed");
-        loadOAuthState();
-      }
-    });
-
-    return () => {
-      unsubSuccess();
-      unsubError();
-    };
-  }, [isOpen, extensionId, hasOAuth]);
-
   const loadData = async () => {
     try {
       if (hasConfig) {
@@ -128,6 +98,38 @@ export function ExtensionConfigModal({
     const state = await window.electronAPI.getOAuthState(extensionId);
     setOauthState(state);
   };
+
+  // Load initial data
+  useEffect(() => {
+    if (isOpen) {
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, extensionId]);
+
+  // Listen for OAuth events
+  useEffect(() => {
+    if (!isOpen || !hasOAuth) return;
+
+    const unsubSuccess = window.electronAPI.onOAuthSuccess((event) => {
+      if (event.extensionId === extensionId) {
+        loadOAuthState();
+      }
+    });
+
+    const unsubError = window.electronAPI.onOAuthError((event) => {
+      if (event.extensionId === extensionId) {
+        setError(event.error ?? "OAuth authentication failed");
+        loadOAuthState();
+      }
+    });
+
+    return () => {
+      unsubSuccess();
+      unsubError();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, extensionId, hasOAuth]);
 
   const handleConfigChange = (key: string, value: string | number | boolean) => {
     setConfigValues((prev) => ({ ...prev, [key]: value }));
