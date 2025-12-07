@@ -29,6 +29,9 @@ log "Installing workspace dependencies (bun install)"
 log "Building shared ragdoll package"
 (cd "$ROOT_DIR" && bun run build:ragdoll)
 
+log "Building ragdoll-extensions package"
+(cd "$ROOT_DIR" && bun run build:extension-framework)
+
 log "Installing chat dependencies for building"
 (cd "$CHAT_DIR" && bun install)
 
