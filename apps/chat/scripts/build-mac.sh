@@ -93,6 +93,14 @@ log "Copying bundled extensions to node_modules"
   # Create @vokality scope directory
   mkdir -p node_modules/@vokality
   
+  # Copy ragdoll core package (renderer depends on it)
+  cp -r "$ROOT_DIR/packages/ragdoll" node_modules/@vokality/ragdoll
+  rm -rf node_modules/@vokality/ragdoll/src
+  rm -rf node_modules/@vokality/ragdoll/tests
+  rm -rf node_modules/@vokality/ragdoll/node_modules
+  rm -f node_modules/@vokality/ragdoll/tsconfig.json
+  rm -f node_modules/@vokality/ragdoll/tsconfig.build.json 2>/dev/null || true
+  
   # Copy ragdoll-extensions (required by bundled extensions)
   cp -r "$ROOT_DIR/packages/ragdoll-extensions" node_modules/@vokality/ragdoll-extensions
   rm -rf node_modules/@vokality/ragdoll-extensions/src
