@@ -32,6 +32,11 @@ log "Building shared ragdoll package"
 log "Building ragdoll-extensions package"
 (cd "$ROOT_DIR" && bun run build:extension-framework)
 
+log "Building bundled extension packages"
+(cd "$ROOT_DIR/packages/ragdoll-extension-character" && bun run build)
+(cd "$ROOT_DIR/packages/ragdoll-extension-tasks" && bun run build)
+(cd "$ROOT_DIR/packages/ragdoll-extension-pomodoro" && bun run build)
+
 log "Installing chat dependencies for building"
 (cd "$CHAT_DIR" && bun install)
 
@@ -79,6 +84,31 @@ EOF
     exit 1
   fi
   echo "✓ Production node_modules created successfully with $(ls node_modules | wc -l) packages"
+)
+
+log "Copying bundled extensions to node_modules"
+(
+  cd "$CHAT_DIR"
+  
+  # Create @vokality scope directory
+  mkdir -p node_modules/@vokality
+  
+  # Copy ragdoll-extensions (required by bundled extensions)
+  cp -r "$ROOT_DIR/packages/ragdoll-extensions" node_modules/@vokality/ragdoll-extensions
+  rm -rf node_modules/@vokality/ragdoll-extensions/src
+  rm -rf node_modules/@vokality/ragdoll-extensions/node_modules
+  rm -f node_modules/@vokality/ragdoll-extensions/tsconfig.json
+  
+  # Copy bundled extensions
+  for EXT in character tasks pomodoro; do
+    cp -r "$ROOT_DIR/packages/ragdoll-extension-${EXT}" "node_modules/@vokality/ragdoll-extension-${EXT}"
+    rm -rf "node_modules/@vokality/ragdoll-extension-${EXT}/src"
+    rm -rf "node_modules/@vokality/ragdoll-extension-${EXT}/node_modules"
+    rm -f "node_modules/@vokality/ragdoll-extension-${EXT}/tsconfig.json"
+  done
+  
+  echo "✓ Bundled extensions copied to node_modules"
+  ls -la node_modules/@vokality/
 )
 
 log "Packaging macOS app with electron-builder"

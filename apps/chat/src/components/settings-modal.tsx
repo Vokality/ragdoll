@@ -1,6 +1,27 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import { ExtensionConfigModal } from "./extension-config-modal";
 
+// Helper to access extension installation APIs (typed loosely to avoid circular type issues)
+const extensionAPI = window.electronAPI as typeof window.electronAPI & {
+  installExtensionFromGitHub: (repoUrl: string) => Promise<{
+    success: boolean;
+    extensionId?: string;
+    name?: string;
+    version?: string;
+    error?: string;
+  }>;
+  uninstallExtension: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  getUserInstalledExtensions: () => Promise<InstalledExtension[]>;
+  checkExtensionUpdates: () => Promise<UpdateCheckResult[]>;
+  updateExtension: (extensionId: string) => Promise<{
+    success: boolean;
+    extensionId?: string;
+    name?: string;
+    version?: string;
+    error?: string;
+  }>;
+};
+
 interface BuiltInExtensionInfo {
   id: string;
   name: string;
@@ -8,6 +29,24 @@ interface BuiltInExtensionInfo {
   canDisable: boolean;
   hasConfigSchema: boolean;
   hasOAuth: boolean;
+}
+
+interface InstalledExtension {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  path: string;
+  repoUrl: string;
+  installedAt: string;
+}
+
+interface UpdateCheckResult {
+  extensionId: string;
+  currentVersion: string;
+  latestVersion: string;
+  hasUpdate: boolean;
+  repoUrl: string;
 }
 
 interface SettingsModalProps {
@@ -49,6 +88,16 @@ export function SettingsModal({
   const [pendingChanges, setPendingChanges] = useState(false);
   const [configModalExtension, setConfigModalExtension] = useState<BuiltInExtensionInfo | null>(null);
 
+  // User-installed extensions state
+  const [userExtensions, setUserExtensions] = useState<InstalledExtension[]>([]);
+  const [extensionUpdates, setExtensionUpdates] = useState<UpdateCheckResult[]>([]);
+  const [installUrl, setInstallUrl] = useState("");
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [updatingExtensionId, setUpdatingExtensionId] = useState<string | null>(null);
+  const [uninstallingExtensionId, setUninstallingExtensionId] = useState<string | null>(null);
+
   // Load extension data when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -59,16 +108,88 @@ export function SettingsModal({
   const loadExtensionData = async () => {
     try {
       // Use getDiscoveredExtensions to include unconfigured extensions
-      const [available, disabled] = await Promise.all([
+      const [available, disabled, userInstalled] = await Promise.all([
         window.electronAPI.getDiscoveredExtensions(),
         window.electronAPI.getDisabledExtensions(),
+        extensionAPI.getUserInstalledExtensions(),
       ]);
       setAvailableExtensions(available);
       setDisabledExtensions(disabled);
+      setUserExtensions(userInstalled);
       setPendingChanges(false);
     } catch (error) {
       console.error("Failed to load extension data:", error);
     }
+  };
+
+  const handleInstallExtension = async () => {
+    if (!installUrl.trim()) return;
+
+    setIsInstalling(true);
+    setInstallError(null);
+
+    try {
+      const result = await extensionAPI.installExtensionFromGitHub(installUrl.trim());
+      if (result.success) {
+        setInstallUrl("");
+        setPendingChanges(true);
+        await loadExtensionData();
+      } else {
+        setInstallError(result.error || "Installation failed");
+      }
+    } catch (error) {
+      setInstallError(error instanceof Error ? error.message : "Installation failed");
+    } finally {
+      setIsInstalling(false);
+    }
+  };
+
+  const handleUninstallExtension = async (extensionId: string) => {
+    setUninstallingExtensionId(extensionId);
+    try {
+      const result = await extensionAPI.uninstallExtension(extensionId);
+      if (result.success) {
+        setPendingChanges(true);
+        await loadExtensionData();
+      }
+    } catch (error) {
+      console.error("Failed to uninstall extension:", error);
+    } finally {
+      setUninstallingExtensionId(null);
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setIsCheckingUpdates(true);
+    try {
+      const updates = await extensionAPI.checkExtensionUpdates();
+      setExtensionUpdates(updates);
+    } catch (error) {
+      console.error("Failed to check updates:", error);
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
+
+  const handleUpdateExtension = async (extensionId: string) => {
+    setUpdatingExtensionId(extensionId);
+    try {
+      const result = await extensionAPI.updateExtension(extensionId);
+      if (result.success) {
+        setPendingChanges(true);
+        await loadExtensionData();
+        // Clear the update notification for this extension
+        setExtensionUpdates((prev) => prev.filter((u) => u.extensionId !== extensionId));
+      }
+    } catch (error) {
+      console.error("Failed to update extension:", error);
+    } finally {
+      setUpdatingExtensionId(null);
+    }
+  };
+
+  const getUpdateForExtension = (extensionId: string): UpdateCheckResult | undefined => {
+    return extensionUpdates.find((u) => u.extensionId === extensionId && u.hasUpdate);
   };
 
   const handleExtensionToggle = async (extensionId: string) => {
@@ -264,6 +385,106 @@ export function SettingsModal({
             </section>
           )}
 
+          {/* User-Installed Extensions Section */}
+          <section style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h3 style={styles.sectionTitle}>Extensions</h3>
+              <button
+                onClick={handleCheckUpdates}
+                disabled={isCheckingUpdates}
+                className="btn-secondary"
+                style={styles.checkUpdatesButton}
+              >
+                {isCheckingUpdates ? "Checking..." : "Check Updates"}
+              </button>
+            </div>
+
+            {/* Install new extension */}
+            <div style={styles.installSection}>
+              <input
+                type="text"
+                value={installUrl}
+                onChange={(e) => {
+                  setInstallUrl(e.target.value);
+                  setInstallError(null);
+                }}
+                placeholder="GitHub URL (e.g., github.com/owner/repo)"
+                style={styles.installInput}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isInstalling) {
+                    handleInstallExtension();
+                  }
+                }}
+              />
+              <button
+                onClick={handleInstallExtension}
+                disabled={isInstalling || !installUrl.trim()}
+                className="btn-primary"
+                style={styles.installButton}
+              >
+                {isInstalling ? "Installing..." : "Install"}
+              </button>
+            </div>
+            {installError && (
+              <div style={styles.installError}>
+                <ErrorIcon />
+                <span>{installError}</span>
+              </div>
+            )}
+
+            {/* List of user-installed extensions */}
+            {userExtensions.length > 0 && (
+              <div style={styles.extensionList}>
+                {userExtensions.map((ext) => {
+                  const update = getUpdateForExtension(ext.id);
+                  const isUpdating = updatingExtensionId === ext.id;
+                  const isUninstalling = uninstallingExtensionId === ext.id;
+                  return (
+                    <div key={ext.id} style={styles.extensionRow}>
+                      <div style={styles.extensionInfo}>
+                        <div style={styles.extensionNameRow}>
+                          <span style={styles.extensionName}>{ext.name}</span>
+                          <span style={styles.versionBadge}>v{ext.version}</span>
+                          {update && (
+                            <span style={styles.updateBadge}>
+                              Update: v{update.latestVersion}
+                            </span>
+                          )}
+                        </div>
+                        <span style={styles.extensionDescription}>{ext.description}</span>
+                      </div>
+                      <div style={styles.extensionActions}>
+                        {update && (
+                          <button
+                            onClick={() => handleUpdateExtension(ext.id)}
+                            disabled={isUpdating}
+                            className="btn-secondary"
+                            style={styles.actionButton}
+                          >
+                            {isUpdating ? "..." : "Update"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleUninstallExtension(ext.id)}
+                          disabled={isUninstalling}
+                          style={styles.uninstallButton}
+                        >
+                          {isUninstalling ? "..." : "Uninstall"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {userExtensions.length === 0 && (
+              <div style={styles.emptyState}>
+                No extensions installed. Enter a GitHub URL above to install one.
+              </div>
+            )}
+          </section>
+
           {/* Danger Zone */}
           <section style={styles.section}>
             <h3 style={styles.sectionTitle}>Data</h3>
@@ -307,6 +528,16 @@ function SettingsIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function ErrorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
     </svg>
   );
 }
@@ -515,5 +746,93 @@ const styles: Record<string, CSSProperties> = {
     padding: "8px 12px",
     fontSize: "12px",
     flexShrink: 0,
+  },
+  // Extension installation styles
+  sectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "12px",
+  },
+  checkUpdatesButton: {
+    padding: "6px 10px",
+    fontSize: "11px",
+  },
+  installSection: {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "12px",
+  },
+  installInput: {
+    flex: 1,
+    padding: "10px 12px",
+    fontSize: "13px",
+    color: "var(--text-primary)",
+    background: "var(--bg-secondary)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-md)",
+    outline: "none",
+  },
+  installButton: {
+    padding: "10px 16px",
+    fontSize: "13px",
+    flexShrink: 0,
+  },
+  installError: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "10px 12px",
+    marginBottom: "12px",
+    background: "var(--error-dim)",
+    border: "1px solid var(--error)",
+    borderRadius: "var(--radius-sm)",
+    fontSize: "12px",
+    color: "var(--error)",
+  },
+  extensionNameRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  versionBadge: {
+    fontSize: "10px",
+    padding: "2px 6px",
+    background: "var(--bg-tertiary)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--text-dim)",
+  },
+  updateBadge: {
+    fontSize: "10px",
+    padding: "2px 6px",
+    background: "rgba(90, 155, 196, 0.2)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--accent)",
+  },
+  extensionActions: {
+    display: "flex",
+    gap: "6px",
+    flexShrink: 0,
+  },
+  actionButton: {
+    padding: "6px 10px",
+    fontSize: "11px",
+  },
+  uninstallButton: {
+    padding: "6px 10px",
+    fontSize: "11px",
+    color: "var(--error)",
+    background: "transparent",
+    border: "1px solid var(--error)",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+  },
+  emptyState: {
+    padding: "16px",
+    textAlign: "center",
+    fontSize: "13px",
+    color: "var(--text-dim)",
+    background: "var(--bg-secondary)",
+    borderRadius: "var(--radius-md)",
   },
 };

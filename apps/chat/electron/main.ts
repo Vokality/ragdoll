@@ -7,8 +7,10 @@ import {
   shell,
 } from "electron";
 import * as path from "path";
+import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { getExtensionManager, type ExtensionManager } from "./services/extension-manager.js";
+import { getExtensionInstaller, type ExtensionInstaller } from "./services/extension-installer.js";
 import { createStorageRepository } from "./infrastructure/storage-repository.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,18 +31,36 @@ const logExtensions = (...args: unknown[]): void => {
 
 let mainWindow: BrowserWindow | null = null;
 let extensionManager: ExtensionManager | null = null;
+let extensionInstaller: ExtensionInstaller | null = null;
 let statePoller: ReturnType<typeof setInterval> | null = null;
 
 async function createWindow(): Promise<void> {
   const storage = storageRepo.read();
   const disabledExtensions = storage.settings?.disabledExtensions ?? [];
 
-  // Extension search paths (workspace packages)
-  const workspaceRoot = path.resolve(__dirname, "../../../..");
-  const searchPaths = [
-    path.join(workspaceRoot, "node_modules"),
-    path.join(workspaceRoot, "packages"),
-  ];
+  // User extensions directory (for user-installed extensions)
+  const userExtensionsPath = path.join(USER_DATA_PATH, "extensions");
+  if (!fs.existsSync(userExtensionsPath)) {
+    fs.mkdirSync(userExtensionsPath, { recursive: true });
+  }
+
+  // Extension search paths differ between dev and production
+  let searchPaths: string[];
+  if (isDev) {
+    // Development: search workspace packages and node_modules
+    const workspaceRoot = path.resolve(__dirname, "../../../..");
+    searchPaths = [
+      path.join(workspaceRoot, "node_modules"),
+      path.join(workspaceRoot, "packages"),
+      userExtensionsPath,
+    ];
+  } else {
+    // Production: search bundled node_modules (in asar) and user extensions
+    searchPaths = [
+      path.join(__dirname, "../node_modules"),  // Bundled extensions in app.asar
+      userExtensionsPath,                        // User-installed extensions
+    ];
+  }
 
   extensionManager = getExtensionManager({
     userDataPath: USER_DATA_PATH,
@@ -89,6 +109,9 @@ async function createWindow(): Promise<void> {
   });
   await extensionManager.initialize();
   logExtensions("Extension manager initialized", extensionManager.getStats());
+
+  // Initialize extension installer for user-installed extensions
+  extensionInstaller = getExtensionInstaller(USER_DATA_PATH);
 
   // Periodically broadcast state channels to keep renderer timers (like Pomodoro) in sync
   if (statePoller) {
@@ -602,6 +625,79 @@ ipcMain.handle(
     }
   },
 );
+
+// ============================================
+// IPC Handlers - Extension Installation
+// ============================================
+
+ipcMain.handle("extensions:install-from-github", async (_, repoUrl: string) => {
+  if (!extensionInstaller) {
+    return { success: false, error: "Extension installer not initialized" };
+  }
+  const result = await extensionInstaller.installFromGitHub(repoUrl);
+
+  // If successful, reload extensions to pick up the new one
+  if (result.success && extensionManager) {
+    await extensionManager.discoverAndLoadPackages();
+  }
+
+  return result;
+});
+
+ipcMain.handle("extensions:uninstall", async (_, extensionId: string) => {
+  if (!extensionInstaller) {
+    return { success: false, error: "Extension installer not initialized" };
+  }
+
+  // First unload from extension manager
+  if (extensionManager) {
+    const loadedPackages = extensionManager.getLoadedPackages();
+    const pkg = loadedPackages.find((p) => p.includes(extensionId));
+    if (pkg) {
+      await extensionManager.unloadPackage(pkg);
+    }
+  }
+
+  return extensionInstaller.uninstall(extensionId);
+});
+
+ipcMain.handle("extensions:get-user-installed", async () => {
+  if (!extensionInstaller) {
+    return [];
+  }
+  return extensionInstaller.getInstalledExtensions();
+});
+
+ipcMain.handle("extensions:check-updates", async () => {
+  if (!extensionInstaller) {
+    return [];
+  }
+  return extensionInstaller.checkForUpdates();
+});
+
+ipcMain.handle("extensions:update", async (_, extensionId: string) => {
+  if (!extensionInstaller) {
+    return { success: false, error: "Extension installer not initialized" };
+  }
+
+  // First unload the old version
+  if (extensionManager) {
+    const loadedPackages = extensionManager.getLoadedPackages();
+    const pkg = loadedPackages.find((p) => p.includes(extensionId));
+    if (pkg) {
+      await extensionManager.unloadPackage(pkg);
+    }
+  }
+
+  const result = await extensionInstaller.update(extensionId);
+
+  // If successful, reload extensions
+  if (result.success && extensionManager) {
+    await extensionManager.discoverAndLoadPackages();
+  }
+
+  return result;
+});
 
 // ============================================
 // IPC Handlers - Chat (OpenAI)

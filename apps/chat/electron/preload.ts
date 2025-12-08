@@ -135,6 +135,33 @@ export interface ExtensionInfoExtended extends ExtensionInfo {
   hasOAuth: boolean;
 }
 
+// User-installed extension types
+export interface InstalledExtension {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  path: string;
+  repoUrl: string;
+  installedAt: string;
+}
+
+export interface InstallResult {
+  success: boolean;
+  extensionId?: string;
+  name?: string;
+  version?: string;
+  error?: string;
+}
+
+export interface UpdateCheckResult {
+  extensionId: string;
+  currentVersion: string;
+  latestVersion: string;
+  hasUpdate: boolean;
+  repoUrl: string;
+}
+
 // Types for the API
 export interface ElectronAPI {
   // Auth
@@ -211,6 +238,13 @@ export interface ElectronAPI {
     key: string,
     value: string | number | boolean
   ) => Promise<{ success: boolean; error?: string }>;
+
+  // Extension Installation
+  installExtensionFromGitHub: (repoUrl: string) => Promise<InstallResult>;
+  uninstallExtension: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
+  getUserInstalledExtensions: () => Promise<InstalledExtension[]>;
+  checkExtensionUpdates: () => Promise<UpdateCheckResult[]>;
+  updateExtension: (extensionId: string) => Promise<InstallResult>;
 
   // Platform
   platform: string;
@@ -334,6 +368,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("extensions:config-get-schema", extensionId),
   setConfigValue: (extensionId: string, key: string, value: string | number | boolean) =>
     ipcRenderer.invoke("extensions:config-set-value", extensionId, key, value),
+
+  // Extension Installation
+  installExtensionFromGitHub: (repoUrl: string) =>
+    ipcRenderer.invoke("extensions:install-from-github", repoUrl),
+  uninstallExtension: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:uninstall", extensionId),
+  getUserInstalledExtensions: () =>
+    ipcRenderer.invoke("extensions:get-user-installed"),
+  checkExtensionUpdates: () =>
+    ipcRenderer.invoke("extensions:check-updates"),
+  updateExtension: (extensionId: string) =>
+    ipcRenderer.invoke("extensions:update", extensionId),
 
   // Platform
   platform: process.platform,

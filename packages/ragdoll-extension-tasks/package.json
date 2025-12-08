@@ -33,6 +33,6 @@
     "capabilities": ["tools", "stateChannels", "slots"],
     "requiredCapabilities": [],
     "entry": "./dist/index.js",
-    "canDisable": true
+    "canDisable": false
   }
 }

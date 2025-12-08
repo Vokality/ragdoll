@@ -38,6 +38,9 @@
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",
     "@vokality/ragdoll-extensions": "workspace:*",
+    "@vokality/ragdoll-extension-character": "workspace:*",
+    "@vokality/ragdoll-extension-tasks": "workspace:*",
+    "@vokality/ragdoll-extension-pomodoro": "workspace:*",
     "node-fetch": "^2",
     "openai": "^4.73.0",
     "react": "^19.2.0",
