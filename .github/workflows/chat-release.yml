@@ -106,11 +106,21 @@ jobs:
       - name: Clean up signing environment
         run: rm -f .env
 
+      - name: List build artifacts
+        run: |
+          echo "=== Build artifacts in apps/chat/release ==="
+          ls -lah apps/chat/release/
+          echo "=== DMG files ==="
+          find apps/chat/release -name "*.dmg" -type f
+          echo "=== ZIP files ==="
+          find apps/chat/release -name "*.zip" -type f
+
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Chat ${{ steps.version.outputs.version }}
           files: |
-            apps/chat/release/Ragdoll Chat-*-arm64.dmg
-            apps/chat/release/Ragdoll Chat-*-arm64-mac.zip
+            apps/chat/release/*.dmg
+            apps/chat/release/*.zip
+          fail_on_unmatched_files: true
