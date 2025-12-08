@@ -114,4 +114,40 @@ log "Copying bundled extensions to node_modules"
 log "Packaging macOS app with electron-builder"
 (cd "$CHAT_DIR" && bunx electron-builder --config electron-builder.json --mac --publish never)
 
+log "Verifying bundled extensions in packaged app"
+(
+  set +e
+  APP_BUNDLES=$(find "$RELEASE_DIR" -type d -name "*.app" 2>/dev/null)
+  if [ -z "$APP_BUNDLES" ]; then
+    echo "WARNING: No .app bundles found in $RELEASE_DIR to verify"
+    exit 0
+  fi
+
+  REQUIRED_PACKAGES=(
+    "@vokality/ragdoll"
+    "@vokality/ragdoll-extensions"
+    "@vokality/ragdoll-extension-character"
+    "@vokality/ragdoll-extension-tasks"
+    "@vokality/ragdoll-extension-pomodoro"
+  )
+
+  for APP_BUNDLE in $APP_BUNDLES; do
+    NODE_MODULES_PATH="$APP_BUNDLE/Contents/Resources/app/node_modules"
+    if [ ! -d "$NODE_MODULES_PATH" ]; then
+      echo "ERROR: node_modules directory missing in $APP_BUNDLE"
+      exit 1
+    fi
+
+    for PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
+      PKG_PATH="$NODE_MODULES_PATH/$PACKAGE"
+      if [ ! -d "$PKG_PATH" ]; then
+        echo "ERROR: Required package $PACKAGE missing in $APP_BUNDLE"
+        exit 1
+      fi
+    done
+  done
+
+  echo "✓ Bundled extensions verified in packaged app"
+)
+
 log "Build complete! Artifacts: $RELEASE_DIR"

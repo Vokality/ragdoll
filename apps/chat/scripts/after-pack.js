@@ -22,7 +22,16 @@ export default async function afterPack(context) {
 
   console.log(`[afterPack] Copying node_modules from ${sourceNodeModules} to ${targetNodeModules}`);
 
-  // Remove @vokality from node_modules (already bundled in renderer)
+  const allowedScopedPackages = {
+    '@vokality': new Set([
+      'ragdoll',
+      'ragdoll-extensions',
+      'ragdoll-extension-character',
+      'ragdoll-extension-tasks',
+      'ragdoll-extension-pomodoro',
+    ]),
+  };
+
   function copyNodeModules(src, dest) {
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(dest, { recursive: true });
@@ -34,19 +43,34 @@ export default async function afterPack(context) {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
 
-      // Skip @vokality workspace packages and dev-only directories
-      if (entry.name === '@vokality' || entry.name === '.bin' || entry.name === '.cache' || entry.name === '.vite' || entry.name === '.vite-temp') {
+      if (entry.name === '.bin' || entry.name === '.cache' || entry.name === '.vite' || entry.name === '.vite-temp') {
+        continue;
+      }
+
+      if (entry.isDirectory() && entry.name.startsWith('@')) {
+        const allowed = allowedScopedPackages[entry.name];
+        if (!allowed) {
+          continue;
+        }
+
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath, { recursive: true });
+        }
+
+        const scopedEntries = fs.readdirSync(srcPath, { withFileTypes: true });
+        for (const scopedEntry of scopedEntries) {
+          if (!allowed.has(scopedEntry.name)) {
+            continue;
+          }
+          const scopedSrc = path.join(srcPath, scopedEntry.name);
+          const scopedDest = path.join(destPath, scopedEntry.name);
+          fs.cpSync(scopedSrc, scopedDest, { recursive: true });
+        }
         continue;
       }
 
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('@')) {
-          // Handle scoped packages
-          copyNodeModules(srcPath, destPath);
-        } else {
-          // Copy entire package directory
-          fs.cpSync(srcPath, destPath, { recursive: true });
-        }
+        fs.cpSync(srcPath, destPath, { recursive: true });
       } else {
         fs.copyFileSync(srcPath, destPath);
       }
