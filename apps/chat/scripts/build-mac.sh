@@ -135,6 +135,10 @@ log "Verifying bundled extensions in packaged app"
 
   found_bundle=false
   while IFS= read -r -d '' APP_BUNDLE; do
+    if [ "$(basename "$APP_BUNDLE")" != "Lumen.app" ]; then
+      continue
+    fi
+
     found_bundle=true
     NODE_MODULES_PATH="$APP_BUNDLE/Contents/Resources/app/node_modules"
     if [ ! -d "$NODE_MODULES_PATH" ]; then
