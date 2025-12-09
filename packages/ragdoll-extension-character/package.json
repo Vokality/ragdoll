@@ -13,7 +13,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -w -p tsconfig.json",
@@ -30,8 +33,13 @@
     "id": "character",
     "name": "Character",
     "description": "Facial expressions and animations",
-    "capabilities": ["tools", "slots"],
-    "requiredCapabilities": ["ipc"],
+    "capabilities": [
+      "tools",
+      "slots"
+    ],
+    "requiredCapabilities": [
+      "ipc"
+    ],
     "entry": "./dist/index.js",
     "canDisable": false
   }
