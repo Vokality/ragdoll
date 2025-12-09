@@ -22,15 +22,32 @@ export default async function afterPack(context) {
 
   console.log(`[afterPack] Copying node_modules from ${sourceNodeModules} to ${targetNodeModules}`);
 
+  // Dynamically discover all @vokality packages in node_modules
+  const vokality = path.join(sourceNodeModules, '@vokality');
+  const allowedPackages = new Set();
+
+  if (fs.existsSync(vokality)) {
+    const packages = fs.readdirSync(vokality, { withFileTypes: true });
+    for (const pkg of packages) {
+      if (pkg.isDirectory()) {
+        // Include core ragdoll packages and all extensions
+        if (pkg.name === 'ragdoll' ||
+            pkg.name === 'ragdoll-extensions' ||
+            pkg.name.startsWith('ragdoll-extension-')) {
+          allowedPackages.add(pkg.name);
+        }
+      }
+    }
+  }
+
   const allowedScopedPackages = {
-    '@vokality': new Set([
-      'ragdoll',
-      'ragdoll-extensions',
-      'ragdoll-extension-character',
-      'ragdoll-extension-tasks',
-      'ragdoll-extension-pomodoro',
-    ]),
+    '@vokality': allowedPackages,
   };
+
+  console.log(`[afterPack] Found ${allowedPackages.size} @vokality packages to bundle:`);
+  for (const pkg of allowedPackages) {
+    console.log(`  - @vokality/${pkg}`);
+  }
 
   function copyNodeModules(src, dest) {
     if (!fs.existsSync(dest)) {

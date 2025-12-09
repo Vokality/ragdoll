@@ -3,15 +3,16 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "chat-v*"
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    environment: npm
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -22,56 +23,90 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build
+      - name: Build packages
         run: bun run build
 
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/chat-v}" >> $GITHUB_OUTPUT
 
-      - name: Update package version
-        working-directory: packages/ragdoll
+      - name: Update app version
+        working-directory: apps/chat
+        shell: bash
         run: |
-          bun -e "const pkg = await Bun.file('package.json').json(); pkg.version = '${{ steps.version.outputs.VERSION }}'; await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+          bun -e "const pkg = await Bun.file('package.json').json(); pkg.version = '${{ steps.version.outputs.VERSION }}'; await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\\n');"
 
-      - name: Commit version update
+      - name: Write signing environment (macOS only)
+        if: runner.os == 'macOS'
+        env:
+          CHAT_BUILD_ENV: ${{ secrets.CHAT_BUILD_ENV }}
+        shell: bash
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git stash
-          git fetch --depth=1 origin main:main || git fetch --depth=1 origin master:master || true
-          git checkout main || git checkout master || git checkout -b main
-          git stash pop || true
-          git add packages/ragdoll/package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}" || exit 0
-          git push origin main || git push origin master
+          if [ -n "$CHAT_BUILD_ENV" ]; then
+            printf "%s\n" "$CHAT_BUILD_ENV" > .env
+          else
+            echo "Warning: CHAT_BUILD_ENV secret not configured, building unsigned"
+          fi
 
-      - name: Create GitHub Release
+      - name: Install signing certificate (macOS only)
+        if: runner.os == 'macOS'
+        env:
+          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "$MAC_CERTIFICATE" ] || [ -z "$MAC_CERTIFICATE_PASSWORD" ]; then
+            echo "Signing certificate secrets not configured; building unsigned"
+            exit 0
+          fi
+
+          KEYCHAIN="$RUNNER_TEMP/chat-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          CERT_PATH="$RUNNER_TEMP/chat-signing.p12"
+
+          echo "$MAC_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -k "$KEYCHAIN" -f pkcs12 -P "$MAC_CERTIFICATE_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning
+
+          echo "CSC_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          echo "CSC_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build Electron app
+        working-directory: apps/chat
+        shell: bash
+        run: |
+          # Load .env if it exists (contains notarization secrets for macOS)
+          if [ -f ../../.env ]; then
+            set -a
+            source ../../.env
+            set +a
+          fi
+          bunx electron-builder --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up signing environment (macOS only)
+        if: runner.os == 'macOS' && always()
+        shell: bash
+        run: rm -f .env
+
+      - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
-          name: Release ${{ steps.version.outputs.VERSION }}
+          name: Lumen v${{ steps.version.outputs.VERSION }}
+          files: |
+            apps/chat/release/**/*.dmg
+            apps/chat/release/**/*.zip
+            apps/chat/release/**/*.exe
+            apps/chat/release/**/*.AppImage
+            apps/chat/release/**/*.deb
           draft: false
           prerelease: false
-
-      - name: Setup Node for npm
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Remove npm auth token for trusted publishing
-        run: |
-          echo "NODE_AUTH_TOKEN=" >> "$GITHUB_ENV"
-          npm config delete //registry.npmjs.org/:_authToken || true
-          if [ -n "${NPM_CONFIG_USERCONFIG:-}" ] && [ -f "$NPM_CONFIG_USERCONFIG" ]; then
-            sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
-            sed -i '/always-auth/d' "$NPM_CONFIG_USERCONFIG"
-          fi
-
-      - name: Verify npm version
-        run: npm --version
-
-      - name: Publish to npm with trusted publishing
-        working-directory: packages/ragdoll
-        run: npm publish --access public --provenance

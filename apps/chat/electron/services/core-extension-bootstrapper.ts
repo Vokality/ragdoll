@@ -110,32 +110,12 @@ export class CoreExtensionBootstrapper {
   /**
    * Check if core extension setup is needed (first run).
    * In development mode, extensions are loaded from workspace so setup is skipped.
+   * In production mode, extensions are bundled with the app so setup is also skipped.
    */
   needsSetup(): boolean {
-    // In development mode, extensions are loaded from workspace packages
-    // so we don't need to download them from GitHub
-    if (this.isDevelopment) {
-      return false;
-    }
-
-    // Check if setup file exists and indicates completion
-    if (fs.existsSync(this.setupFilePath)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(this.setupFilePath, "utf-8"));
-        if (data[CORE_SETUP_COMPLETE_KEY] === true) {
-          // Verify all core extensions are actually installed
-          const installed = this.installer.getInstalledExtensions();
-          const coreIds = CORE_EXTENSIONS.map((e) => e.id);
-          const allInstalled = coreIds.every((id) =>
-            installed.some((ext) => ext.id === id)
-          );
-          return !allInstalled;
-        }
-      } catch {
-        // If file is corrupted, needs setup
-      }
-    }
-    return true;
+    // Extensions are now bundled with the app in both dev and production modes.
+    // No need to download from GitHub releases anymore.
+    return false;
   }
 
   /**
@@ -245,41 +225,12 @@ export class CoreExtensionBootstrapper {
 
   /**
    * Check for updates to core extensions in the background.
-   * Called on subsequent app launches.
+   * No-op since extensions are now bundled with the app.
    */
   async checkAndUpdateInBackground(): Promise<void> {
-    console.info("[CoreBootstrapper] Checking for core extension updates");
-
-    const installed = this.installer.getInstalledExtensions();
-
-    for (const core of CORE_EXTENSIONS) {
-      const ext = installed.find((i) => i.id === core.id);
-      if (!ext) {
-        // Extension missing - reinstall
-        console.warn(`[CoreBootstrapper] Core extension ${core.id} missing, reinstalling`);
-        try {
-          const releaseUrl = await this.findLatestRelease(core);
-          if (releaseUrl) {
-            await this.installer.installFromGitHub(releaseUrl);
-          }
-        } catch (error) {
-          console.error(`[CoreBootstrapper] Failed to reinstall ${core.id}:`, error);
-        }
-        continue;
-      }
-
-      // Check if update available
-      try {
-        const latestVersion = await this.fetchLatestVersion(core);
-        if (latestVersion && this.isNewerVersion(latestVersion, ext.version)) {
-          console.info(`[CoreBootstrapper] Updating ${core.id} from ${ext.version} to ${latestVersion}`);
-          const releaseUrl = `${core.repoUrl}/releases/tag/${core.tagPrefix}${latestVersion}`;
-          await this.installer.installFromGitHub(releaseUrl);
-        }
-      } catch (error) {
-        console.warn(`[CoreBootstrapper] Failed to check/update ${core.id}:`, error);
-      }
-    }
+    // Extensions are bundled with the app, so no background updates needed.
+    // Updates will come with new app releases.
+    console.info("[CoreBootstrapper] Extensions are bundled with the app - no updates needed");
   }
 
   // ===========================================================================
