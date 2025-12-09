@@ -20,9 +20,9 @@ export default async function afterPack(context) {
   // In Bun workspaces, dependencies are in the workspace root, not the app directory
   let sourceNodeModules = path.join(context.packager.projectDir, 'node_modules');
 
-  // If app-level node_modules doesn't exist, use workspace root
+  // If app-level node_modules doesn't exist, use workspace root (up 2 levels from apps/chat)
   if (!fs.existsSync(sourceNodeModules)) {
-    sourceNodeModules = path.join(context.packager.projectDir, '../../..', 'node_modules');
+    sourceNodeModules = path.resolve(context.packager.projectDir, '../..', 'node_modules');
   }
 
   const targetNodeModules = path.join(appResourcesPath, 'node_modules');
