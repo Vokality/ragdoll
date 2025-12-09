@@ -10,10 +10,14 @@ permissions:
 jobs:
   build-extension:
     name: Build Extension Tarball
-    # Only run for extension releases (spotify-v*, pomodoro-v*, etc.)
+    # Run for extension releases (character-v*, tasks-v*, pomodoro-v*, spotify-v*, etc.)
     # Excludes chat-v* and emote-v* which have their own workflows
+    # Core extensions use "extension-{name}-v*" format, third-party use "{name}-v*" format
     if: |
-      startsWith(github.event.release.tag_name, 'spotify-')
+      startsWith(github.event.release.tag_name, 'extension-character-v') ||
+      startsWith(github.event.release.tag_name, 'extension-tasks-v') ||
+      startsWith(github.event.release.tag_name, 'extension-pomodoro-v') ||
+      startsWith(github.event.release.tag_name, 'spotify-v')
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -32,13 +36,27 @@ jobs:
         id: ext
         run: |
           TAG="${RELEASE_TAG}"
-          # Extract extension name (e.g., "spotify" from "spotify-v0.1.0")
-          EXT_NAME="${TAG%%-v*}"
-          # Extract version (e.g., "0.1.0" from "spotify-v0.1.0")
-          VERSION="${TAG#*-v}"
+          
+          # Handle two formats:
+          # 1. Core extensions: "extension-{name}-v{version}" (e.g., "extension-character-v0.1.0")
+          # 2. Third-party extensions: "{name}-v{version}" (e.g., "spotify-v0.1.0")
+          
+          if [[ "$TAG" == extension-*-v* ]]; then
+            # Core extension format: extension-{name}-v{version}
+            # Remove "extension-" prefix first
+            STRIPPED="${TAG#extension-}"
+            # Extract name (everything before -v)
+            EXT_NAME="${STRIPPED%%-v*}"
+            # Extract version (everything after -v)
+            VERSION="${STRIPPED#*-v}"
+          else
+            # Third-party format: {name}-v{version}
+            EXT_NAME="${TAG%%-v*}"
+            VERSION="${TAG#*-v}"
+          fi
           
           if [ -z "$EXT_NAME" ] || [ -z "$VERSION" ] || [ "$EXT_NAME" = "$TAG" ]; then
-            echo "Invalid release tag format. Expected: {extension}-v{version}" >&2
+            echo "Invalid release tag format. Expected: extension-{name}-v{version} or {name}-v{version}" >&2
             exit 1
           fi
           

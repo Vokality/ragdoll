@@ -32,10 +32,8 @@ log "Building shared ragdoll package"
 log "Building ragdoll-extensions package"
 (cd "$ROOT_DIR" && bun run build:extension-framework)
 
-log "Building bundled extension packages"
-(cd "$ROOT_DIR/packages/ragdoll-extension-character" && bun run build)
-(cd "$ROOT_DIR/packages/ragdoll-extension-tasks" && bun run build)
-(cd "$ROOT_DIR/packages/ragdoll-extension-pomodoro" && bun run build)
+# Note: Core extensions (character, tasks, pomodoro) are now installed at runtime
+# from GitHub releases. They are no longer bundled with the app.
 
 log "Installing chat dependencies for building"
 (cd "$CHAT_DIR" && bun install)
@@ -86,7 +84,7 @@ EOF
   echo "✓ Production node_modules created successfully with $(ls node_modules | wc -l) packages"
 )
 
-log "Copying bundled extensions to node_modules"
+log "Copying required packages to node_modules"
 (
   cd "$CHAT_DIR"
   
@@ -101,36 +99,29 @@ log "Copying bundled extensions to node_modules"
   rm -f node_modules/@vokality/ragdoll/tsconfig.json
   rm -f node_modules/@vokality/ragdoll/tsconfig.build.json 2>/dev/null || true
   
-  # Copy ragdoll-extensions (required by bundled extensions)
+  # Copy ragdoll-extensions (extension framework - required for loading extensions)
   cp -r "$ROOT_DIR/packages/ragdoll-extensions" node_modules/@vokality/ragdoll-extensions
   rm -rf node_modules/@vokality/ragdoll-extensions/src
   rm -rf node_modules/@vokality/ragdoll-extensions/node_modules
   rm -f node_modules/@vokality/ragdoll-extensions/tsconfig.json
   
-  # Copy bundled extensions
-  for EXT in character tasks pomodoro; do
-    cp -r "$ROOT_DIR/packages/ragdoll-extension-${EXT}" "node_modules/@vokality/ragdoll-extension-${EXT}"
-    rm -rf "node_modules/@vokality/ragdoll-extension-${EXT}/src"
-    rm -rf "node_modules/@vokality/ragdoll-extension-${EXT}/node_modules"
-    rm -f "node_modules/@vokality/ragdoll-extension-${EXT}/tsconfig.json"
-  done
+  # Note: Core extensions (character, tasks, pomodoro) are installed at runtime
+  # from GitHub releases, not bundled with the app.
   
-  echo "✓ Bundled extensions copied to node_modules"
+  echo "✓ Required packages copied to node_modules"
   ls -la node_modules/@vokality/
 )
 
 log "Packaging macOS app with electron-builder"
 (cd "$CHAT_DIR" && bunx electron-builder --config electron-builder.json --mac --publish never)
 
-log "Verifying bundled extensions in packaged app"
+log "Verifying required packages in packaged app"
 (
   set +e
+  # Only verify core framework packages - extensions are installed at runtime
   REQUIRED_PACKAGES=(
     "@vokality/ragdoll"
     "@vokality/ragdoll-extensions"
-    "@vokality/ragdoll-extension-character"
-    "@vokality/ragdoll-extension-tasks"
-    "@vokality/ragdoll-extension-pomodoro"
   )
 
   found_bundle=false
@@ -160,7 +151,7 @@ log "Verifying bundled extensions in packaged app"
     exit 0
   fi
 
-  echo "✓ Bundled extensions verified in packaged app"
+  echo "✓ Required packages verified in packaged app"
 )
 
 log "Build complete! Artifacts: $RELEASE_DIR"

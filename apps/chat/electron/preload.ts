@@ -152,6 +152,8 @@ export interface InstallResult {
   name?: string;
   version?: string;
   error?: string;
+  requiresConfiguration?: boolean;
+  message?: string;
 }
 
 export interface UpdateCheckResult {
@@ -160,6 +162,23 @@ export interface UpdateCheckResult {
   latestVersion: string;
   hasUpdate: boolean;
   repoUrl: string;
+}
+
+// Core setup types
+export interface CoreExtensionStatus {
+  id: string;
+  name: string;
+  status: "pending" | "installing" | "installed" | "failed" | "updating";
+  version?: string;
+  error?: string;
+}
+
+export interface CoreSetupStatus {
+  isComplete: boolean;
+  isFirstRun: boolean;
+  extensions: CoreExtensionStatus[];
+  progress: number;
+  currentOperation: string;
 }
 
 // Types for the API
@@ -245,6 +264,12 @@ export interface ElectronAPI {
   getUserInstalledExtensions: () => Promise<InstalledExtension[]>;
   checkExtensionUpdates: () => Promise<UpdateCheckResult[]>;
   updateExtension: (extensionId: string) => Promise<InstallResult>;
+
+  // Core Extension Setup
+  needsCoreSetup: () => Promise<boolean>;
+  getCoreSetupStatus: () => Promise<CoreSetupStatus>;
+  runCoreSetup: () => Promise<CoreSetupStatus>;
+  onCoreSetupProgress: (callback: (status: CoreSetupStatus) => void) => () => void;
 
   // Platform
   platform: string;
@@ -380,6 +405,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("extensions:check-updates"),
   updateExtension: (extensionId: string) =>
     ipcRenderer.invoke("extensions:update", extensionId),
+
+  // Core Extension Setup
+  needsCoreSetup: () => ipcRenderer.invoke("core-setup:needs-setup"),
+  getCoreSetupStatus: () => ipcRenderer.invoke("core-setup:get-status"),
+  runCoreSetup: () => ipcRenderer.invoke("core-setup:run-setup"),
+  onCoreSetupProgress: (callback: (status: CoreSetupStatus) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, status: CoreSetupStatus) => callback(status);
+    ipcRenderer.on("core-setup:progress", handler);
+    return () => {
+      ipcRenderer.removeListener("core-setup:progress", handler);
+    };
+  },
 
   // Platform
   platform: process.platform,

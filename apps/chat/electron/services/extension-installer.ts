@@ -38,6 +38,8 @@ export interface InstallResult {
   name?: string;
   version?: string;
   error?: string;
+  requiresConfiguration?: boolean;
+  message?: string;
 }
 
 export interface UpdateCheckResult {
@@ -98,34 +100,54 @@ export class ExtensionInstaller {
 
   /**
    * Install an extension from a GitHub repository URL.
-   * @param repoUrl GitHub repository URL (e.g., https://github.com/owner/repo)
+   * Supports:
+   * - https://github.com/owner/repo (latest release)
+   * - https://github.com/owner/repo/releases/tag/tag-name (specific release)
+   * - https://github.com/owner/repo/releases/download/tag/file.tar.gz (direct download)
    */
   async installFromGitHub(repoUrl: string): Promise<InstallResult> {
     try {
-      // Parse GitHub URL
-      const { owner, repo } = this.parseGitHubUrl(repoUrl);
-      if (!owner || !repo) {
+      // Check if this is a direct download URL
+      const directDownload = this.parseDirectDownloadUrl(repoUrl);
+      if (directDownload) {
+        return this.installFromDirectUrl(directDownload);
+      }
+
+      // Parse GitHub URL with optional tag
+      const parsed = this.parseGitHubUrl(repoUrl);
+      if (!parsed.owner || !parsed.repo) {
         return { success: false, error: "Invalid GitHub URL. Expected format: https://github.com/owner/repo" };
       }
 
-      console.info(`[ExtensionInstaller] Installing from ${owner}/${repo}`);
+      console.info(`[ExtensionInstaller] Installing from ${parsed.owner}/${parsed.repo}${parsed.tag ? ` (tag: ${parsed.tag})` : ''}`);
 
-      // Fetch latest release
-      const release = await this.fetchLatestRelease(owner, repo);
+      // Fetch release (specific tag or latest)
+      const release = parsed.tag 
+        ? await this.fetchReleaseByTag(parsed.owner, parsed.repo, parsed.tag)
+        : await this.fetchLatestRelease(parsed.owner, parsed.repo);
+      
       if (!release) {
-        return { success: false, error: "No releases found for this repository" };
+        return { success: false, error: parsed.tag 
+          ? `Release not found for tag: ${parsed.tag}`
+          : "No releases found for this repository" 
+        };
       }
 
-      // Find tarball asset
-      const tarballAsset = release.assets.find(
-        (asset) => asset.name.endsWith(".tar.gz") && asset.name.includes("ragdoll-extension")
-      );
+      // Find tarball asset (prefer ragdoll-named, fallback to any .tar.gz)
+      const tarballAsset = 
+        release.assets.find(
+          (asset) => asset.name.toLowerCase().endsWith(".tar.gz") && 
+                     asset.name.toLowerCase().includes("ragdoll")
+        ) ||
+        release.assets.find(
+          (asset) => asset.name.toLowerCase().endsWith(".tar.gz")
+        );
       if (!tarballAsset) {
         return { success: false, error: "No extension tarball found in the latest release" };
       }
 
       // Parse version from tag
-      const version = release.tag_name.replace(/^v/, "").replace(/^[a-z]+-v?/, "");
+      const version = this.parseVersion(release.tag_name);
 
       // Download tarball
       const tempDir = path.join(this.extensionsPath, ".temp-" + Date.now());
@@ -262,7 +284,7 @@ export class ExtensionInstaller {
         const release = await this.fetchLatestRelease(owner, repo);
         if (!release) continue;
 
-        const latestVersion = release.tag_name.replace(/^v/, "").replace(/^[a-z]+-v?/, "");
+        const latestVersion = this.parseVersion(release.tag_name);
         const hasUpdate = this.compareVersions(latestVersion, ext.version) > 0;
 
         results.push({
@@ -297,13 +319,22 @@ export class ExtensionInstaller {
   // Private Helpers
   // ===========================================================================
 
-  private parseGitHubUrl(url: string): { owner: string | null; repo: string | null } {
+  private parseGitHubUrl(url: string): { owner: string | null; repo: string | null; tag?: string } {
     try {
       // Handle various GitHub URL formats
       // https://github.com/owner/repo
       // https://github.com/owner/repo.git
+      // https://github.com/owner/repo/releases/tag/tag-name
       // github.com/owner/repo
       const normalized = url.replace(/\.git$/, "");
+      
+      // Check for /releases/tag/ format
+      const tagMatch = normalized.match(/github\.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)/);
+      if (tagMatch) {
+        return { owner: tagMatch[1], repo: tagMatch[2], tag: tagMatch[3] };
+      }
+      
+      // Standard repo URL
       const match = normalized.match(/github\.com\/([^/]+)\/([^/]+)/);
       if (match) {
         return { owner: match[1], repo: match[2] };
@@ -311,6 +342,25 @@ export class ExtensionInstaller {
       return { owner: null, repo: null };
     } catch {
       return { owner: null, repo: null };
+    }
+  }
+
+  private parseDirectDownloadUrl(url: string): { owner: string; repo: string; tag: string; filename: string } | null {
+    try {
+      // Check for direct download URL format:
+      // https://github.com/owner/repo/releases/download/tag/file.tar.gz
+      const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\/([^/]+)/);
+      if (match) {
+        return {
+          owner: match[1],
+          repo: match[2],
+          tag: match[3],
+          filename: match[4],
+        };
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 
@@ -347,6 +397,126 @@ export class ExtensionInstaller {
       req.on("error", reject);
       req.end();
     });
+  }
+
+  private async fetchReleaseByTag(owner: string, repo: string, tag: string): Promise<GitHubRelease | null> {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: "api.github.com",
+        path: `/repos/${owner}/${repo}/releases/tags/${tag}`,
+        method: "GET",
+        headers: {
+          "User-Agent": "Lumen-Extension-Installer",
+          "Accept": "application/vnd.github.v3+json",
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          if (res.statusCode === 200) {
+            try {
+              resolve(JSON.parse(data) as GitHubRelease);
+            } catch {
+              reject(new Error("Failed to parse release data"));
+            }
+          } else if (res.statusCode === 404) {
+            resolve(null);
+          } else {
+            reject(new Error(`GitHub API error: ${res.statusCode}`));
+          }
+        });
+      });
+
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  private async installFromDirectUrl(info: { owner: string; repo: string; tag: string; filename: string }): Promise<InstallResult> {
+    try {
+      console.info(`[ExtensionInstaller] Installing from direct URL: ${info.owner}/${info.repo}/${info.tag}/${info.filename}`);
+
+      // Parse version from tag
+      const version = this.parseVersion(info.tag);
+
+      // Download tarball directly
+      const tempDir = path.join(this.extensionsPath, ".temp-" + Date.now());
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      const tarballPath = path.join(tempDir, "extension.tar.gz");
+      const downloadUrl = `https://github.com/${info.owner}/${info.repo}/releases/download/${info.tag}/${info.filename}`;
+      await this.downloadFile(downloadUrl, tarballPath);
+
+      // Extract tarball
+      const extractDir = path.join(tempDir, "extracted");
+      fs.mkdirSync(extractDir, { recursive: true });
+      await this.extractTarGz(tarballPath, extractDir);
+
+      // Find package.json and validate
+      const packageJsonPath = path.join(extractDir, "package.json");
+      if (!fs.existsSync(packageJsonPath)) {
+        this.cleanup(tempDir);
+        return { success: false, error: "Invalid extension: package.json not found" };
+      }
+
+      const manifest = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as ExtensionManifest;
+      if (!manifest.ragdollExtension?.id) {
+        this.cleanup(tempDir);
+        return { success: false, error: "Invalid extension: ragdollExtension.id not found in package.json" };
+      }
+
+      const extensionId = manifest.ragdollExtension.id;
+      const extensionName = manifest.ragdollExtension.name || manifest.name;
+      const description = manifest.ragdollExtension.description || manifest.description || "";
+
+      // Check if already installed
+      const existingExtension = this.getInstalledExtension(extensionId);
+      if (existingExtension) {
+        // Remove old installation
+        this.cleanup(existingExtension.path);
+      }
+
+      // Move to final location
+      const finalPath = path.join(this.extensionsPath, extensionId);
+      if (fs.existsSync(finalPath)) {
+        fs.rmSync(finalPath, { recursive: true });
+      }
+      fs.renameSync(extractDir, finalPath);
+
+      // Cleanup temp directory
+      this.cleanup(tempDir);
+
+      // Reconstruct repo URL
+      const repoUrl = `https://github.com/${info.owner}/${info.repo}`;
+
+      // Register the extension
+      this.registerExtension({
+        id: extensionId,
+        name: extensionName,
+        version,
+        description,
+        path: finalPath,
+        repoUrl,
+        installedAt: new Date().toISOString(),
+      });
+
+      console.info(`[ExtensionInstaller] Successfully installed ${extensionId} v${version}`);
+
+      return {
+        success: true,
+        extensionId,
+        name: extensionName,
+        version,
+      };
+    } catch (error) {
+      console.error("[ExtensionInstaller] Installation failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error during installation",
+      };
+    }
   }
 
   private async downloadFile(url: string, destPath: string): Promise<void> {
@@ -461,6 +631,28 @@ export class ExtensionInstaller {
     const nullIndex = slice.indexOf(0);
     const str = slice.subarray(0, nullIndex === -1 ? length : nullIndex).toString("utf-8");
     return str.trim();
+  }
+
+  private parseVersion(tagName: string): string {
+    // Try to extract semantic version (X.Y.Z)
+    const semverMatch = tagName.match(/(\d+\.\d+\.\d+)/);
+    if (semverMatch) {
+      return semverMatch[1];
+    }
+
+    // Try to extract major.minor (X.Y)
+    const minorMatch = tagName.match(/(\d+\.\d+)/);
+    if (minorMatch) {
+      return minorMatch[1] + ".0";
+    }
+
+    // Fallback: strip common prefixes and return
+    const cleaned = tagName
+      .replace(/^v/i, "")
+      .replace(/^release[-_]?/i, "")
+      .replace(/^version[-_]?/i, "");
+
+    return cleaned || tagName;
   }
 
   private compareVersions(a: string, b: string): number {

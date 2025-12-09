@@ -9,6 +9,8 @@ const extensionAPI = window.electronAPI as typeof window.electronAPI & {
     name?: string;
     version?: string;
     error?: string;
+    requiresConfiguration?: boolean;
+    message?: string;
   }>;
   uninstallExtension: (extensionId: string) => Promise<{ success: boolean; error?: string }>;
   getUserInstalledExtensions: () => Promise<InstalledExtension[]>;
@@ -19,6 +21,8 @@ const extensionAPI = window.electronAPI as typeof window.electronAPI & {
     name?: string;
     version?: string;
     error?: string;
+    requiresConfiguration?: boolean;
+    message?: string;
   }>;
 };
 
@@ -134,6 +138,13 @@ export function SettingsModal({
         setInstallUrl("");
         setPendingChanges(true);
         await loadExtensionData();
+        
+        // Show info message if extension requires configuration
+        if (result.requiresConfiguration && result.message) {
+          setInstallError(result.message);
+          // Clear the message after 5 seconds
+          setTimeout(() => setInstallError(null), 5000);
+        }
       } else {
         setInstallError(result.error || "Installation failed");
       }
@@ -180,9 +191,18 @@ export function SettingsModal({
         await loadExtensionData();
         // Clear the update notification for this extension
         setExtensionUpdates((prev) => prev.filter((u) => u.extensionId !== extensionId));
+        
+        // Show info message if extension requires configuration
+        if (result.requiresConfiguration && result.message) {
+          setInstallError(result.message);
+          setTimeout(() => setInstallError(null), 5000);
+        }
+      } else if (result.error) {
+        setInstallError(result.error);
       }
     } catch (error) {
       console.error("Failed to update extension:", error);
+      setInstallError("Failed to update extension");
     } finally {
       setUpdatingExtensionId(null);
     }
@@ -224,11 +244,15 @@ export function SettingsModal({
     }
   };
 
-  // Filter to only show extensions that can be disabled
-  const toggleableExtensions = availableExtensions.filter((ext) => ext.canDisable);
+  // Filter out user-installed extensions from built-in sections
+  const userExtensionIds = new Set(userExtensions.map(ext => ext.id));
+  const builtInExtensions = availableExtensions.filter(ext => !userExtensionIds.has(ext.id));
+
+  // Show all built-in extensions in Features section (all will be visible, toggles disabled for core ones)
+  const featureExtensions = builtInExtensions;
 
   // Filter to show extensions that need configuration (OAuth or Config)
-  const configurableExtensions = availableExtensions.filter(
+  const configurableExtensions = builtInExtensions.filter(
     (ext) => ext.hasConfigSchema || ext.hasOAuth
   );
 
@@ -318,8 +342,8 @@ export function SettingsModal({
             </div>
           </section>
 
-          {/* Extensions Section */}
-          {toggleableExtensions.length > 0 && (
+          {/* Features Section - Show all built-in extensions */}
+          {featureExtensions.length > 0 && (
             <section style={styles.section}>
               <h3 style={styles.sectionTitle}>Features</h3>
               {pendingChanges && (
@@ -329,19 +353,28 @@ export function SettingsModal({
                 </div>
               )}
               <div style={styles.extensionList}>
-                {toggleableExtensions.map((extension) => {
+                {featureExtensions.map((extension) => {
                   const isDisabled = disabledExtensions.includes(extension.id);
+                  const canToggle = extension.canDisable;
                   return (
                     <div key={extension.id} style={styles.extensionRow}>
                       <div style={styles.extensionInfo}>
-                        <span style={styles.extensionName}>{extension.name}</span>
+                        <div style={styles.extensionNameRow}>
+                          <span style={styles.extensionName}>{extension.name}</span>
+                          {!canToggle && (
+                            <span style={styles.requiredBadge}>Required</span>
+                          )}
+                        </div>
                         <span style={styles.extensionDescription}>{extension.description}</span>
                       </div>
                       <button
-                        onClick={() => handleExtensionToggle(extension.id)}
+                        onClick={() => canToggle && handleExtensionToggle(extension.id)}
+                        disabled={!canToggle}
                         style={{
                           ...styles.toggle,
-                          ...(isDisabled ? styles.toggleOff : styles.toggleOn),
+                          ...(canToggle 
+                            ? (isDisabled ? styles.toggleOff : styles.toggleOn)
+                            : styles.toggleDisabled),
                         }}
                         aria-pressed={!isDisabled}
                         aria-label={`${isDisabled ? "Enable" : "Disable"} ${extension.name}`}
@@ -349,7 +382,9 @@ export function SettingsModal({
                         <span
                           style={{
                             ...styles.toggleKnob,
-                            ...(isDisabled ? styles.toggleKnobOff : styles.toggleKnobOn),
+                            ...(canToggle
+                              ? (isDisabled ? styles.toggleKnobOff : styles.toggleKnobOn)
+                              : styles.toggleKnobDisabled),
                           }}
                         />
                       </button>
@@ -439,27 +474,40 @@ export function SettingsModal({
                   const update = getUpdateForExtension(ext.id);
                   const isUpdating = updatingExtensionId === ext.id;
                   const isUninstalling = uninstallingExtensionId === ext.id;
+                  // Check if this extension needs configuration
+                  const extInfo = availableExtensions.find(e => e.id === ext.id);
+                  const needsConfig = extInfo && (extInfo.hasConfigSchema || extInfo.hasOAuth);
+                  
                   return (
                     <div key={ext.id} style={styles.extensionRow}>
                       <div style={styles.extensionInfo}>
                         <div style={styles.extensionNameRow}>
                           <span style={styles.extensionName}>{ext.name}</span>
                           <span style={styles.versionBadge}>v{ext.version}</span>
-                          {update && (
-                            <span style={styles.updateBadge}>
-                              Update: v{update.latestVersion}
-                            </span>
-                          )}
                         </div>
                         <span style={styles.extensionDescription}>{ext.description}</span>
+                        {update && (
+                          <span style={styles.updateBadge}>
+                            v{update.latestVersion} available
+                          </span>
+                        )}
                       </div>
                       <div style={styles.extensionActions}>
+                        {needsConfig && extInfo && (
+                          <button
+                            onClick={() => setConfigModalExtension(extInfo)}
+                            className="btn-secondary"
+                            style={styles.actionButton}
+                          >
+                            <SettingsIcon />
+                          </button>
+                        )}
                         {update && (
                           <button
                             onClick={() => handleUpdateExtension(ext.id)}
                             disabled={isUpdating}
                             className="btn-secondary"
-                            style={styles.actionButton}
+                            style={styles.updateButton}
                           >
                             {isUpdating ? "..." : "Update"}
                           </button>
@@ -708,6 +756,11 @@ const styles: Record<string, CSSProperties> = {
   toggleOff: {
     background: "var(--border)",
   },
+  toggleDisabled: {
+    background: "var(--bg-tertiary)",
+    cursor: "not-allowed",
+    opacity: 0.5,
+  },
   toggleKnob: {
     position: "absolute",
     top: "2px",
@@ -723,6 +776,19 @@ const styles: Record<string, CSSProperties> = {
   },
   toggleKnobOff: {
     left: "2px",
+  },
+  toggleKnobDisabled: {
+    left: "22px",
+    opacity: 0.6,
+  },
+  requiredBadge: {
+    fontSize: "10px",
+    padding: "2px 6px",
+    background: "var(--bg-tertiary)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--text-dim)",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
   },
   dangerButton: {
     width: "100%",
@@ -794,6 +860,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "8px",
+    flexWrap: "wrap",
   },
   versionBadge: {
     fontSize: "10px",
@@ -803,11 +870,23 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-dim)",
   },
   updateBadge: {
+    display: "inline-block",
     fontSize: "10px",
     padding: "2px 6px",
+    marginTop: "4px",
     background: "rgba(90, 155, 196, 0.2)",
     borderRadius: "var(--radius-sm)",
     color: "var(--accent)",
+    fontWeight: "500",
+  },
+  updateButton: {
+    padding: "6px 10px",
+    fontSize: "11px",
+    background: "var(--accent)",
+    color: "white",
+    border: "none",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
   },
   extensionActions: {
     display: "flex",
