@@ -11,7 +11,7 @@ import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { getExtensionManager, type ExtensionManager } from "./services/extension-manager.js";
 import { getExtensionInstaller, type ExtensionInstaller } from "./services/extension-installer.js";
-import { getCoreExtensionBootstrapper, type CoreExtensionBootstrapper, type CoreSetupStatus } from "./services/core-extension-bootstrapper.js";
+import { getCoreExtensionBootstrapper, type CoreExtensionBootstrapper } from "./services/core-extension-bootstrapper.js";
 import { createStorageRepository } from "./infrastructure/storage-repository.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -657,29 +657,29 @@ ipcMain.handle("extensions:install-from-github", async (_, repoUrl: string) => {
   // If successful, verify the extension actually loaded
   if (result.success && extensionManager && result.extensionId) {
     await extensionManager.discoverAndLoadPackages();
-    
+
     // Check if it actually loaded
     const loadedExtensions = extensionManager.getAvailableExtensions();
     const isLoaded = loadedExtensions.some(ext => ext.id === result.extensionId);
-    
+
     if (!isLoaded) {
       // Check if it needs configuration
       const discovered = extensionManager.getDiscoveredExtensions();
       const ext = discovered.find(e => e.id === result.extensionId);
-      
+
       if (ext?.hasConfigSchema || ext?.hasOAuth) {
         // Extension needs configuration - this is OK, return success with flag
-        return { 
-          ...result, 
+        return {
+          ...result,
           requiresConfiguration: true,
           message: "Extension installed but requires configuration before use"
         };
       }
-      
+
       // Extension failed to load for unknown reason - uninstall and report failure
       await extensionInstaller.uninstall(result.extensionId);
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: "Extension installed but failed to load. The extension may be incompatible or corrupted. Please try reinstalling."
       };
     }

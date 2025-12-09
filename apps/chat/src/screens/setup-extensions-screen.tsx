@@ -73,6 +73,7 @@ export function SetupExtensionsScreen({ onComplete }: SetupExtensionsScreenProps
       setHasStarted(true);
       runSetup();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasStarted]);
 
   const runSetup = async () => {

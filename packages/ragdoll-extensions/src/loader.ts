@@ -319,6 +319,8 @@ export class ExtensionLoader {
 
   /**
    * Scan a node_modules directory for extension packages.
+   * Also handles user extensions directories where packages are in subdirectories
+   * named by extension ID rather than package name.
    */
   private async scanDirectory(nodeModulesPath: string): Promise<string[]> {
     const extensions: string[] = [];
@@ -327,29 +329,66 @@ export class ExtensionLoader {
       return extensions;
     }
 
+    // Check if this is a user extensions directory (not node_modules)
+    // User extensions are installed in subdirectories named by extension ID
+    const isUserExtensionsDir = !nodeModulesPath.includes("node_modules");
+
     try {
-      const entries = await this.config.readDir(nodeModulesPath);
+      if (isUserExtensionsDir) {
+        // For user extensions directory, scan subdirectories recursively
+        // Each subdirectory contains an extension with its own package.json
+        const entries = await this.config.readDir(nodeModulesPath);
 
-      for (const entry of entries) {
-        // Handle scoped packages (@org/package)
-        if (entry.startsWith("@")) {
-          const scopePath = this.joinPath(nodeModulesPath, entry);
-          const scopedPackages = await this.config.readDir(scopePath);
+        for (const entry of entries) {
+          // Skip hidden files/directories and temp files
+          if (entry.startsWith(".")) {
+            continue;
+          }
 
-          for (const scopedPkg of scopedPackages) {
-            const pkgName = `${entry}/${scopedPkg}`;
-            const pkgPath = this.joinPath(scopePath, scopedPkg);
+          const subdirPath = this.joinPath(nodeModulesPath, entry);
 
-            if (await this.isExtensionPackage(pkgPath)) {
-              extensions.push(pkgName);
+          // Check if this subdirectory contains a package.json
+          const packageJsonPath = this.joinPath(subdirPath, "package.json");
+          if (await this.config.pathExists(packageJsonPath)) {
+            try {
+              const content = await this.config.readFile(packageJsonPath);
+              const pkg = JSON.parse(content) as ExtensionPackageJson;
+
+              // If it's an extension package, use the package name from package.json
+              if (pkg.ragdollExtension && pkg.name) {
+                extensions.push(pkg.name);
+              }
+            } catch {
+              // Skip invalid package.json files
+              continue;
             }
           }
-        } else {
-          // Regular package
-          const pkgPath = this.joinPath(nodeModulesPath, entry);
+        }
+      } else {
+        // Standard node_modules structure
+        const entries = await this.config.readDir(nodeModulesPath);
 
-          if (await this.isExtensionPackage(pkgPath)) {
-            extensions.push(entry);
+        for (const entry of entries) {
+          // Handle scoped packages (@org/package)
+          if (entry.startsWith("@")) {
+            const scopePath = this.joinPath(nodeModulesPath, entry);
+            const scopedPackages = await this.config.readDir(scopePath);
+
+            for (const scopedPkg of scopedPackages) {
+              const pkgName = `${entry}/${scopedPkg}`;
+              const pkgPath = this.joinPath(scopePath, scopedPkg);
+
+              if (await this.isExtensionPackage(pkgPath)) {
+                extensions.push(pkgName);
+              }
+            }
+          } else {
+            // Regular package
+            const pkgPath = this.joinPath(nodeModulesPath, entry);
+
+            if (await this.isExtensionPackage(pkgPath)) {
+              extensions.push(entry);
+            }
           }
         }
       }
@@ -615,6 +654,7 @@ export class ExtensionLoader {
   ): Promise<{ packageJson: ExtensionPackageJson | null; packagePath: string | null }> {
     // Try to find the package in search paths
     for (const searchPath of this.config.searchPaths) {
+      // First, try standard node_modules structure
       const packagePath = this.joinPath(searchPath, ...packageName.split("/"));
       const packageJsonPath = this.joinPath(packagePath, "package.json");
 
@@ -624,6 +664,41 @@ export class ExtensionLoader {
           const packageJson = JSON.parse(content) as ExtensionPackageJson;
           return { packageJson, packagePath };
         } catch {
+          continue;
+        }
+      }
+
+      // If not found and this is a user extensions directory, search subdirectories
+      const isUserExtensionsDir = !searchPath.includes("node_modules");
+      if (isUserExtensionsDir) {
+        try {
+          const entries = await this.config.readDir(searchPath);
+
+          for (const entry of entries) {
+            // Skip hidden files/directories
+            if (entry.startsWith(".")) {
+              continue;
+            }
+
+            const subdirPath = this.joinPath(searchPath, entry);
+            const subdirPackageJsonPath = this.joinPath(subdirPath, "package.json");
+
+            if (await this.config.pathExists(subdirPackageJsonPath)) {
+              try {
+                const content = await this.config.readFile(subdirPackageJsonPath);
+                const packageJson = JSON.parse(content) as ExtensionPackageJson;
+
+                // Check if this package.json matches the package name we're looking for
+                if (packageJson.name === packageName) {
+                  return { packageJson, packagePath: subdirPath };
+                }
+              } catch {
+                continue;
+              }
+            }
+          }
+        } catch {
+          // Directory read failed, continue to next search path
           continue;
         }
       }

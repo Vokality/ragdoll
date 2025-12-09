@@ -33,7 +33,8 @@
     "electron": "electron .",
     "electron:dev": "concurrently -n VITE,ELECTRON -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "verify-extensions": "bun run scripts/verify-extension-discovery.ts"
   },
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",
