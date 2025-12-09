@@ -7,10 +7,7 @@ on:
 
 jobs:
   release:
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
@@ -28,20 +25,16 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/chat-v}" >> $GITHUB_OUTPUT
 
       - name: Update app version
         working-directory: apps/chat
-        shell: bash
         run: |
           bun -e "const pkg = await Bun.file('package.json').json(); pkg.version = '${{ steps.version.outputs.VERSION }}'; await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\\n');"
 
-      - name: Write signing environment (macOS only)
-        if: runner.os == 'macOS'
+      - name: Write signing environment
         env:
           CHAT_BUILD_ENV: ${{ secrets.CHAT_BUILD_ENV }}
-        shell: bash
         run: |
           if [ -n "$CHAT_BUILD_ENV" ]; then
             printf "%s\n" "$CHAT_BUILD_ENV" > .env
@@ -49,12 +42,10 @@ jobs:
             echo "Warning: CHAT_BUILD_ENV secret not configured, building unsigned"
           fi
 
-      - name: Install signing certificate (macOS only)
-        if: runner.os == 'macOS'
+      - name: Install signing certificate
         env:
           MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
           MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-        shell: bash
         run: |
           if [ -z "$MAC_CERTIFICATE" ] || [ -z "$MAC_CERTIFICATE_PASSWORD" ]; then
             echo "Signing certificate secrets not configured; building unsigned"
@@ -80,7 +71,6 @@ jobs:
 
       - name: Build Electron app
         working-directory: apps/chat
-        shell: bash
         run: |
           # Load .env if it exists (contains notarization secrets for macOS)
           if [ -f ../../.env ]; then
@@ -88,13 +78,12 @@ jobs:
             source ../../.env
             set +a
           fi
-          bunx electron-builder --publish never
+          bunx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Clean up signing environment (macOS only)
-        if: runner.os == 'macOS' && always()
-        shell: bash
+      - name: Clean up signing environment
+        if: always()
         run: rm -f .env
 
       - name: Upload artifacts to release
@@ -103,10 +92,7 @@ jobs:
           tag_name: ${{ github.ref }}
           name: Lumen v${{ steps.version.outputs.VERSION }}
           files: |
-            apps/chat/release/**/*.dmg
-            apps/chat/release/**/*.zip
-            apps/chat/release/**/*.exe
-            apps/chat/release/**/*.AppImage
-            apps/chat/release/**/*.deb
+            apps/chat/release/*.dmg
+            apps/chat/release/*.zip
           draft: false
           prerelease: false

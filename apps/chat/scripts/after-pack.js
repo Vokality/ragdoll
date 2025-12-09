@@ -17,7 +17,14 @@ export default async function afterPack(context) {
     appResourcesPath = path.join(appOutDir, 'resources', 'app');
   }
 
-  const sourceNodeModules = path.join(context.packager.projectDir, 'node_modules');
+  // In Bun workspaces, dependencies are in the workspace root, not the app directory
+  let sourceNodeModules = path.join(context.packager.projectDir, 'node_modules');
+
+  // If app-level node_modules doesn't exist, use workspace root
+  if (!fs.existsSync(sourceNodeModules)) {
+    sourceNodeModules = path.join(context.packager.projectDir, '../../..', 'node_modules');
+  }
+
   const targetNodeModules = path.join(appResourcesPath, 'node_modules');
 
   console.log(`[afterPack] Copying node_modules from ${sourceNodeModules} to ${targetNodeModules}`);
@@ -50,6 +57,11 @@ export default async function afterPack(context) {
   }
 
   function copyNodeModules(src, dest) {
+    if (!fs.existsSync(src)) {
+      console.log(`[afterPack] Source node_modules not found at ${src}, skipping copy`);
+      return;
+    }
+
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(dest, { recursive: true });
     }
