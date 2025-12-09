@@ -36,7 +36,8 @@ export default async function afterPack(context) {
   if (fs.existsSync(vokality)) {
     const packages = fs.readdirSync(vokality, { withFileTypes: true });
     for (const pkg of packages) {
-      if (pkg.isDirectory()) {
+      // Check both directories and symlinks (Bun workspaces use symlinks)
+      if (pkg.isDirectory() || pkg.isSymbolicLink()) {
         // Include core ragdoll packages and all extensions
         if (pkg.name === 'ragdoll' ||
             pkg.name === 'ragdoll-extensions' ||
@@ -93,7 +94,14 @@ export default async function afterPack(context) {
           }
           const scopedSrc = path.join(srcPath, scopedEntry.name);
           const scopedDest = path.join(destPath, scopedEntry.name);
-          fs.cpSync(scopedSrc, scopedDest, { recursive: true });
+
+          // Resolve symlinks before copying (important for Bun workspaces)
+          const resolvedSrc = fs.lstatSync(scopedSrc).isSymbolicLink()
+            ? fs.realpathSync(scopedSrc)
+            : scopedSrc;
+
+          console.log(`[afterPack]   Copying ${scopedEntry.name}${resolvedSrc !== scopedSrc ? ' (resolved symlink)' : ''}`);
+          fs.cpSync(resolvedSrc, scopedDest, { recursive: true });
         }
         continue;
       }
