@@ -131,6 +131,23 @@ interface ExtensionConfigStatus {
   values: Record<string, unknown>;
 }
 
+// Core setup types
+interface CoreExtensionStatus {
+  id: string;
+  name: string;
+  status: "pending" | "installing" | "installed" | "failed" | "updating";
+  version?: string;
+  error?: string;
+}
+
+interface CoreSetupStatus {
+  isComplete: boolean;
+  isFirstRun: boolean;
+  extensions: CoreExtensionStatus[];
+  progress: number;
+  currentOperation: string;
+}
+
 // ElectronAPI type definition
 interface ElectronAPI {
   // Auth
@@ -207,6 +224,12 @@ interface ElectronAPI {
     key: string,
     value: string | number | boolean
   ) => Promise<{ success: boolean; error?: string }>;
+
+  // Core Extension Setup
+  needsCoreSetup: () => Promise<boolean>;
+  getCoreSetupStatus: () => Promise<CoreSetupStatus>;
+  runCoreSetup: () => Promise<CoreSetupStatus>;
+  onCoreSetupProgress: (callback: (status: CoreSetupStatus) => void) => () => void;
 
   // Platform
   platform: string;
