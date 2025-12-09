@@ -77,6 +77,7 @@ export default async function afterPack(context) {
         continue;
       }
 
+      // Only process scoped packages (like @vokality)
       if (entry.isDirectory() && entry.name.startsWith('@')) {
         const allowed = allowedScopedPackages[entry.name];
         if (!allowed) {
@@ -103,14 +104,9 @@ export default async function afterPack(context) {
           console.log(`[afterPack]   Copying ${scopedEntry.name}${resolvedSrc !== scopedSrc ? ' (resolved symlink)' : ''}`);
           fs.cpSync(resolvedSrc, scopedDest, { recursive: true });
         }
-        continue;
       }
 
-      if (entry.isDirectory()) {
-        fs.cpSync(srcPath, destPath, { recursive: true });
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
+      // Skip everything else - electron-builder handles other dependencies
     }
   }
 
