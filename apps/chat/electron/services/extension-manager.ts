@@ -20,6 +20,7 @@ import {
   type ExtensionManifest,
   type ConfigSchema,
   type ConfigValues,
+  type ConversationEventInput,
   type OAuthConfig,
   type OAuthTokens,
   type RegistryCapabilityEvent,
@@ -38,6 +39,7 @@ import { OAuthManager, createOAuthManager } from "./oauth-manager.js";
 import { ConfigManager, createConfigManager } from "./config-manager.js";
 import type { ExtensionStorage } from "../infrastructure/extension-storage.js";
 import type { ExtensionMessageBus } from "./extension-message-bus.js";
+import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
 
 // =============================================================================
 // Types
@@ -71,6 +73,7 @@ export interface ExtensionManagerConfig {
   fileSystem: ExtensionLoaderConfig["fileSystem"];
   storage: ExtensionStorage;
   messageBus: ExtensionMessageBus;
+  conversationEvents: ExtensionConversationEventPublisher;
 }
 
 export interface BuiltInExtensionDefinition {
@@ -143,6 +146,12 @@ export class ExtensionManager {
       capabilities.add("notifications");
     }
 
+    const canPublishConversationEvents =
+      manifest.requiredCapabilities?.includes("conversationEvents") ?? false;
+    if (canPublishConversationEvents) {
+      capabilities.add("conversationEvents");
+    }
+
     if (packageInfo?.oauth) {
       capabilities.add("oauth");
     }
@@ -160,6 +169,12 @@ export class ExtensionManager {
     const storage = this.createStorageCapability(extensionId);
     const notifications = this.config.onNotification;
     const ipc = this.createIpcCapability(extensionId);
+    const conversationEvents = canPublishConversationEvents
+      ? {
+          publish: (event: ConversationEventInput) =>
+            this.config.conversationEvents.publish(extensionId, event),
+        }
+      : undefined;
 
     // Get OAuth capability if extension requires it
     const oauth = packageInfo?.oauth
@@ -179,6 +194,7 @@ export class ExtensionManager {
       capabilities,
       storage,
       notifications,
+      conversationEvents,
       logger,
       ipc,
       oauth,

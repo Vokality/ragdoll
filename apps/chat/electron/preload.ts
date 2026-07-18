@@ -17,12 +17,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url),
 
   // Chat
-  sendMessage: (conversationHistory: ChatMessageDto[]) =>
-    ipcRenderer.invoke("chat:send-message", conversationHistory),
+  sendMessage: (message: string) =>
+    ipcRenderer.invoke("chat:send-message", message),
   getConversation: () => ipcRenderer.invoke("chat:get-conversation"),
   clearConversation: () => ipcRenderer.invoke("chat:clear-conversation"),
-  saveConversation: (conversation: ChatMessageDto[]) =>
-    ipcRenderer.invoke("chat:save-conversation", conversation),
 
   // Streaming events
   onStreamingText: (callback: (text: string) => void) => {
@@ -31,6 +29,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("chat:streaming-text", handler);
     return () => {
       ipcRenderer.removeListener("chat:streaming-text", handler);
+    };
+  },
+  onConversationChanged: (
+    callback: (conversation: ChatMessageDto[]) => void,
+  ) => {
+    const handler = (
+      _: Electron.IpcRendererEvent,
+      conversation: ChatMessageDto[],
+    ) => callback(conversation);
+    ipcRenderer.on("chat:conversation-changed", handler);
+    return () => {
+      ipcRenderer.removeListener("chat:conversation-changed", handler);
     };
   },
   onFunctionCall: (

@@ -4,6 +4,7 @@ import type { ChatSettings } from "../../domain/settings";
 export interface StreamingHandlers {
   onText: (text: string) => void;
   onStreamEnd: () => void;
+  onConversationChanged: (conversation: ChatMessage[]) => void;
 }
 
 export type ChatSendResult =
@@ -13,9 +14,8 @@ export interface ChatGateway {
   fetchSettings(): Promise<Partial<ChatSettings> | undefined>;
   persistSettings(settings: Partial<ChatSettings>): Promise<void>;
   fetchConversation(): Promise<ChatMessage[]>;
-  persistConversation(messages: ChatMessage[]): Promise<void>;
   clearConversation(): Promise<void>;
-  sendMessage(conversationHistory: ChatMessage[]): Promise<ChatSendResult>;
+  sendMessage(message: string): Promise<ChatSendResult>;
   subscribeToStreaming(handlers: StreamingHandlers): () => void;
   onFunctionCall(
     callback: (name: string, args: Record<string, unknown>) => void,

@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../domain/chat";
-import { appendMessage, getVisibleMessages } from "../domain/chat";
+import { getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
 import { DEFAULT_SETTINGS, mergeSettings } from "../domain/settings";
 import type { ChatGateway } from "./ports/chat-gateway";
@@ -27,6 +27,7 @@ const INITIAL_SNAPSHOT: ChatSnapshot = {
 export class ChatService {
   private messages: ChatMessage[] = [];
   private streamingContent = "";
+  private conversationVersion = 0;
   private snapshot = INITIAL_SNAPSHOT;
   private readonly listeners = new Set<() => void>();
   private unsubscribeStreaming: (() => void) | null = null;
@@ -50,6 +51,11 @@ export class ChatService {
         this.publish();
       },
       onStreamEnd: () => this.finishStream(),
+      onConversationChanged: (conversation) => {
+        this.conversationVersion += 1;
+        this.messages = conversation;
+        this.publish();
+      },
     });
     this.startPromise = this.hydrate().catch((error: unknown) => {
       this.reportError(error);
@@ -72,16 +78,12 @@ export class ChatService {
       return { success: false, error: "Already processing" };
     }
 
-    this.messages = appendMessage(this.messages, {
-      role: "user",
-      content: trimmed,
-    });
     this.streamingContent = "";
     this.publish({ isLoading: true, isStreaming: true, error: null });
 
     let result: Awaited<ReturnType<ChatGateway["sendMessage"]>>;
     try {
-      result = await this.gateway.sendMessage(this.messages);
+      result = await this.gateway.sendMessage(trimmed);
     } catch (error) {
       result = { success: false, error: this.getErrorMessage(error) };
     }
@@ -154,24 +156,18 @@ export class ChatService {
   ): (() => void) => this.gateway.onFunctionCall(callback);
 
   private async hydrate(): Promise<void> {
+    const conversationVersion = this.conversationVersion;
     const [settings, messages] = await Promise.all([
       this.gateway.fetchSettings(),
       this.gateway.fetchConversation(),
     ]);
-    this.messages = messages;
+    if (this.conversationVersion === conversationVersion) {
+      this.messages = messages;
+    }
     this.publish({ settings: mergeSettings(settings) });
   }
 
   private finishStream(): void {
-    if (this.streamingContent) {
-      this.messages = appendMessage(this.messages, {
-        role: "assistant",
-        content: this.streamingContent,
-      });
-      void this.gateway
-        .persistConversation(this.messages)
-        .catch((error: unknown) => this.reportError(error));
-    }
     this.streamingContent = "";
     this.publish({ isLoading: false, isStreaming: false });
   }

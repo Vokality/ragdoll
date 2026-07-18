@@ -71,6 +71,7 @@ const ExtensionPackageManifestSchema = z
         z.enum([
           "storage",
           "notifications",
+          "conversationEvents",
           "timers",
           "scheduler",
           "ipc",

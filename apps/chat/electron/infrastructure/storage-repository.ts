@@ -9,11 +9,10 @@ import {
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { CHARACTER_THEME_IDS, CHARACTER_VARIANT_IDS } from "../electron-api.js";
-
-export const conversationMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-});
+import {
+  conversationEntrySchema,
+  pendingAgentTurnSchema,
+} from "../domain/conversation.js";
 
 export const storageSchema = z
   .object({
@@ -26,7 +25,8 @@ export const storageSchema = z
       })
       .strict()
       .optional(),
-    conversation: z.array(conversationMessageSchema).optional(),
+    conversation: z.array(conversationEntrySchema).optional(),
+    pendingAgentTurns: z.array(pendingAgentTurnSchema).optional(),
   })
   .strict();
 

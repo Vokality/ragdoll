@@ -4,20 +4,15 @@ import { ChatService } from "./chat-service";
 
 function createGateway() {
   let streamingHandlers: StreamingHandlers | null = null;
-  let sentConversation: Parameters<ChatGateway["sendMessage"]>[0] = [];
-  let persistedConversation: Parameters<ChatGateway["persistConversation"]>[0] =
-    [];
+  let sentMessage = "";
 
   const gateway: ChatGateway = {
     fetchSettings: async () => ({ theme: "robot", variant: "einstein" }),
     persistSettings: async () => undefined,
     fetchConversation: async () => [{ role: "assistant", content: "Hello" }],
-    persistConversation: async (messages) => {
-      persistedConversation = messages;
-    },
     clearConversation: async () => undefined,
-    sendMessage: async (conversation) => {
-      sentConversation = conversation;
+    sendMessage: async (message) => {
+      sentMessage = message;
       return { success: true };
     },
     subscribeToStreaming: (handlers) => {
@@ -33,13 +28,12 @@ function createGateway() {
   return {
     gateway,
     getStreamingHandlers: () => streamingHandlers,
-    getSentConversation: () => sentConversation,
-    getPersistedConversation: () => persistedConversation,
+    getSentMessage: () => sentMessage,
   };
 }
 
 describe("ChatService", () => {
-  it("owns hydration, streaming, and persistence outside React", async () => {
+  it("owns hydration and the main-process conversation projection outside React", async () => {
     const testGateway = createGateway();
     const service = new ChatService(testGateway.gateway);
 
@@ -50,7 +44,8 @@ describe("ChatService", () => {
     });
 
     await service.sendMessage("Hi");
-    expect(testGateway.getSentConversation()).toEqual([
+    expect(testGateway.getSentMessage()).toBe("Hi");
+    testGateway.getStreamingHandlers()?.onConversationChanged([
       { role: "assistant", content: "Hello" },
       { role: "user", content: "Hi" },
     ]);
@@ -60,9 +55,14 @@ describe("ChatService", () => {
       "Hello back",
     );
     testGateway.getStreamingHandlers()?.onStreamEnd();
+    testGateway.getStreamingHandlers()?.onConversationChanged([
+      { role: "assistant", content: "Hello" },
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Hello back" },
+    ]);
 
     expect(service.getSnapshot().isLoading).toBe(false);
-    expect(testGateway.getPersistedConversation().at(-1)).toEqual({
+    expect(service.getSnapshot().visibleMessages.at(-1)).toEqual({
       role: "assistant",
       content: "Hello back",
     });

@@ -10,12 +10,16 @@ import {
 } from "./extension-manager.js";
 import { ExtensionStorage } from "../infrastructure/extension-storage.js";
 import { ExtensionMessageBus } from "./extension-message-bus.js";
+import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
 
 const host: ExtensionHostEnvironment = { capabilities: new Set() };
 
 function createManager(
   onSlotStateChange?: () => void,
   builtInExtensions: readonly BuiltInExtensionDefinition[] = [],
+  conversationEvents: ExtensionConversationEventPublisher = {
+    publish: async () => ({ eventId: "event-id" }),
+  },
 ): ExtensionManager {
   return new ExtensionManager({
     packageRoots: [],
@@ -27,6 +31,7 @@ function createManager(
     },
     storage: new ExtensionStorage("/tmp/ragdoll-extension-manager-test"),
     messageBus: new ExtensionMessageBus(() => undefined),
+    conversationEvents,
     openExternal: async () => {},
     oauthRedirectBase: "lumen://oauth",
     onSlotStateChange: onSlotStateChange
@@ -221,6 +226,93 @@ describe("ExtensionManager built-in boundaries", () => {
       "builtin",
     ]);
     expect(manager.getLoadedPackages()).toEqual([]);
+    await manager.destroy();
+  });
+
+  it("grants conversation events only when declared and binds the source extension", async () => {
+    const published: Array<{ extensionId: string; type: string }> = [];
+    let undeclaredCapabilityWasPresent = false;
+    const conversationEvents: ExtensionConversationEventPublisher = {
+      publish: async (extensionId, event) => {
+        published.push({ extensionId, type: event.type });
+        return { eventId: "event-id" };
+      },
+    };
+    const tool = {
+      definition: {
+        type: "function" as const,
+        function: {
+          name: "noop",
+          description: "No operation",
+          parameters: { type: "object" as const, properties: {} },
+        },
+      },
+      handler: () => ({ success: true }),
+    };
+    const manager = createManager(
+      undefined,
+      [
+        {
+          packageName: "@example/publisher",
+          canDisable: false,
+          capabilities: ["tools"],
+          createExtension: () =>
+            createExtension({
+              id: "publisher",
+              name: "Publisher",
+              version: "1.0.0",
+              requiredCapabilities: ["conversationEvents"],
+              tools: [tool],
+              onInitialize: async (_context, hostEnvironment) => {
+                if (!hostEnvironment.conversationEvents) {
+                  throw new Error("conversationEvents was not granted");
+                }
+                await hostEnvironment.conversationEvents.publish({
+                  type: "test.completed",
+                  payload: {},
+                  turnPolicy: "record-only",
+                });
+              },
+            }),
+        },
+        {
+          packageName: "@example/non-publisher",
+          canDisable: false,
+          capabilities: ["tools"],
+          createExtension: () =>
+            createExtension({
+              id: "non-publisher",
+              name: "Non-publisher",
+              version: "1.0.0",
+              tools: [
+                {
+                  ...tool,
+                  definition: {
+                    ...tool.definition,
+                    function: {
+                      ...tool.definition.function,
+                      name: "otherNoop",
+                    },
+                  },
+                },
+              ],
+              onInitialize: (_context, hostEnvironment) => {
+                undeclaredCapabilityWasPresent = Boolean(
+                  hostEnvironment.conversationEvents,
+                );
+              },
+            }),
+        },
+      ],
+      conversationEvents,
+    );
+
+    await manager.initialize();
+
+    expect(published).toEqual([
+      { extensionId: "publisher", type: "test.completed" },
+    ]);
+    expect(undeclaredCapabilityWasPresent).toBe(false);
     await manager.destroy();
   });
 });

@@ -15,6 +15,7 @@ import type {
 export type ExtensionHostCapability =
   | "storage"
   | "notifications"
+  | "conversationEvents"
   | "timers"
   | "scheduler"
   | "ipc"
@@ -36,6 +37,30 @@ export interface NotificationRequest {
  * Callback invoked when an extension requests a notification.
  */
 export type NotificationCallback = (notification: NotificationRequest) => void;
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue =
+  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+
+export type EventTurnPolicy = "record-only" | "start-turn";
+
+export interface ConversationEventInput<
+  TPayload extends JsonObject = JsonObject,
+> {
+  type: string;
+  payload: TPayload;
+  turnPolicy: EventTurnPolicy;
+  deduplicationKey?: string;
+}
+
+export interface PublishedConversationEvent {
+  eventId: string;
+}
+
+export interface HostConversationEventsCapability {
+  publish(event: ConversationEventInput): Promise<PublishedConversationEvent>;
+}
 
 /**
  * Storage surface scoped per extension.
@@ -139,6 +164,7 @@ export interface ExtensionHostEnvironment {
   readonly capabilities: ReadonlySet<ExtensionHostCapability>;
   readonly storage?: HostStorageCapability;
   readonly notifications?: NotificationCallback;
+  readonly conversationEvents?: HostConversationEventsCapability;
   readonly timers?: HostTimersCapability;
   readonly scheduler?: HostSchedulerCapability;
   readonly ipc?: HostIpcBridge;

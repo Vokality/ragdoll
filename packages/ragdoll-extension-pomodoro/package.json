@@ -20,6 +20,7 @@
   "scripts": {
     "prebuild": "bun run clean",
     "build": "bunx --bun --no-install tsc -p tsconfig.json",
+    "test": "bun test ./src",
     "dev": "bunx --bun --no-install tsc -w -p tsconfig.json",
     "typecheck": "bunx --bun --no-install tsc --noEmit -p tsconfig.json",
     "clean": "bun run ../../scripts/clean.ts dist"
@@ -40,7 +41,8 @@
       "slots"
     ],
     "requiredCapabilities": [
-      "notifications"
+      "notifications",
+      "conversationEvents"
     ],
     "entry": "./dist/index.js",
     "canDisable": false

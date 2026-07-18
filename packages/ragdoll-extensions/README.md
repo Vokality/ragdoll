@@ -76,7 +76,32 @@ Registration is transactional: invalid, duplicate, conflicting, or partially act
 
 Extensions access runtime services only through `ExtensionHostEnvironment`. Declare required capabilities in the runtime manifest and package manifest. The registry rejects activation when the host does not provide them.
 
-Supported host boundaries include storage, logging, timers, scheduling, IPC, notifications, OAuth, and config. Extension packages should not import an app or host implementation.
+Supported host boundaries include storage, logging, timers, scheduling, IPC, notifications, conversation events, OAuth, and config. Extension packages should not import an app or host implementation.
+
+### Publish conversation events
+
+Declare `conversationEvents` in `requiredCapabilities` when an extension needs
+to record agent-visible activity:
+
+```ts
+if (!host.conversationEvents) {
+  throw new Error("This extension requires conversationEvents");
+}
+
+await host.conversationEvents.publish({
+  type: "sync.completed",
+  payload: { changed: 3 },
+  turnPolicy: "record-only",
+});
+```
+
+Every accepted event becomes internal conversation context. Use `record-only`
+when the next normal turn can consume the event. Use `start-turn` when core
+should immediately ask the agent to evaluate the event. The agent can still
+finish an event-triggered turn silently.
+
+Core owns event IDs, source attribution, timestamps, persistence, model turns,
+and renderer projection. Extensions cannot create visible messages directly.
 
 ## Load extension packages
 

@@ -1,5 +1,9 @@
 import type { BrowserWindow } from "electron";
-import type { OAuthEvent, SlotChangeEvent } from "../electron-api.js";
+import type {
+  ChatMessageDto,
+  OAuthEvent,
+  SlotChangeEvent,
+} from "../electron-api.js";
 
 export class RendererEventService {
   private window: BrowserWindow | null = null;
@@ -14,6 +18,10 @@ export class RendererEventService {
 
   functionCall(name: string, args: Record<string, unknown>): void {
     this.send("chat:function-call", name, args);
+  }
+
+  conversationChanged(conversation: ChatMessageDto[]): void {
+    this.send("chat:conversation-changed", conversation);
   }
 
   slotChanged(event: SlotChangeEvent): void {

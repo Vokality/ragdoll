@@ -111,11 +111,13 @@ export interface ElectronAPI {
   clearApiKey(): Promise<OperationResult>;
   openExternal(url: string): Promise<OperationResult>;
 
-  sendMessage(conversationHistory: ChatMessageDto[]): Promise<OperationResult>;
+  sendMessage(message: string): Promise<OperationResult>;
   getConversation(): Promise<ChatMessageDto[]>;
   clearConversation(): Promise<OperationResult>;
-  saveConversation(conversation: ChatMessageDto[]): Promise<OperationResult>;
   onStreamingText(callback: (text: string) => void): () => void;
+  onConversationChanged(
+    callback: (conversation: ChatMessageDto[]) => void,
+  ): () => void;
   onFunctionCall(
     callback: (name: string, args: Record<string, unknown>) => void,
   ): () => void;

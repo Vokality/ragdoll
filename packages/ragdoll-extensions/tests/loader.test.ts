@@ -14,6 +14,7 @@ function packageManifest(
   requiredCapabilities: Array<
     | "storage"
     | "notifications"
+    | "conversationEvents"
     | "timers"
     | "scheduler"
     | "ipc"

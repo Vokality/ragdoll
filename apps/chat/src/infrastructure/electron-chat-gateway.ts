@@ -8,8 +8,7 @@ import type { ElectronAPI } from "../../electron/electron-api";
 
 async function requireSuccess(
   operation: ReturnType<
-    ElectronAPI[
-      "clearApiKey" | "clearConversation" | "saveConversation" | "setSettings"]
+    ElectronAPI["clearApiKey" | "clearConversation" | "setSettings"]
   >,
 ): Promise<void> {
   const result = await operation;
@@ -28,21 +27,26 @@ export function createElectronChatGateway(api: ElectronAPI): ChatGateway {
       const conversation = await api.getConversation();
       return conversation;
     },
-    async persistConversation(messages: ChatMessage[]): Promise<void> {
-      await requireSuccess(api.saveConversation(messages));
-    },
     async clearConversation(): Promise<void> {
       await requireSuccess(api.clearConversation());
     },
-    async sendMessage(conversationHistory) {
-      return api.sendMessage(conversationHistory);
+    async sendMessage(message) {
+      return api.sendMessage(message);
     },
-    subscribeToStreaming({ onText, onStreamEnd }: StreamingHandlers) {
+    subscribeToStreaming({
+      onText,
+      onStreamEnd,
+      onConversationChanged,
+    }: StreamingHandlers) {
       const unsubscribeText = api.onStreamingText(onText);
       const unsubscribeEnd = api.onStreamEnd(onStreamEnd);
+      const unsubscribeConversation = api.onConversationChanged(
+        onConversationChanged,
+      );
       return () => {
         unsubscribeText();
         unsubscribeEnd();
+        unsubscribeConversation();
       };
     },
     onFunctionCall(callback) {

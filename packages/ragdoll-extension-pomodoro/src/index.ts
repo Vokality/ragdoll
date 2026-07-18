@@ -263,6 +263,11 @@ function createRuntime(
   options: PomodoroRuntimeOptions | undefined,
   host: ExtensionHostEnvironment,
 ): ExtensionRuntimeContribution {
+  const conversationEvents = host.conversationEvents;
+  if (!conversationEvents) {
+    throw new Error("Pomodoro requires the conversationEvents host capability");
+  }
+
   const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
   const sessionDuration = options?.sessionDuration ?? DEFAULT_SESSION_DURATION;
   const breakDuration = options?.breakDuration ?? DEFAULT_BREAK_DURATION;
@@ -276,6 +281,31 @@ function createRuntime(
     }
   };
 
+  const publishTimerCompleted = (
+    event: PomodoroEvent,
+    completedPhase: "focus" | "break",
+    nextPhase: "focus" | "break",
+  ): void => {
+    void conversationEvents
+      .publish({
+        type: "timer.completed",
+        payload: {
+          completedPhase,
+          nextPhase,
+          sessionsCompleted: event.state.sessionsCompleted,
+          sessionDurationMinutes: manager.getSessionDurationMinutes(),
+          breakDurationMinutes: manager.getBreakDurationMinutes(),
+        },
+        turnPolicy: "start-turn",
+        deduplicationKey: `${event.type}:${event.timestamp}`,
+      })
+      .catch((error: unknown) => {
+        host.logger?.error("Failed to publish timer completion", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  };
+
   const unsubscribe = manager.onStateChange((event) => {
     const mapped = mapPomodoroState(manager);
     notify(mapped);
@@ -284,11 +314,13 @@ function createRuntime(
         title: "🍅 Focus session complete",
         body: "Great work! Enjoy your break.",
       });
+      publishTimerCompleted(event, "focus", "break");
     } else if (event.type === "pomodoro:break-complete") {
       host.notifications?.({
         title: "🍅 Break over",
         body: "Ready for another session?",
       });
+      publishTimerCompleted(event, "break", "focus");
     }
   });
 
@@ -488,6 +520,7 @@ export function createExtension(
     name: "Pomodoro Timer",
     version: "0.1.0",
     description: "Pomodoro-style focus sessions and notifications",
+    requiredCapabilities: ["conversationEvents"],
     createRuntime: (host, _context) =>
       createRuntime(config as PomodoroRuntimeOptions | undefined, host),
   });

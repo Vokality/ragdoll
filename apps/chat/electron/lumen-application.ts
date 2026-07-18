@@ -10,6 +10,7 @@ import { InstalledExtensionRepository } from "./infrastructure/installed-extensi
 import { registerIpc } from "./ipc/register-ipc.js";
 import { ApiKeyService } from "./services/api-key-service.js";
 import { ChatApplicationService } from "./services/chat-application-service.js";
+import { ConversationEventService } from "./services/conversation-event-service.js";
 import { ExtensionInstaller } from "./services/extension-installer.js";
 import { ExtensionArchiveService } from "./services/extension-archive-service.js";
 import { ExtensionManager } from "./services/extension-manager.js";
@@ -18,6 +19,7 @@ import { ExtensionOperationsService } from "./services/extension-operations-serv
 import { ExternalNavigationService } from "./services/external-navigation-service.js";
 import { GitHubReleaseService } from "./services/github-release-service.js";
 import { OAuthCallbackService } from "./services/oauth-callback-service.js";
+import { OpenAIAgentRunner } from "./services/openai-service.js";
 import { RendererEventService } from "./services/renderer-event-service.js";
 import { WindowService } from "./services/window-service.js";
 
@@ -30,6 +32,10 @@ export class LumenApplication {
   private readonly extensions;
   private readonly windows;
   private readonly oauthCallbacks;
+  private readonly apiKeys;
+  private readonly chat;
+  private readonly conversationEvents;
+  private readonly unsubscribeConversationEvents: () => void;
   private disposeIpc: (() => void) | null = null;
 
   private constructor(
@@ -38,6 +44,7 @@ export class LumenApplication {
     disabledExtensions: string[],
   ) {
     this.storage = storage;
+    this.conversationEvents = new ConversationEventService(storage);
     const messageBus = new ExtensionMessageBus((name, args) =>
       this.rendererEvents.functionCall(name, args),
     );
@@ -47,6 +54,7 @@ export class LumenApplication {
       fileSystem: createExtensionPackageFileSystem(),
       storage: new ExtensionStorage(config.userExtensionsPath),
       messageBus,
+      conversationEvents: this.conversationEvents,
       disabledExtensions,
       oauthRedirectBase: config.oauthRedirectBase,
       openExternal: async (url) => {
@@ -69,6 +77,16 @@ export class LumenApplication {
       config.protocolScheme,
       this.extensions,
       this.rendererEvents,
+    );
+    this.apiKeys = new ApiKeyService(this.storage, safeStorage);
+    this.chat = new ChatApplicationService(
+      this.storage,
+      this.apiKeys,
+      new OpenAIAgentRunner(this.extensions, this.config.chat),
+      (conversation) => this.rendererEvents.conversationChanged(conversation),
+    );
+    this.unsubscribeConversationEvents = this.conversationEvents.onTurnQueued(
+      () => void this.chat.schedulePendingEventTurns(),
     );
   }
 
@@ -104,14 +122,15 @@ export class LumenApplication {
   async destroy(): Promise<void> {
     this.disposeIpc?.();
     this.disposeIpc = null;
+    this.unsubscribeConversationEvents();
     await this.extensions.destroy();
   }
 
   private async initialize(): Promise<void> {
     await mkdir(this.config.userExtensionsPath, { recursive: true });
     await this.extensions.initialize();
+    void this.chat.schedulePendingEventTurns();
 
-    const apiKeys = new ApiKeyService(this.storage, safeStorage);
     const installer = new ExtensionInstaller({
       extensionsPath: this.config.userExtensionsPath,
       repository: new InstalledExtensionRepository(
@@ -127,13 +146,8 @@ export class LumenApplication {
       this.storage,
     );
     this.disposeIpc = registerIpc(ipcMain, {
-      apiKeys,
-      chat: new ChatApplicationService(
-        this.storage,
-        apiKeys,
-        this.extensions,
-        this.config.chat,
-      ),
+      apiKeys: this.apiKeys,
+      chat: this.chat,
       extensions: this.extensions,
       extensionOperations,
       navigation: this.navigation,
