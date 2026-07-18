@@ -19,6 +19,25 @@ export interface EyeState {
   squint: number; // 0 = none, 1 = full squint (affects lower lid)
 }
 
+export interface EyePaths {
+  sclera: string;
+  clipPath: string;
+  upperLid: string;
+  lowerLid: string;
+  aperture: {
+    upperY: number;
+    lowerY: number;
+    height: number;
+  };
+}
+
+export interface IrisPosition {
+  cx: number;
+  cy: number;
+  irisR: number;
+  pupilR: number;
+}
+
 /**
  * Eyebrow control points
  */
@@ -45,6 +64,14 @@ export interface MouthState {
   width: number; // Mouth width multiplier
   // Corners
   cornerPull: number; // -1 = frown, 0 = neutral, 1 = smile
+}
+
+export interface MouthPaths {
+  upperLip: string;
+  lowerLip: string;
+  opening: string;
+  openingHeight: number;
+  commissureY: number;
 }
 
 /**
@@ -456,10 +483,7 @@ export class RagdollGeometry {
   /**
    * Generate SVG path for an eye shape
    */
-  public getEyePath(
-    isLeft: boolean,
-    eyeState: EyeState,
-  ): { sclera: string; upperLid: string; lowerLid: string } {
+  public getEyePath(isLeft: boolean, eyeState: EyeState): EyePaths {
     const d = this.dimensions;
     const sign = isLeft ? 1 : -1;
     const cx = (sign * d.eyeSpacing) / 2;
@@ -468,55 +492,66 @@ export class RagdollGeometry {
     const h = d.eyeHeight / 2;
 
     const openness = Math.max(0, Math.min(1.3, eyeState.openness));
-    const squint = eyeState.squint;
+    const squint = Math.max(0, Math.min(1, eyeState.squint));
+    const upperY = cy - h * openness;
+    const lowerY = cy + h * openness * (1 - squint * 0.55);
+    const apertureHeight = Math.max(0, lowerY - upperY);
 
-    // Eye sclera (white) - almond shape
+    // The visible eye itself follows the lid aperture. This keeps the iris and
+    // sclera from leaking through a closed blink or wink.
     const sclera = `
       M ${cx - w} ${cy}
-      Q ${cx - w * 0.5} ${cy - h} ${cx} ${cy - h}
-      Q ${cx + w * 0.5} ${cy - h} ${cx + w} ${cy}
-      Q ${cx + w * 0.5} ${cy + h} ${cx} ${cy + h}
-      Q ${cx - w * 0.5} ${cy + h} ${cx - w} ${cy}
+      Q ${cx - w * 0.5} ${upperY} ${cx} ${upperY}
+      Q ${cx + w * 0.5} ${upperY} ${cx + w} ${cy}
+      Q ${cx + w * 0.5} ${lowerY} ${cx} ${lowerY}
+      Q ${cx - w * 0.5} ${lowerY} ${cx - w} ${cy}
       Z
     `;
 
-    // Upper eyelid - covers eye based on openness
-    const upperLidY = cy - h + (1 - openness) * h * 1.5;
+    const upperCurve = Math.min(2, apertureHeight * 0.15);
     const upperLid = `
       M ${cx - w - 2} ${cy - h - 4}
       L ${cx + w + 2} ${cy - h - 4}
-      L ${cx + w + 2} ${upperLidY}
-      Q ${cx} ${upperLidY + (openness > 0.5 ? 2 : -2)} ${cx - w - 2} ${upperLidY}
+      L ${cx + w + 2} ${cy}
+      Q ${cx} ${upperY - upperCurve} ${cx - w - 2} ${cy}
       Z
     `;
 
-    // Lower eyelid - rises with squint
-    const lowerLidY = cy + h - squint * h * 0.6;
+    const lowerCurve = Math.min(2, apertureHeight * 0.15);
     const lowerLid = `
       M ${cx - w - 2} ${cy + h + 4}
       L ${cx + w + 2} ${cy + h + 4}
-      L ${cx + w + 2} ${lowerLidY}
-      Q ${cx} ${lowerLidY - 2} ${cx - w - 2} ${lowerLidY}
+      L ${cx + w + 2} ${cy}
+      Q ${cx} ${lowerY + lowerCurve} ${cx - w - 2} ${cy}
       Z
     `;
 
-    return { sclera, upperLid, lowerLid };
+    return {
+      sclera,
+      clipPath: sclera,
+      upperLid,
+      lowerLid,
+      aperture: { upperY, lowerY, height: apertureHeight },
+    };
   }
 
   /**
    * Get iris and pupil positions
    */
-  public getIrisPosition(
-    isLeft: boolean,
-    eyeState: EyeState,
-  ): { cx: number; cy: number; irisR: number; pupilR: number } {
+  public getIrisPosition(isLeft: boolean, eyeState: EyeState): IrisPosition {
     const d = this.dimensions;
     const sign = isLeft ? 1 : -1;
     const baseCx = (sign * d.eyeSpacing) / 2;
     const baseCy = d.eyeY;
 
-    // Clamp pupil offset to stay within eye
-    const maxOffset = d.eyeWidth / 2 - d.irisRadius;
+    // Pupil dilation changes the pupil, not the iris. Keep the complete iris
+    // inside the horizontal eye bounds while the eye clip handles the lids.
+    const irisR = Math.min(d.irisRadius, d.eyeWidth * 0.45, d.eyeHeight * 0.5);
+    const pupilR = Math.max(
+      irisR * 0.15,
+      Math.min(irisR * 0.72, d.pupilRadius * eyeState.pupilSize),
+    );
+    const maxOffset = Math.max(0, d.eyeWidth / 2 - irisR - 1);
     const offsetX = Math.max(
       -maxOffset,
       Math.min(maxOffset, eyeState.pupilOffset.x),
@@ -526,8 +561,8 @@ export class RagdollGeometry {
     return {
       cx: baseCx + offsetX,
       cy: baseCy + offsetY,
-      irisR: d.irisRadius * eyeState.pupilSize,
-      pupilR: d.pupilRadius * eyeState.pupilSize,
+      irisR,
+      pupilR,
     };
   }
 
@@ -551,12 +586,27 @@ export class RagdollGeometry {
     const innerX = cx - sign * w * 0.3;
     const outerX = cx + sign * w;
 
-    // Curved eyebrow path
+    const rotate = (point: Point): Point => {
+      const angle = -eyebrowState.rotation;
+      const dx = point.x - cx;
+      const dy = point.y - baseY;
+      return {
+        x: cx + dx * Math.cos(angle) - dy * Math.sin(angle),
+        y: baseY + dx * Math.sin(angle) + dy * Math.cos(angle),
+      };
+    };
+    const innerTop = rotate({ x: innerX, y: innerY });
+    const arcTop = rotate({ x: cx, y: arcY - t });
+    const outerTop = rotate({ x: outerX, y: outerY });
+    const outerBottom = rotate({ x: outerX, y: outerY + t });
+    const arcBottom = rotate({ x: cx, y: arcY + t * 0.5 });
+    const innerBottom = rotate({ x: innerX, y: innerY + t * 1.2 });
+
     return `
-      M ${innerX} ${innerY}
-      Q ${cx} ${arcY - t} ${outerX} ${outerY}
-      L ${outerX} ${outerY + t}
-      Q ${cx} ${arcY + t * 0.5} ${innerX} ${innerY + t * 1.2}
+      M ${innerTop.x} ${innerTop.y}
+      Q ${arcTop.x} ${arcTop.y} ${outerTop.x} ${outerTop.y}
+      L ${outerBottom.x} ${outerBottom.y}
+      Q ${arcBottom.x} ${arcBottom.y} ${innerBottom.x} ${innerBottom.y}
       Z
     `;
   }
@@ -564,11 +614,7 @@ export class RagdollGeometry {
   /**
    * Generate SVG path for the mouth/lips
    */
-  public getMouthPath(mouthState: MouthState): {
-    upperLip: string;
-    lowerLip: string;
-    opening: string;
-  } {
+  public getMouthPath(mouthState: MouthState): MouthPaths {
     const d = this.dimensions;
     const cy = d.mouthY;
     const w = (d.mouthWidth / 2) * mouthState.width;
@@ -578,94 +624,74 @@ export class RagdollGeometry {
 
     // Upper lip with cupid's bow
     const upperTop = cy - d.lipThickness + mouthState.upperLipTop;
-    let upperBottom = cy + mouthState.upperLipBottom;
-    let lowerTop = cy + mouthState.lowerLipTop;
-    let lowerBottom = cy + mouthState.lowerLipBottom;
-
-    // Validate and clamp lip positions to prevent overlap/inversion
-    // Ensure minimum lip thickness of 2 pixels
-    const minLipThickness = 2;
-
-    // Upper lip: top must be above bottom
-    if (upperBottom < upperTop + minLipThickness) {
-      upperBottom = upperTop + minLipThickness;
+    const upperBottom = cy + mouthState.upperLipBottom;
+    const lowerTop = cy + mouthState.lowerLipTop;
+    const lowerBottom = cy + mouthState.lowerLipBottom;
+    const values = [
+      w,
+      upperTop,
+      upperBottom,
+      lowerTop,
+      lowerBottom,
+      mouthState.upperLipCurve,
+      mouthState.lowerLipCurve,
+      pull,
+    ];
+    if (values.some((value) => !Number.isFinite(value))) {
+      throw new Error("Mouth geometry contains a non-finite value");
     }
-
-    // Lower lip: bottom must be below top
-    if (lowerBottom < lowerTop + minLipThickness) {
-      lowerBottom = lowerTop + minLipThickness;
+    if (w <= 0 || upperBottom - upperTop < 2 || lowerBottom - lowerTop < 2) {
+      throw new Error("Mouth geometry has invalid lip dimensions");
     }
-
-    // Prevent lips from inverting: ensure gap between upper and lower lip edges
-    // If there's supposed to be a gap (mouth open), ensure minimum gap of 1px
-    // If lips should be touching or closed, allow them to be at same position
-    const minGap = 0.5;
-    if (lowerTop < upperBottom + minGap) {
-      // Push lips apart equally to maintain the intended mouth center
-      const overlap = upperBottom + minGap - lowerTop;
-      upperBottom -= overlap / 2;
-      lowerTop += overlap / 2;
+    if (lowerTop < upperBottom) {
+      throw new Error("Mouth geometry has intersecting inner lip edges");
     }
 
     const bowDepth = mouthState.upperLipCurve * 3;
-
-    // Calculate connection points with validation
-    // Upper lip inner edge (bottom of upper lip where it meets opening)
-    const upperInnerY = upperBottom + pull * 2;
-
-    // Lower lip inner edge (top of lower lip where it meets opening)
-    const lowerInnerY = lowerTop - pull * 2;
-
-    // Validate corner connection points to prevent broken paths
-    // Upper lip: corner should be between top of lip and bottom of lip
-    const upperCornerY = Math.max(
-      Math.min(cornerY, upperInnerY - 1), // Don't go below inner edge
-      upperTop // Don't go above top of lip
-    );
-
-    // Lower lip: corner should be between top of lip and bottom of lip
-    const lowerCornerY = Math.min(
-      Math.max(cornerY + d.lipThickness * 0.5, lowerInnerY + 1), // Don't go above inner edge
-      lowerBottom - 1 // Don't go below bottom of lip
+    const lowerCurveDepth = mouthState.lowerLipCurve * 4;
+    const openingHeight = lowerTop - upperBottom;
+    const innerCurveDepth = Math.min(1.5, openingHeight * 0.35);
+    const upperInnerControlY = upperBottom + innerCurveDepth;
+    const lowerInnerControlY = lowerTop - innerCurveDepth;
+    const commissureY = Math.max(
+      upperTop + 1,
+      Math.min(lowerBottom - 1, cornerY),
     );
 
     const upperLip = `
-      M ${-w} ${upperCornerY}
+      M ${-w} ${commissureY}
       Q ${-w * 0.5} ${upperTop - 2} ${-w * 0.15} ${upperTop}
       Q 0 ${upperTop + bowDepth} ${w * 0.15} ${upperTop}
-      Q ${w * 0.5} ${upperTop - 2} ${w} ${upperCornerY}
-      L ${w * 0.8} ${upperInnerY}
-      Q 0 ${upperBottom + 2} ${-w * 0.8} ${upperInnerY}
+      Q ${w * 0.5} ${upperTop - 2} ${w} ${commissureY}
+      L ${w * 0.82} ${commissureY}
+      Q ${w * 0.4} ${upperBottom} 0 ${upperInnerControlY}
+      Q ${-w * 0.4} ${upperBottom} ${-w * 0.82} ${commissureY}
       Z
     `;
 
-    // Lower lip - fuller curve (using validated values)
     const lowerLip = `
-      M ${-w * 0.8} ${lowerInnerY}
-      Q 0 ${lowerTop - 2} ${w * 0.8} ${lowerInnerY}
-      L ${w} ${lowerCornerY}
-      Q ${w * 0.5} ${lowerBottom + 2} 0 ${lowerBottom}
-      Q ${-w * 0.5} ${lowerBottom + 2} ${-w} ${lowerCornerY}
+      M ${-w * 0.82} ${commissureY}
+      Q ${-w * 0.4} ${lowerTop} 0 ${lowerInnerControlY}
+      Q ${w * 0.4} ${lowerTop} ${w * 0.82} ${commissureY}
+      L ${w} ${commissureY}
+      Q ${w * 0.5} ${lowerBottom + lowerCurveDepth} 0 ${lowerBottom}
+      Q ${-w * 0.5} ${lowerBottom + lowerCurveDepth} ${-w} ${commissureY}
       Z
     `;
 
-    // Mouth opening (dark inside) - use validated inner edge positions
-    const openingTop = upperBottom;
-    const openingBottom = lowerTop;
-    const hasOpening = openingBottom > openingTop + 1;
-
-    const opening = hasOpening
-      ? `
-      M ${-w * 0.75} ${upperInnerY}
-      Q 0 ${openingTop + 1} ${w * 0.75} ${upperInnerY}
-      Q ${w * 0.6} ${(openingTop + openingBottom) / 2} ${w * 0.7} ${lowerInnerY}
-      Q 0 ${openingBottom - 1} ${-w * 0.7} ${lowerInnerY}
-      Q ${-w * 0.6} ${(openingTop + openingBottom) / 2} ${-w * 0.75} ${upperInnerY}
+    const opening =
+      openingHeight > 1
+        ? `
+      M ${-w * 0.82} ${commissureY}
+      Q ${-w * 0.4} ${upperBottom} 0 ${upperInnerControlY}
+      Q ${w * 0.4} ${upperBottom} ${w * 0.82} ${commissureY}
+      Q ${w * 0.4} ${lowerTop} 0 ${lowerInnerControlY}
+      Q ${-w * 0.4} ${lowerTop} ${-w * 0.82} ${commissureY}
       Z
     `
-      : "";
+        : "";
 
-    return { upperLip, lowerLip, opening };
+    return { upperLip, lowerLip, opening, openingHeight, commissureY };
   }
 
   /**

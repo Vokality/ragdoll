@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { CharacterController } from "../controllers/character-controller";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
 import type { RagdollTheme } from "../themes/types";
@@ -15,9 +15,10 @@ interface RagdollCharacterProps {
  * Render SVG gradients from theme
  * Note: We include theme.id in gradient IDs to force re-render when theme changes
  */
-function renderGradients(theme: RagdollTheme): React.JSX.Element {
-  const prefix = theme.id;
-
+function renderGradients(
+  theme: RagdollTheme,
+  prefix: string,
+): React.JSX.Element {
   const renderGradient = (
     id: string,
     gradient: GradientDef,
@@ -162,9 +163,7 @@ interface RenderData {
   headRollDeg: number;
 }
 
-function computeRenderData(
-  controller: CharacterController,
-): RenderData {
+function computeRenderData(controller: CharacterController): RenderData {
   const geometry = controller.getGeometry();
   const dims = geometry.dimensions;
   const state = controller.getState();
@@ -184,9 +183,9 @@ function computeRenderData(
   const yawWithIdle = headPose.yaw + (idleState.headMicroX * Math.PI) / 180;
   const pitchWithIdle = headPose.pitch + (idleState.headMicroY * Math.PI) / 180;
   const ht = calculateHeadTransforms(yawWithIdle, pitchWithIdle);
-  const breathingOffsetY = -idleState.breathAmount * dims.headHeight * 0.8;
-  const breathingScale = 1 + idleState.breathAmount * 2.5;
-  const headRollDeg = ht.yaw * 4 + ht.pitch * -3;
+  const breathingOffsetY = -idleState.breathAmount * dims.headHeight * 0.25;
+  const breathingScale = 1 + idleState.breathAmount * 0.4;
+  const headRollDeg = idleState.headMicroX * 0.35;
 
   return {
     dims,
@@ -219,7 +218,10 @@ export function RagdollCharacter({
   destroyOnUnmount = true,
 }: RagdollCharacterProps) {
   // Create controller once and store in state (not ref) so it's safe to read during render
-  const [controller] = useState(() => new CharacterController(theme?.id, variant));
+  const [controller] = useState(
+    () => new CharacterController(theme?.id, variant),
+  );
+  const instanceId = useId().replace(/:/g, "");
   const lastTimeRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -305,7 +307,11 @@ export function RagdollCharacter({
   } = renderData;
 
   // Helper to generate gradient URL with theme prefix
-  const g = (name: string) => `url(#${currentTheme.id}-${name})`;
+  const gradientPrefix = `${instanceId}-${currentTheme.id}`;
+  const leftEyeClipId = `${instanceId}-left-eye-clip`;
+  const rightEyeClipId = `${instanceId}-right-eye-clip`;
+  const mouthClipId = `${instanceId}-mouth-clip`;
+  const g = (name: string) => `url(#${gradientPrefix}-${name})`;
   const rootTransform = `translate(0 ${breathingOffsetY}) scale(${breathingScale}) rotate(${headRollDeg})`;
 
   return (
@@ -320,7 +326,20 @@ export function RagdollCharacter({
         maxHeight: "380px",
       }}
     >
-      {renderGradients(currentTheme)}
+      {renderGradients(currentTheme, gradientPrefix)}
+      <defs>
+        <clipPath id={leftEyeClipId}>
+          <path d={leftEyePaths.clipPath} />
+        </clipPath>
+        <clipPath id={rightEyeClipId}>
+          <path d={rightEyePaths.clipPath} />
+        </clipPath>
+        {mouthPaths.opening && (
+          <clipPath id={mouthClipId}>
+            <path d={mouthPaths.opening} />
+          </clipPath>
+        )}
+      </defs>
 
       <g transform={rootTransform}>
         {/* Left Ear (behind face) - visibility changes with yaw */}
@@ -389,40 +408,38 @@ export function RagdollCharacter({
 
         {/* Left eye - shifts based on head rotation */}
         <g transform={`translate(${ht.leftEyeShiftX}, ${ht.eyeShiftY})`}>
-          {/* Sclera (white) */}
-          <path d={leftEyePaths.sclera} fill={currentTheme.colors.eyes.white} />
-
-          {/* Iris */}
-          <circle
-            cx={leftIris.cx}
-            cy={leftIris.cy}
-            r={leftIris.irisR}
-            fill={g("irisGradient")}
-          />
-
-          {/* Pupil */}
-          <circle
-            cx={leftIris.cx}
-            cy={leftIris.cy}
-            r={leftIris.pupilR}
-            fill={currentTheme.colors.eyes.pupil}
-          />
-
-          {/* Eye highlight */}
-          <circle
-            cx={leftIris.cx - 2}
-            cy={leftIris.cy - 2}
-            r={leftIris.pupilR * 0.6}
-            fill={currentTheme.colors.highlight}
-            opacity={0.8}
-          />
-          <circle
-            cx={leftIris.cx + 3}
-            cy={leftIris.cy + 1}
-            r={leftIris.pupilR * 0.3}
-            fill={currentTheme.colors.highlight}
-            opacity={0.4}
-          />
+          <g clipPath={`url(#${leftEyeClipId})`}>
+            <path
+              d={leftEyePaths.sclera}
+              fill={currentTheme.colors.eyes.white}
+            />
+            <circle
+              cx={leftIris.cx}
+              cy={leftIris.cy}
+              r={leftIris.irisR}
+              fill={g("irisGradient")}
+            />
+            <circle
+              cx={leftIris.cx}
+              cy={leftIris.cy}
+              r={leftIris.pupilR}
+              fill={currentTheme.colors.eyes.pupil}
+            />
+            <circle
+              cx={leftIris.cx - 2}
+              cy={leftIris.cy - 2}
+              r={leftIris.pupilR * 0.6}
+              fill={currentTheme.colors.highlight}
+              opacity={0.8}
+            />
+            <circle
+              cx={leftIris.cx + 3}
+              cy={leftIris.cy + 1}
+              r={leftIris.pupilR * 0.3}
+              fill={currentTheme.colors.highlight}
+              opacity={0.4}
+            />
+          </g>
 
           {/* Upper eyelid */}
           <path d={leftEyePaths.upperLid} fill={g("lidGradient")} />
@@ -443,43 +460,38 @@ export function RagdollCharacter({
 
         {/* Right eye */}
         <g transform={`translate(${ht.rightEyeShiftX}, ${ht.eyeShiftY})`}>
-          {/* Sclera */}
-          <path
-            d={rightEyePaths.sclera}
-            fill={currentTheme.colors.eyes.white}
-          />
-
-          {/* Iris */}
-          <circle
-            cx={rightIris.cx}
-            cy={rightIris.cy}
-            r={rightIris.irisR}
-            fill={g("irisGradient")}
-          />
-
-          {/* Pupil */}
-          <circle
-            cx={rightIris.cx}
-            cy={rightIris.cy}
-            r={rightIris.pupilR}
-            fill={currentTheme.colors.eyes.pupil}
-          />
-
-          {/* Eye highlight */}
-          <circle
-            cx={rightIris.cx - 2}
-            cy={rightIris.cy - 2}
-            r={rightIris.pupilR * 0.6}
-            fill={currentTheme.colors.highlight}
-            opacity={0.8}
-          />
-          <circle
-            cx={rightIris.cx + 3}
-            cy={rightIris.cy + 1}
-            r={rightIris.pupilR * 0.3}
-            fill={currentTheme.colors.highlight}
-            opacity={0.4}
-          />
+          <g clipPath={`url(#${rightEyeClipId})`}>
+            <path
+              d={rightEyePaths.sclera}
+              fill={currentTheme.colors.eyes.white}
+            />
+            <circle
+              cx={rightIris.cx}
+              cy={rightIris.cy}
+              r={rightIris.irisR}
+              fill={g("irisGradient")}
+            />
+            <circle
+              cx={rightIris.cx}
+              cy={rightIris.cy}
+              r={rightIris.pupilR}
+              fill={currentTheme.colors.eyes.pupil}
+            />
+            <circle
+              cx={rightIris.cx - 2}
+              cy={rightIris.cy - 2}
+              r={rightIris.pupilR * 0.6}
+              fill={currentTheme.colors.highlight}
+              opacity={0.8}
+            />
+            <circle
+              cx={rightIris.cx + 3}
+              cy={rightIris.cy + 1}
+              r={rightIris.pupilR * 0.3}
+              fill={currentTheme.colors.highlight}
+              opacity={0.4}
+            />
+          </g>
 
           {/* Upper eyelid */}
           <path d={rightEyePaths.upperLid} fill={g("lidGradient")} />
@@ -536,8 +548,7 @@ export function RagdollCharacter({
 
           {/* Teeth hint when mouth is open */}
           {(() => {
-            const openingHeight =
-              expression.mouth.lowerLipTop - expression.mouth.upperLipBottom;
+            const openingHeight = mouthPaths.openingHeight;
             const minOpeningForTeeth = 6;
 
             // Only show teeth if there's a significant opening
@@ -565,6 +576,7 @@ export function RagdollCharacter({
                 height={teethHeight}
                 fill={currentTheme.colors.teeth}
                 rx={2}
+                clipPath={`url(#${mouthClipId})`}
               />
             );
           })()}
@@ -586,9 +598,7 @@ export function RagdollCharacter({
           />
 
           {/* Mustache (if variant has one) */}
-          {mustachePath && (
-            <path d={mustachePath} fill={g("hairGradient")} />
-          )}
+          {mustachePath && <path d={mustachePath} fill={g("hairGradient")} />}
         </g>
 
         {/* Hair (on top) - slight shift */}
@@ -619,11 +629,12 @@ function applyIdleToExpression(
   pupilOffsetX: number,
   pupilOffsetY: number,
 ): ExpressionConfig {
+  const blink = Math.max(0, Math.min(1, blinkAmount));
   return {
     ...expr,
     leftEye: {
       ...expr.leftEye,
-      openness: expr.leftEye.openness * (1 - blinkAmount * 0.95),
+      openness: expr.leftEye.openness * (1 - blink),
       pupilOffset: {
         x: expr.leftEye.pupilOffset.x + pupilOffsetX,
         y: expr.leftEye.pupilOffset.y + pupilOffsetY,
@@ -631,7 +642,7 @@ function applyIdleToExpression(
     },
     rightEye: {
       ...expr.rightEye,
-      openness: expr.rightEye.openness * (1 - blinkAmount * 0.95),
+      openness: expr.rightEye.openness * (1 - blink),
       pupilOffset: {
         x: expr.rightEye.pupilOffset.x + pupilOffsetX,
         y: expr.rightEye.pupilOffset.y + pupilOffsetY,

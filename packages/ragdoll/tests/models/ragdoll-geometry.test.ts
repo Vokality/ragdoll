@@ -1,6 +1,98 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { RagdollGeometry } from "../../src/models/ragdoll-geometry";
-import { getDefaultVariant } from "../../src/variants";
+import {
+  RagdollGeometry,
+  type ExpressionConfig,
+} from "../../src/models/ragdoll-geometry";
+import type { FacialMood } from "../../src/types";
+import {
+  einsteinVariant,
+  getDefaultVariant,
+  humanVariant,
+} from "../../src/variants";
+
+const MOODS: readonly FacialMood[] = [
+  "neutral",
+  "smile",
+  "frown",
+  "laugh",
+  "angry",
+  "sad",
+  "surprise",
+  "confusion",
+  "thinking",
+];
+
+const SYMMETRIC_MOODS: readonly FacialMood[] = [
+  "neutral",
+  "smile",
+  "frown",
+  "laugh",
+  "angry",
+  "sad",
+  "surprise",
+];
+
+const BUILT_IN_VARIANTS = [humanVariant, einsteinVariant] as const;
+const TRANSITION_SAMPLES = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1] as const;
+
+function expectFinitePath(path: string): void {
+  expect(path.length).toBeGreaterThan(0);
+  expect(path).not.toMatch(/NaN|Infinity/);
+}
+
+function expectFiniteExpressionGeometry(
+  geometry: RagdollGeometry,
+  expression: ExpressionConfig,
+): void {
+  const leftEye = geometry.getEyePath(true, expression.leftEye);
+  const rightEye = geometry.getEyePath(false, expression.rightEye);
+  const leftIris = geometry.getIrisPosition(true, expression.leftEye);
+  const rightIris = geometry.getIrisPosition(false, expression.rightEye);
+  const mouth = geometry.getMouthPath(expression.mouth);
+
+  for (const path of [
+    leftEye.sclera,
+    leftEye.clipPath,
+    leftEye.upperLid,
+    leftEye.lowerLid,
+    rightEye.sclera,
+    rightEye.clipPath,
+    rightEye.upperLid,
+    rightEye.lowerLid,
+    geometry.getEyebrowPath(true, expression.leftEyebrow),
+    geometry.getEyebrowPath(false, expression.rightEyebrow),
+    mouth.upperLip,
+    mouth.lowerLip,
+  ]) {
+    expectFinitePath(path);
+  }
+
+  if (mouth.openingHeight > 1) {
+    expectFinitePath(mouth.opening);
+  } else {
+    expect(mouth.opening).toBe("");
+  }
+
+  expect(leftEye.aperture.height).toBeGreaterThanOrEqual(0);
+  expect(rightEye.aperture.height).toBeGreaterThanOrEqual(0);
+  expect(mouth.openingHeight).toBeGreaterThanOrEqual(0);
+
+  for (const value of [
+    leftIris.cx,
+    leftIris.cy,
+    leftIris.irisR,
+    leftIris.pupilR,
+    rightIris.cx,
+    rightIris.cy,
+    rightIris.irisR,
+    rightIris.pupilR,
+  ]) {
+    expect(Number.isFinite(value)).toBe(true);
+  }
+
+  expect(leftIris.pupilR).toBeLessThan(leftIris.irisR);
+  expect(rightIris.pupilR).toBeLessThan(rightIris.irisR);
+}
 
 describe("RagdollGeometry", () => {
   let geometry: RagdollGeometry;
@@ -70,44 +162,82 @@ describe("RagdollGeometry", () => {
     it("should interpolate between two expressions", () => {
       const neutral = geometry.getExpressionForMood("neutral");
       const smile = geometry.getExpressionForMood("smile");
-      const interpolated = RagdollGeometry.interpolateExpression(neutral, smile, 0.5);
-      
-      expect(interpolated.mouth.cornerPull).toBeGreaterThan(neutral.mouth.cornerPull);
-      expect(interpolated.mouth.cornerPull).toBeLessThan(smile.mouth.cornerPull);
+      const interpolated = RagdollGeometry.interpolateExpression(
+        neutral,
+        smile,
+        0.5,
+      );
+
+      expect(interpolated.mouth.cornerPull).toBeGreaterThan(
+        neutral.mouth.cornerPull,
+      );
+      expect(interpolated.mouth.cornerPull).toBeLessThan(
+        smile.mouth.cornerPull,
+      );
     });
 
     it("should return first expression at t=0", () => {
       const neutral = geometry.getExpressionForMood("neutral");
       const smile = geometry.getExpressionForMood("smile");
-      const interpolated = RagdollGeometry.interpolateExpression(neutral, smile, 0);
-      
-      expect(interpolated.mouth.cornerPull).toBeCloseTo(neutral.mouth.cornerPull, 2);
+      const interpolated = RagdollGeometry.interpolateExpression(
+        neutral,
+        smile,
+        0,
+      );
+
+      expect(interpolated.mouth.cornerPull).toBeCloseTo(
+        neutral.mouth.cornerPull,
+        2,
+      );
     });
 
     it("should return second expression at t=1", () => {
       const neutral = geometry.getExpressionForMood("neutral");
       const smile = geometry.getExpressionForMood("smile");
-      const interpolated = RagdollGeometry.interpolateExpression(neutral, smile, 1);
-      
-      expect(interpolated.mouth.cornerPull).toBeCloseTo(smile.mouth.cornerPull, 2);
+      const interpolated = RagdollGeometry.interpolateExpression(
+        neutral,
+        smile,
+        1,
+      );
+
+      expect(interpolated.mouth.cornerPull).toBeCloseTo(
+        smile.mouth.cornerPull,
+        2,
+      );
     });
 
     it("should interpolate eye properties", () => {
       const neutral = geometry.getExpressionForMood("neutral");
       const smile = geometry.getExpressionForMood("smile");
-      const interpolated = RagdollGeometry.interpolateExpression(neutral, smile, 0.5);
-      
-      expect(interpolated.leftEye.openness).toBeGreaterThan(smile.leftEye.openness);
-      expect(interpolated.leftEye.openness).toBeLessThanOrEqual(neutral.leftEye.openness);
+      const interpolated = RagdollGeometry.interpolateExpression(
+        neutral,
+        smile,
+        0.5,
+      );
+
+      expect(interpolated.leftEye.openness).toBeGreaterThan(
+        smile.leftEye.openness,
+      );
+      expect(interpolated.leftEye.openness).toBeLessThanOrEqual(
+        neutral.leftEye.openness,
+      );
     });
 
     it("should interpolate eyebrow properties", () => {
       const neutral = geometry.getExpressionForMood("neutral");
       const sad = geometry.getExpressionForMood("sad");
-      const interpolated = RagdollGeometry.interpolateExpression(neutral, sad, 0.5);
-      
-      expect(interpolated.leftEyebrow.innerY).toBeGreaterThan(neutral.leftEyebrow.innerY);
-      expect(interpolated.leftEyebrow.innerY).toBeLessThan(sad.leftEyebrow.innerY);
+      const interpolated = RagdollGeometry.interpolateExpression(
+        neutral,
+        sad,
+        0.5,
+      );
+
+      expect(interpolated.leftEyebrow.innerY).toBeGreaterThan(
+        neutral.leftEyebrow.innerY,
+      );
+      expect(interpolated.leftEyebrow.innerY).toBeLessThan(
+        sad.leftEyebrow.innerY,
+      );
     });
   });
 
@@ -159,7 +289,9 @@ describe("RagdollGeometry", () => {
     it("should set expression", () => {
       const smile = geometry.getExpressionForMood("smile");
       geometry.setExpression(smile);
-      expect(geometry.currentExpression.mouth.cornerPull).toBe(smile.mouth.cornerPull);
+      expect(geometry.currentExpression.mouth.cornerPull).toBe(
+        smile.mouth.cornerPull,
+      );
     });
 
     it("should update current expression", () => {
@@ -167,7 +299,9 @@ describe("RagdollGeometry", () => {
       geometry.setExpression(neutral);
       const smile = geometry.getExpressionForMood("smile");
       geometry.setExpression(smile);
-      expect(geometry.currentExpression.mouth.cornerPull).toBe(smile.mouth.cornerPull);
+      expect(geometry.currentExpression.mouth.cornerPull).toBe(
+        smile.mouth.cornerPull,
+      );
     });
 
     it("should maintain eye state", () => {
@@ -225,5 +359,122 @@ describe("RagdollGeometry", () => {
       expect(customGeometry.dimensions).toBeDefined();
     });
   });
-});
 
+  describe("built-in facial proportion invariants", () => {
+    for (const variant of BUILT_IN_VARIANTS) {
+      it(`${variant.id} keeps facial features in natural anatomical order and bounds`, () => {
+        const variantGeometry = new RagdollGeometry(variant);
+        const d = variantGeometry.dimensions;
+        const faceBottom = d.headHeight * 0.25 + d.chinHeight;
+
+        expect(d.jawWidth).toBeLessThanOrEqual(d.headWidth);
+        expect(d.eyeSpacing + d.eyeWidth).toBeLessThan(d.headWidth);
+        expect(d.irisRadius).toBeLessThanOrEqual(d.eyeHeight / 2 + 1);
+        expect(d.pupilRadius).toBeLessThan(d.irisRadius);
+        expect(d.eyeY).toBeLessThan(d.noseY);
+        expect(d.noseY).toBeLessThan(d.mouthY);
+        expect(d.eyebrowY).toBeGreaterThan(d.eyeHeight / 2);
+        expect(d.mouthY).toBeLessThan(faceBottom);
+      });
+    }
+  });
+
+  describe("expression geometry invariants", () => {
+    for (const variant of BUILT_IN_VARIANTS) {
+      for (const mood of MOODS) {
+        it(`${variant.id} ${mood} produces finite, non-intersecting face geometry`, () => {
+          const variantGeometry = new RagdollGeometry(variant);
+          const expression = variantGeometry.getExpressionForMood(mood);
+          const d = variantGeometry.dimensions;
+          const faceBottom = d.headHeight * 0.25 + d.chinHeight;
+          const mouthBottom =
+            d.mouthY +
+            expression.mouth.lowerLipBottom +
+            Math.max(0, expression.mouth.lowerLipCurve * 4);
+
+          expectFiniteExpressionGeometry(variantGeometry, expression);
+          expect(mouthBottom).toBeLessThan(faceBottom);
+        });
+      }
+    }
+
+    it("fully closes the visible eye aperture", () => {
+      const expression = geometry.getExpressionForMood("neutral");
+      const closedEye = geometry.getEyePath(true, {
+        ...expression.leftEye,
+        openness: 0,
+      });
+
+      expect(closedEye.aperture.height).toBe(0);
+      expect(closedEye.aperture.upperY).toBe(closedEye.aperture.lowerY);
+    });
+
+    it("changes pupil dilation without changing iris size", () => {
+      const expression = geometry.getExpressionForMood("neutral");
+      const normal = geometry.getIrisPosition(true, expression.leftEye);
+      const dilated = geometry.getIrisPosition(true, {
+        ...expression.leftEye,
+        pupilSize: 1.5,
+      });
+
+      expect(dilated.irisR).toBe(normal.irisR);
+      expect(dilated.pupilR).toBeGreaterThan(normal.pupilR);
+      expect(dilated.pupilR).toBeLessThan(dilated.irisR);
+    });
+
+    it("applies eyebrow rotation to the generated path", () => {
+      const expression = geometry.getExpressionForMood("neutral");
+      const unrotated = geometry.getEyebrowPath(true, expression.leftEyebrow);
+      const rotated = geometry.getEyebrowPath(true, {
+        ...expression.leftEyebrow,
+        rotation: 0.2,
+      });
+
+      expect(rotated).not.toBe(unrotated);
+      expectFinitePath(rotated);
+    });
+
+    for (const mood of SYMMETRIC_MOODS) {
+      it(`${mood} preserves bilateral expression symmetry`, () => {
+        const expression = geometry.getExpressionForMood(mood);
+
+        expect(expression.leftEye).toEqual(expression.rightEye);
+        expect(expression.leftEyebrow.innerY).toBe(
+          expression.rightEyebrow.innerY,
+        );
+        expect(expression.leftEyebrow.arcY).toBe(expression.rightEyebrow.arcY);
+        expect(expression.leftEyebrow.outerY).toBe(
+          expression.rightEyebrow.outerY,
+        );
+        expect(expression.leftEyebrow.rotation).toBeCloseTo(
+          -expression.rightEyebrow.rotation,
+          10,
+        );
+      });
+    }
+  });
+
+  describe("transition geometry invariants", () => {
+    for (const variant of BUILT_IN_VARIANTS) {
+      it(`${variant.id} keeps every mood-to-mood transition valid`, () => {
+        const variantGeometry = new RagdollGeometry(variant);
+
+        for (const fromMood of MOODS) {
+          for (const toMood of MOODS) {
+            const from = variantGeometry.getExpressionForMood(fromMood);
+            const to = variantGeometry.getExpressionForMood(toMood);
+
+            for (const progress of TRANSITION_SAMPLES) {
+              const expression = RagdollGeometry.interpolateExpression(
+                from,
+                to,
+                progress,
+              );
+              expectFiniteExpressionGeometry(variantGeometry, expression);
+            }
+          }
+        }
+      });
+    }
+  });
+});

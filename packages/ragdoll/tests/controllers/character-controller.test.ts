@@ -68,6 +68,16 @@ describe("CharacterController", () => {
       const state = controller.getState();
       expect(state.action).toBe("wink");
     });
+
+    it("should advance an action exactly once per frame", () => {
+      controller.triggerAction("wink", 1);
+      controller.update(0.25);
+
+      expect(controller.getState().animation.actionProgress).toBeCloseTo(
+        0.25,
+        5,
+      );
+    });
   });
 
   describe("head pose coordination", () => {

@@ -1,6 +1,8 @@
-import type { FacialAction, HeadPose } from "../types";
+import type { FacialAction } from "../types";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
 import type { IHeadPoseController } from "./interfaces";
+
+type ExpressionAction = Extract<FacialAction, "wink" | "talk">;
 
 interface ActionState {
   name: Exclude<FacialAction, "none">;
@@ -8,9 +10,10 @@ interface ActionState {
   duration: number;
 }
 
-export interface ActionOverlay {
-  expression?: Partial<ExpressionConfig>;
-  headPose?: Partial<HeadPose>;
+interface ReleasingActionState extends ActionState {
+  name: ExpressionAction;
+  releaseElapsed: number;
+  releaseDuration: number;
 }
 
 /**
@@ -18,7 +21,8 @@ export interface ActionOverlay {
  */
 export class ActionController {
   private actionState: ActionState | null = null;
-  private headPoseController: IHeadPoseController;
+  private releasingActions: ReleasingActionState[] = [];
+  private readonly headPoseController: IHeadPoseController;
 
   constructor(headPoseController: IHeadPoseController) {
     this.headPoseController = headPoseController;
@@ -31,11 +35,15 @@ export class ActionController {
     action: Exclude<FacialAction, "none">,
     duration?: number,
   ): void {
-    const resolvedDuration = duration ?? (action === "shake" ? 0.6 : 0.6);
+    this.releaseActiveExpressionAction();
+    if (this.actionState?.name === "shake" && action !== "shake") {
+      this.headPoseController.lookForward(0.2);
+    }
+
     this.actionState = {
       name: action,
       elapsed: 0,
-      duration: Math.max(0.2, resolvedDuration),
+      duration: Math.max(0.2, duration ?? 0.6),
     };
   }
 
@@ -43,17 +51,28 @@ export class ActionController {
    * Clear the active action
    */
   public clearAction(): void {
-    this.actionState = null;
-    // Return head to center when clearing shake
-    if (this.headPoseController) {
+    if (!this.actionState) {
+      return;
+    }
+
+    this.releaseActiveExpressionAction();
+    if (this.actionState.name === "shake") {
       this.headPoseController.lookForward(0.2);
     }
+    this.actionState = null;
   }
 
   /**
    * Update action state
    */
   public update(deltaTime: number): void {
+    this.releasingActions = this.releasingActions
+      .map((state) => ({
+        ...state,
+        releaseElapsed: state.releaseElapsed + deltaTime,
+      }))
+      .filter((state) => state.releaseElapsed < state.releaseDuration);
+
     if (!this.actionState) {
       return;
     }
@@ -61,25 +80,25 @@ export class ActionController {
     this.actionState.elapsed += deltaTime;
 
     // Handle shake animation (affects head pose)
-    if (this.actionState.name === "shake" && this.headPoseController) {
+    if (this.actionState.name === "shake") {
       if (this.actionState.elapsed >= this.actionState.duration) {
         // Shake complete, return to center
         this.actionState = null;
         this.headPoseController.lookForward(0.2);
       } else {
-        // Oscillate head left-right during shake
+        // Oscillate with a zero-amplitude envelope at both ends so the head
+        // never snaps into or out of a shake.
         const progress = this.actionState.elapsed / this.actionState.duration;
         const frequency = 3; // Number of shakes per duration
         const amplitude = 0.4; // How far to shake (40% of max yaw)
         const MAX_YAW_RAD = (35 * Math.PI) / 180;
+        const envelope = Math.sin(Math.PI * progress);
         const yaw =
           Math.sin(progress * frequency * Math.PI * 2) *
           amplitude *
-          MAX_YAW_RAD;
-        // Apply easing to slow down at the end
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        const finalYaw = yaw * easeOut;
-        this.headPoseController.setTargetPose({ yaw: finalYaw }, 0.15);
+          MAX_YAW_RAD *
+          envelope;
+        this.headPoseController.setTargetPose({ yaw }, 0.15);
       }
     } else if (this.actionState.elapsed >= this.actionState.duration) {
       // Other actions complete naturally
@@ -124,56 +143,122 @@ export class ActionController {
   public getExpressionOverlay(
     currentExpression: ExpressionConfig,
   ): Partial<ExpressionConfig> {
-    if (!this.actionState) {
+    const expressionStates: Array<{
+      state: ActionState & { name: ExpressionAction };
+      weight: number;
+    }> = this.releasingActions.map((state) => ({
+      state,
+      weight: 1 - this.smoothstep(state.releaseElapsed / state.releaseDuration),
+    }));
+
+    const activeAction = this.actionState;
+    if (activeAction && this.isExpressionAction(activeAction.name)) {
+      expressionStates.push({
+        state: { ...activeAction, name: activeAction.name },
+        weight: 1,
+      });
+    }
+
+    if (expressionStates.length === 0) {
       return {};
     }
 
-    const action = this.actionState.name;
-    const elapsed = this.actionState.elapsed;
+    let winkAmount = 0;
+    let hasWink = false;
+    let talkShape: {
+      openAmount: number;
+      widthDelta: number;
+    } | null = null;
 
-    if (action === "wink") {
-      // Wink affects only the right eye (character's left from viewer)
-      const progress = Math.min(1, elapsed / 0.4);
-      // Quick close, slower open
-      const winkCurve =
-        progress < 0.3
-          ? Math.sin(((progress / 0.3) * Math.PI) / 2)
-          : Math.cos((((progress - 0.3) / 0.7) * Math.PI) / 2);
+    for (const { state, weight } of expressionStates) {
+      const progress = Math.min(1, state.elapsed / state.duration);
 
-      return {
-        rightEye: {
-          ...currentExpression.rightEye,
-          openness: 1 - winkCurve * 0.95,
-        },
-        // Slight cheek raise on winking side
-        cheekPuff: winkCurve * 0.2,
-      };
-    }
+      if (state.name === "wink") {
+        hasWink = true;
+        const curve =
+          progress < 0.3
+            ? this.easeOutCubic(progress / 0.3)
+            : 1 - this.easeInOutCubic((progress - 0.3) / 0.7);
+        winkAmount = Math.max(winkAmount, curve * weight);
+        continue;
+      }
 
-    if (action === "talk") {
-      // Organic talking animation with varied mouth shapes
       const baseFreq = 6;
-      const variation = Math.sin(elapsed * 1.7) * 0.3;
-      const cycle = Math.sin(elapsed * baseFreq + variation);
-      const cycle2 = Math.sin(elapsed * baseFreq * 1.3);
+      const variation = Math.sin(state.elapsed * 1.7) * 0.3;
+      const cycle = Math.sin(state.elapsed * baseFreq + variation);
+      const cycle2 = Math.sin(state.elapsed * baseFreq * 1.3);
+      const envelope = Math.min(
+        1,
+        this.smoothstep(progress / 0.12),
+        this.smoothstep((1 - progress) / 0.15),
+      );
+      const openAmount =
+        (Math.abs(cycle) * 0.7 + Math.abs(cycle2) * 0.3) * envelope * weight;
+      const widthDelta = Math.sin(state.elapsed * 4) * 0.08 * envelope * weight;
 
-      const openAmount = Math.abs(cycle) * 0.7 + Math.abs(cycle2) * 0.3;
+      if (!talkShape || openAmount > talkShape.openAmount) {
+        talkShape = { openAmount, widthDelta };
+      }
+    }
 
-      return {
-        mouth: {
-          ...currentExpression.mouth,
-          upperLipBottom:
-            currentExpression.mouth.upperLipBottom + openAmount * 4,
-          lowerLipTop: currentExpression.mouth.lowerLipTop + openAmount * 10,
-          lowerLipBottom:
-            currentExpression.mouth.lowerLipBottom + openAmount * 6,
-          width:
-            currentExpression.mouth.width * (1 + Math.sin(elapsed * 4) * 0.08),
-        },
+    const overlay: Partial<ExpressionConfig> = {};
+    if (hasWink) {
+      overlay.rightEye = {
+        ...currentExpression.rightEye,
+        openness: currentExpression.rightEye.openness * (1 - winkAmount),
+      };
+      overlay.cheekPuff = Math.min(
+        1,
+        currentExpression.cheekPuff + winkAmount * 0.2,
+      );
+    }
+
+    if (talkShape) {
+      overlay.mouth = {
+        ...currentExpression.mouth,
+        upperLipBottom:
+          currentExpression.mouth.upperLipBottom + talkShape.openAmount * 1.5,
+        lowerLipTop:
+          currentExpression.mouth.lowerLipTop + talkShape.openAmount * 6,
+        lowerLipBottom:
+          currentExpression.mouth.lowerLipBottom + talkShape.openAmount * 6,
+        width: currentExpression.mouth.width * (1 + talkShape.widthDelta),
       };
     }
 
-    // Shake doesn't affect expression
-    return {};
+    return overlay;
+  }
+
+  private releaseActiveExpressionAction(): void {
+    if (!this.actionState || !this.isExpressionAction(this.actionState.name)) {
+      return;
+    }
+
+    this.releasingActions.push({
+      ...this.actionState,
+      name: this.actionState.name,
+      releaseElapsed: 0,
+      releaseDuration: 0.12,
+    });
+  }
+
+  private isExpressionAction(action: FacialAction): action is ExpressionAction {
+    return action === "wink" || action === "talk";
+  }
+
+  private easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+  }
+
+  private easeInOutCubic(t: number): number {
+    const clamped = Math.max(0, Math.min(1, t));
+    return clamped < 0.5
+      ? 4 * clamped * clamped * clamped
+      : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
+  }
+
+  private smoothstep(t: number): number {
+    const clamped = Math.max(0, Math.min(1, t));
+    return clamped * clamped * (3 - 2 * clamped);
   }
 }

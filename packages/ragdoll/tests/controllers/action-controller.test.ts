@@ -1,6 +1,25 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { ActionController } from "../../src/controllers/action-controller";
+import { RagdollGeometry } from "../../src/models/ragdoll-geometry";
 import { MockHeadPoseController } from "../../src/testing/mocks";
+import type { FacialMood } from "../../src/types";
+import {
+  einsteinVariant,
+  getDefaultVariant,
+  humanVariant,
+} from "../../src/variants";
+
+const MOODS: readonly FacialMood[] = [
+  "neutral",
+  "smile",
+  "frown",
+  "laugh",
+  "angry",
+  "sad",
+  "surprise",
+  "confusion",
+  "thinking",
+];
 
 describe("ActionController", () => {
   let mockHeadPose: MockHeadPoseController;
@@ -68,7 +87,9 @@ describe("ActionController", () => {
       const initialCalls = mockHeadPose.setTargetPoseCalls.length;
       controller.update(0.1);
       controller.update(0.1);
-      expect(mockHeadPose.setTargetPoseCalls.length).toBeGreaterThan(initialCalls);
+      expect(mockHeadPose.setTargetPoseCalls.length).toBeGreaterThan(
+        initialCalls,
+      );
     });
 
     it("should apply easing to shake animation", () => {
@@ -77,6 +98,25 @@ describe("ActionController", () => {
       const call = mockHeadPose.setTargetPoseCalls[0];
       expect(call).toBeDefined();
       expect(call.pose.yaw).toBeDefined();
+    });
+
+    it("should ease the shake amplitude in and out", () => {
+      controller.triggerAction("shake", 1);
+      controller.update(0.01);
+      const startYaw = Math.abs(
+        mockHeadPose.setTargetPoseCalls.at(-1)?.pose.yaw ?? 0,
+      );
+      controller.update(0.24);
+      const middleYaw = Math.abs(
+        mockHeadPose.setTargetPoseCalls.at(-1)?.pose.yaw ?? 0,
+      );
+      controller.update(0.74);
+      const endYaw = Math.abs(
+        mockHeadPose.setTargetPoseCalls.at(-1)?.pose.yaw ?? 0,
+      );
+
+      expect(middleYaw).toBeGreaterThan(startYaw);
+      expect(middleYaw).toBeGreaterThan(endYaw);
     });
   });
 
@@ -95,6 +135,42 @@ describe("ActionController", () => {
       controller.triggerAction("talk", 0.5);
       expect(controller.getActionElapsed()).toBe(0);
     });
+
+    it("should release an interrupted expression without a visual jump", () => {
+      const expression = new RagdollGeometry(
+        getDefaultVariant(),
+      ).getExpressionForMood("neutral");
+      controller.triggerAction("wink", 0.5);
+      controller.update(0.15);
+      const beforeReplacement =
+        controller.getExpressionOverlay(expression).rightEye?.openness;
+
+      controller.triggerAction("talk", 0.5);
+      const afterReplacement =
+        controller.getExpressionOverlay(expression).rightEye?.openness;
+
+      expect(beforeReplacement).toBeDefined();
+      expect(afterReplacement).toBe(beforeReplacement);
+
+      controller.update(0.06);
+      const releasingOpenness =
+        controller.getExpressionOverlay(expression).rightEye?.openness;
+      expect(releasingOpenness).toBeGreaterThan(beforeReplacement ?? 0);
+      expect(releasingOpenness).toBeLessThan(expression.rightEye.openness);
+
+      controller.update(0.06);
+      expect(
+        controller.getExpressionOverlay(expression).rightEye,
+      ).toBeUndefined();
+    });
+
+    it("should smoothly return an interrupted shake to center", () => {
+      controller.triggerAction("shake", 0.6);
+      controller.update(0.1);
+      controller.triggerAction("talk", 0.6);
+
+      expect(mockHeadPose.lookForwardCalls.length).toBe(1);
+    });
   });
 
   describe("action cancellation", () => {
@@ -108,6 +184,39 @@ describe("ActionController", () => {
       controller.triggerAction("shake", 0.6);
       controller.clearAction();
       expect(mockHeadPose.lookForwardCalls.length).toBe(1);
+    });
+
+    it("should not change head pose when clearing a facial action", () => {
+      controller.triggerAction("wink", 0.6);
+      controller.clearAction();
+
+      expect(mockHeadPose.lookForwardCalls.length).toBe(0);
+    });
+
+    it("should release a cancelled facial action without a visual jump", () => {
+      const expression = new RagdollGeometry(
+        getDefaultVariant(),
+      ).getExpressionForMood("neutral");
+      controller.triggerAction("talk", 1);
+      controller.update(0.2);
+      const beforeClear = controller.getExpressionOverlay(expression).mouth;
+
+      controller.clearAction();
+      const afterClear = controller.getExpressionOverlay(expression).mouth;
+
+      expect(afterClear).toEqual(beforeClear);
+
+      controller.update(0.06);
+      const releasingMouth = controller.getExpressionOverlay(expression).mouth;
+      expect(releasingMouth?.lowerLipTop).toBeLessThan(
+        beforeClear?.lowerLipTop ?? 0,
+      );
+      expect(releasingMouth?.lowerLipTop).toBeGreaterThan(
+        expression.mouth.lowerLipTop,
+      );
+
+      controller.update(0.06);
+      expect(controller.getExpressionOverlay(expression).mouth).toBeUndefined();
     });
   });
 
@@ -157,51 +266,130 @@ describe("ActionController", () => {
   });
 
   describe("expression overlay", () => {
+    const expression = new RagdollGeometry(
+      getDefaultVariant(),
+    ).getExpressionForMood("neutral");
+
     it("should return empty overlay when no action is active", () => {
-      const baseExpression = {
-        leftEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        rightEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        mouth: { upperLipBottom: 0, lowerLipTop: 0, lowerLipBottom: 0, width: 1 },
-        leftEyebrow: { raise: 0 },
-        rightEyebrow: { raise: 0 },
-        cheekPuff: 0,
-        noseScrunch: 0,
-      };
-      const overlay = controller.getExpressionOverlay(baseExpression);
+      const overlay = controller.getExpressionOverlay(expression);
       expect(overlay).toEqual({});
     });
 
     it("should return wink overlay for wink action", () => {
       controller.triggerAction("wink", 0.5);
-      const baseExpression = {
-        leftEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        rightEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        mouth: { upperLipBottom: 0, lowerLipTop: 0, lowerLipBottom: 0, width: 1 },
-        leftEyebrow: { raise: 0 },
-        rightEyebrow: { raise: 0 },
-        cheekPuff: 0,
-        noseScrunch: 0,
-      };
-      const overlay = controller.getExpressionOverlay(baseExpression);
+      const overlay = controller.getExpressionOverlay(expression);
       expect(overlay.rightEye).toBeDefined();
       expect(overlay.cheekPuff).toBeDefined();
+    });
+
+    it("should preserve the base cheek shape while winking", () => {
+      const smile = new RagdollGeometry(
+        getDefaultVariant(),
+      ).getExpressionForMood("smile");
+      controller.triggerAction("wink", 1);
+      expect(controller.getExpressionOverlay(smile).cheekPuff).toBe(
+        smile.cheekPuff,
+      );
+
+      controller.update(0.3);
+      expect(controller.getExpressionOverlay(smile).cheekPuff).toBeGreaterThan(
+        smile.cheekPuff,
+      );
+    });
+
+    it("should close and reopen a wink without overshoot at any duration", () => {
+      controller.triggerAction("wink", 1);
+      expect(
+        controller.getExpressionOverlay(expression).rightEye?.openness,
+      ).toBe(expression.rightEye.openness);
+
+      controller.update(0.3);
+      expect(
+        controller.getExpressionOverlay(expression).rightEye?.openness,
+      ).toBeCloseTo(0, 5);
+
+      controller.update(0.699);
+      const endingOpenness =
+        controller.getExpressionOverlay(expression).rightEye?.openness;
+      expect(endingOpenness).toBeGreaterThanOrEqual(0);
+      expect(endingOpenness).toBeLessThanOrEqual(expression.rightEye.openness);
+      expect(endingOpenness).toBeCloseTo(expression.rightEye.openness, 4);
     });
 
     it("should return talk overlay for talk action", () => {
       controller.triggerAction("talk", 0.5);
       controller.update(0.1);
-      const baseExpression = {
-        leftEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        rightEye: { openness: 1, pupilOffset: { x: 0, y: 0 } },
-        mouth: { upperLipBottom: 0, lowerLipTop: 0, lowerLipBottom: 0, width: 1 },
-        leftEyebrow: { raise: 0 },
-        rightEyebrow: { raise: 0 },
-        cheekPuff: 0,
-        noseScrunch: 0,
-      };
-      const overlay = controller.getExpressionOverlay(baseExpression);
+      const overlay = controller.getExpressionOverlay(expression);
       expect(overlay.mouth).toBeDefined();
+    });
+
+    it("should return the mouth to its base shape at both action boundaries", () => {
+      controller.triggerAction("talk", 1);
+      expect(controller.getExpressionOverlay(expression).mouth).toEqual(
+        expression.mouth,
+      );
+
+      controller.update(0.999);
+      const endingMouth = controller.getExpressionOverlay(expression).mouth;
+      expect(endingMouth?.lowerLipTop).toBeCloseTo(
+        expression.mouth.lowerLipTop,
+        3,
+      );
+      expect(endingMouth?.width).toBeCloseTo(expression.mouth.width, 4);
+    });
+
+    it("should keep all built-in mood and action combinations geometrically valid", () => {
+      for (const variant of [humanVariant, einsteinVariant]) {
+        const geometry = new RagdollGeometry(variant);
+
+        for (const mood of MOODS) {
+          const base = geometry.getExpressionForMood(mood);
+
+          for (const action of ["wink", "talk"] as const) {
+            for (const duration of [0.2, 2]) {
+              for (const progress of [0, 0.1, 0.3, 0.5, 0.9, 0.999]) {
+                const actionController = new ActionController(
+                  new MockHeadPoseController(),
+                );
+                actionController.triggerAction(action, duration);
+                actionController.update(duration * progress);
+                const overlay = actionController.getExpressionOverlay(base);
+                const leftEye = geometry.getEyePath(
+                  true,
+                  overlay.leftEye ?? base.leftEye,
+                );
+                const rightEye = geometry.getEyePath(
+                  false,
+                  overlay.rightEye ?? base.rightEye,
+                );
+                const mouthState = overlay.mouth ?? base.mouth;
+                const mouth = geometry.getMouthPath(mouthState);
+                const faceBottom =
+                  geometry.dimensions.headHeight * 0.25 +
+                  geometry.dimensions.chinHeight;
+                const mouthBottom =
+                  geometry.dimensions.mouthY +
+                  mouthState.lowerLipBottom +
+                  Math.max(0, mouthState.lowerLipCurve * 4);
+
+                for (const path of [
+                  leftEye.sclera,
+                  rightEye.sclera,
+                  mouth.upperLip,
+                  mouth.lowerLip,
+                  mouth.opening,
+                ]) {
+                  expect(path).not.toMatch(/NaN|Infinity/);
+                }
+                expect(leftEye.aperture.height).toBeGreaterThanOrEqual(0);
+                expect(rightEye.aperture.height).toBeGreaterThanOrEqual(0);
+                expect(mouth.openingHeight).toBeGreaterThanOrEqual(0);
+                expect(mouthBottom).toBeLessThanOrEqual(faceBottom);
+              }
+            }
+          }
+        }
+      }
     });
   });
 });
-

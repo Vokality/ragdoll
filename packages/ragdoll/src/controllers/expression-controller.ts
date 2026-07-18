@@ -6,7 +6,7 @@ import { ActionController } from "./action-controller";
 export class ExpressionController {
   private geometry: RagdollGeometry;
   private currentMood: FacialMood = "neutral";
-  private previousMood: FacialMood = "neutral";
+  private transitionStartExpression: ExpressionConfig;
   private targetExpression: ExpressionConfig;
   private currentExpression: ExpressionConfig;
   private transitionProgress = 1;
@@ -17,6 +17,7 @@ export class ExpressionController {
     this.geometry = geometry;
     this.actionController = actionController;
     this.currentExpression = geometry.getExpressionForMood("neutral");
+    this.transitionStartExpression = this.currentExpression;
     this.targetExpression = geometry.getExpressionForMood("neutral");
     this.geometry.setExpression(this.currentExpression);
   }
@@ -24,7 +25,7 @@ export class ExpressionController {
   public setMood(mood: FacialMood, transitionDuration: number = 0.35): void {
     if (mood === this.currentMood) return;
 
-    this.previousMood = this.currentMood;
+    this.transitionStartExpression = this.currentExpression;
     this.currentMood = mood;
     this.targetExpression = this.geometry.getExpressionForMood(mood);
     this.transitionDuration = Math.max(0.05, transitionDuration);
@@ -45,9 +46,6 @@ export class ExpressionController {
       const t = this.easeInOutCubic(this.transitionProgress);
       this.interpolateExpression(t);
     }
-
-    // Update action controller (handles action state)
-    this.actionController.update(deltaTime);
 
     this.geometry.setExpression(this.currentExpression);
   }
@@ -94,39 +92,17 @@ export class ExpressionController {
     const expr = this.getExpressionWithAction();
 
     if (blinkAmount <= 0) return expr;
+    const blink = Math.min(1, blinkAmount);
 
     return {
       ...expr,
       leftEye: {
         ...expr.leftEye,
-        openness: expr.leftEye.openness * (1 - blinkAmount),
+        openness: expr.leftEye.openness * (1 - blink),
       },
       rightEye: {
         ...expr.rightEye,
-        openness: expr.rightEye.openness * (1 - blinkAmount),
-      },
-    };
-  }
-
-  /**
-   * Apply micro-movements to pupils (for idle animation)
-   */
-  public applyPupilOffset(offsetX: number, offsetY: number): void {
-    this.currentExpression = {
-      ...this.currentExpression,
-      leftEye: {
-        ...this.currentExpression.leftEye,
-        pupilOffset: {
-          x: this.currentExpression.leftEye.pupilOffset.x + offsetX,
-          y: this.currentExpression.leftEye.pupilOffset.y + offsetY,
-        },
-      },
-      rightEye: {
-        ...this.currentExpression.rightEye,
-        pupilOffset: {
-          x: this.currentExpression.rightEye.pupilOffset.x + offsetX,
-          y: this.currentExpression.rightEye.pupilOffset.y + offsetY,
-        },
+        openness: expr.rightEye.openness * (1 - blink),
       },
     };
   }
@@ -147,11 +123,8 @@ export class ExpressionController {
   }
 
   private interpolateExpression(t: number): void {
-    const prevExpression = this.geometry.getExpressionForMood(
-      this.previousMood,
-    );
     this.currentExpression = RagdollGeometry.interpolateExpression(
-      prevExpression,
+      this.transitionStartExpression,
       this.targetExpression,
       t,
     );

@@ -84,13 +84,15 @@ describe("ExpressionController", () => {
       controller.setMood("neutral");
       controller.update(0.1); // Ensure neutral is set
       const neutralExpr = controller.getExpression();
-      
+
       controller.setMood("smile", 0.3);
       controller.update(0.15); // Halfway through transition
       const halfwayExpr = controller.getExpression();
-      
+
       // Should be between neutral and smile
-      expect(halfwayExpr.mouth.cornerPull).toBeGreaterThan(neutralExpr.mouth.cornerPull);
+      expect(halfwayExpr.mouth.cornerPull).toBeGreaterThan(
+        neutralExpr.mouth.cornerPull,
+      );
     });
 
     it("should update geometry during transition", () => {
@@ -117,22 +119,22 @@ describe("ExpressionController", () => {
       expect(controller.isTalking()).toBe(true);
     });
 
-    it("should delegate action progress to action controller", () => {
+    it("should report progress owned by the action controller", () => {
       actionController.triggerAction("wink", 1.0);
-      controller.update(0.5);
+      actionController.update(0.5);
       expect(controller.getActionProgress()).toBeCloseTo(0.5, 2);
     });
 
-    it("should delegate action elapsed to action controller", () => {
+    it("should report elapsed time owned by the action controller", () => {
       actionController.triggerAction("wink", 1.0);
-      controller.update(0.3);
+      actionController.update(0.3);
       expect(controller.getActionElapsed()).toBeCloseTo(0.3, 2);
     });
 
-    it("should update action controller during update", () => {
+    it("should not advance action time from the expression update", () => {
       actionController.triggerAction("wink", 0.5);
       controller.update(0.1);
-      expect(controller.getActionProgress()).toBeGreaterThan(0);
+      expect(controller.getActionProgress()).toBe(0);
     });
   });
 
@@ -152,12 +154,23 @@ describe("ExpressionController", () => {
       const expr = controller.getExpression();
       expect(expr).toBeDefined();
     });
+
+    it("should continue a rapid transition from the rendered expression", () => {
+      controller.setMood("smile", 1);
+      controller.update(0.5);
+      const beforeRedirect = controller.getExpression();
+
+      controller.setMood("sad", 1);
+      controller.update(0);
+
+      expect(controller.getExpression()).toEqual(beforeRedirect);
+    });
   });
 
   describe("expression with action overlay", () => {
     it("should return expression with action overlay applied", () => {
       actionController.triggerAction("wink", 0.5);
-      controller.update(0.1);
+      actionController.update(0.1);
       const exprWithAction = controller.getExpressionWithAction();
       expect(exprWithAction).toBeDefined();
       expect(exprWithAction.rightEye).toBeDefined();
@@ -167,7 +180,7 @@ describe("ExpressionController", () => {
       controller.setMood("smile");
       controller.update(0.1);
       actionController.triggerAction("wink", 0.5);
-      controller.update(0.1);
+      actionController.update(0.1);
       const exprWithAction = controller.getExpressionWithAction();
       expect(exprWithAction.rightEye.openness).toBeLessThan(1);
     });
@@ -178,7 +191,9 @@ describe("ExpressionController", () => {
       const expr = controller.getExpression();
       const blinkedExpr = controller.applyBlink(0.5);
       expect(blinkedExpr.leftEye.openness).toBeLessThan(expr.leftEye.openness);
-      expect(blinkedExpr.rightEye.openness).toBeLessThan(expr.rightEye.openness);
+      expect(blinkedExpr.rightEye.openness).toBeLessThan(
+        expr.rightEye.openness,
+      );
     });
 
     it("should not modify expression when blink amount is 0", () => {
@@ -193,30 +208,4 @@ describe("ExpressionController", () => {
       expect(blinkedExpr.rightEye.openness).toBe(0);
     });
   });
-
-  describe("pupil offset application", () => {
-    it("should apply pupil offset", () => {
-      const initialExpr = controller.getExpression();
-      controller.applyPupilOffset(2, 1);
-      const updatedExpr = controller.getExpression();
-      expect(updatedExpr.leftEye.pupilOffset.x).toBeGreaterThan(initialExpr.leftEye.pupilOffset.x);
-      expect(updatedExpr.leftEye.pupilOffset.y).toBeGreaterThan(initialExpr.leftEye.pupilOffset.y);
-    });
-
-    it("should apply offset to both eyes", () => {
-      controller.applyPupilOffset(2, 1);
-      const expr = controller.getExpression();
-      expect(expr.leftEye.pupilOffset.x).toBe(expr.rightEye.pupilOffset.x);
-      expect(expr.leftEye.pupilOffset.y).toBe(expr.rightEye.pupilOffset.y);
-    });
-
-    it("should accumulate offsets", () => {
-      controller.applyPupilOffset(1, 1);
-      const firstExpr = controller.getExpression();
-      controller.applyPupilOffset(1, 1);
-      const secondExpr = controller.getExpression();
-      expect(secondExpr.leftEye.pupilOffset.x).toBeGreaterThan(firstExpr.leftEye.pupilOffset.x);
-    });
-  });
 });
-
