@@ -1,122 +1,59 @@
-# CLAUDE.md
+# Repository guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Ragdoll is a Bun 1.3.14 workspace monorepo using React and strict TypeScript.
 
-## Project Overview
+## Commands
 
-Ragdoll is a monorepo containing an animated character framework and applications built with it.
+Run all commands from the repository root unless a package-specific command is required.
 
-## Monorepo Structure
-
-```
-ragdoll/
-├── packages/
-│   ├── ragdoll/              # @vokality/ragdoll - core character framework
-│   │   └── src/
-│   │       ├── components/   # RagdollCharacter React component
-│   │       ├── controllers/  # CharacterController, ExpressionController, etc.
-│   │       ├── models/       # RagdollGeometry, RagdollSkeleton
-│   │       ├── themes/       # Theme system (default, robot, alien, monochrome)
-│   │       ├── types/        # TypeScript type definitions
-│   │       └── animation/    # Easing functions
-│   │
-│   └── ragdoll-extensions/   # @vokality/ragdoll-extensions - extension framework
-│       └── src/
-│           ├── types.ts      # Core types (ToolDefinition, RagdollExtension, etc.)
-│           ├── registry.ts   # ExtensionRegistry - tool aggregation & execution
-│           ├── create-extension.ts  # createExtension() factory
-│           └── extensions/   # Built-in extensions
-│               ├── character/  # Facial expression tools
-│               ├── pomodoro/   # Timer tools
-│               └── tasks/      # Task management tools
-│
-├── apps/
-│   ├── demo/                 # Browser demo with control panel
-│   │   └── src/
-│   │       ├── ui/           # UI components (Scene, ControlPanel, etc.)
-│   │       ├── api/          # Express server with WebSocket
-│   │       └── mcp/          # MCP server for browser version
-│   │
-│   ├── chat/                 # Electron chat app with AI assistant
-│   │   ├── src/              # React renderer (UI components, hooks, screens)
-│   │   └── electron/         # Main process
-│   │       └── services/     # ExtensionManager, OpenAI service
-│   │
-│   └── emote/                # VS Code extension
-│       ├── src/              # Extension host code
-│       └── webview/          # Webview React app
-│
-└── package.json              # Workspace root (bun workspaces)
+```bash
+bun install --frozen-lockfile
+bun run build
+bun run test
+bun run typecheck
+bun run lint
 ```
 
-## Development Commands
+Use workspace filters for focused work:
 
-### Root
-
-- `bun install` - Install all dependencies
-- `bun run build` - Build all packages and apps
-
-### Package: @vokality/ragdoll
-
-- `cd packages/ragdoll && bun run build` - Build the core package
-- `cd packages/ragdoll && bun run dev` - Watch mode
-
-### Package: @vokality/ragdoll-extensions
-
-- `cd packages/ragdoll-extensions && bun run build` - Build the extensions package
-- `cd packages/ragdoll-extensions && bun run dev` - Watch mode
-
-### App: Chat (Electron)
-
-- `cd apps/chat && bun run electron:dev` - Start dev server with Electron
-- `cd apps/chat && bun run build` - Build for production
-
-### App: Demo
-
-- `cd apps/demo && bun run dev` - Start dev server
-- `cd apps/demo && bun run build` - Build for production
-- `cd apps/demo && bun run server` - Start API server
-
-### App: Emote (VS Code Extension)
-
-- `cd apps/emote && bun run build` - Build extension
-- `cd apps/emote && bunx @vscode/vsce package` - Package .vsix
-
-## Engineering Requirements
-
-- Use kebab-case for all files
-- Group files in packages by features
-- Use DDD (domain-driven design)
-- Use bun for package management
-
-## Tech Stack
-
-- **Bun** - Package manager and runtime
-- **React 19** with TypeScript
-- **Vite** - Build tool for apps
-- **TypeScript** - Compiled with tsc for packages
-- **Electron** - Desktop app framework (Chat app)
-- **VS Code Extension API** - For Emote extension
-- **MCP (Model Context Protocol)** - AI assistant control
-
-## Extension System
-
-The `@vokality/ragdoll-extensions` package provides a flexible extension system:
-
-- **createExtension(config)** - Factory to create custom extensions
-- **ExtensionRegistry** - Manages extensions, aggregates tools, routes execution
-- **Built-in extensions**: character, pomodoro, tasks
-
-Extensions provide tools in OpenAI function-calling format. The registry:
-1. Aggregates tools from all registered extensions
-2. Validates tool arguments
-3. Routes execution to the correct handler
-4. Emits events when tools change
-
-Usage pattern:
-```typescript
-const registry = createRegistry();
-await registry.register(createCharacterExtension({ handler: {...} }));
-const tools = registry.getAllTools(); // Pass to OpenAI
-await registry.executeTool("setMood", { mood: "smile" });
+```bash
+bun run --filter @vokality/ragdoll-extensions test
+bun run --filter lumen typecheck
+bun run --filter emote build
 ```
+
+Do not add npm, pnpm, or Yarn lockfiles or scripts. Do not execute tools by hardcoding paths under `node_modules`; use `bun run` for package scripts and `bunx --bun` for package binaries.
+
+## Boundaries
+
+- `@vokality/ragdoll` owns the React character framework.
+- `@vokality/ragdoll-extensions` default entrypoint is React-free.
+- `@vokality/ragdoll-extensions/loader` is host-adapter-driven.
+- `@vokality/ragdoll-extensions/slots` is React-free.
+- `@vokality/ragdoll-extensions/ui` is the only React UI entrypoint.
+- First-party extension packages depend on the extension framework, never an app or another extension.
+- Apps provide storage, IPC, notifications, config, OAuth, filesystem, and import adapters.
+
+Do not add compatibility reexports or restore deleted entrypoints. Add a new public entrypoint only for a genuine runtime boundary.
+
+## Extension contract
+
+An extension package exports `createExtension(config?)` or an extension object supported by the loader. Its `ragdollExtension` package metadata must declare:
+
+- stable ID and entrypoint;
+- provided capability types;
+- required host capabilities;
+- config and OAuth schemas when applicable.
+
+Registration requires an `ExtensionHostEnvironment`. Runtime services must be injected through that environment; shared extension packages must not import Electron or an app implementation.
+
+Slots contain React-free observable state. Serialize them before IPC and route action descriptors back to the owning callback.
+
+## Engineering rules
+
+- Keep TypeScript strict and avoid `any`.
+- Preserve package dependency direction.
+- Keep React imports out of core and loader entrypoints.
+- Clean only the workspace's own generated output.
+- Add regression coverage for lifecycle, loading, and IPC behavior changes.
+- Keep changes scoped; remove stale paths, commands, and docs instead of retaining compatibility guidance.

@@ -15,7 +15,7 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 import {
   PomodoroManager,
   createPomodoroManager,
@@ -24,7 +24,12 @@ import {
   type PomodoroEvent,
   type PomodoroEventCallback,
 } from "./pomodoro-manager.js";
-import { createSlotState } from "@vokality/ragdoll-extensions/ui/state";
+import {
+  createSlotState,
+  type ItemStatus,
+  type ListPanelItem,
+  type PanelAction,
+} from "@vokality/ragdoll-extensions/slots";
 
 // =============================================================================
 // Constants
@@ -37,7 +42,12 @@ export type SessionDuration = (typeof VALID_SESSION_DURATIONS)[number];
 export type BreakDuration = (typeof VALID_BREAK_DURATIONS)[number];
 
 // Re-export types from pomodoro-manager
-export type { PomodoroState, PomodoroPhase, PomodoroEvent, PomodoroEventCallback };
+export type {
+  PomodoroState,
+  PomodoroPhase,
+  PomodoroEvent,
+  PomodoroEventCallback,
+};
 export { PomodoroManager, createPomodoroManager };
 
 // =============================================================================
@@ -79,17 +89,25 @@ export interface PomodoroToolHandler {
   startPomodoro(args: StartPomodoroArgs): Promise<ToolResult> | ToolResult;
   pausePomodoro(args: PausePomodoroArgs): Promise<ToolResult> | ToolResult;
   resetPomodoro(args: ResetPomodoroArgs): Promise<ToolResult> | ToolResult;
-  getPomodoroState(args: GetPomodoroStateArgs): Promise<ToolResult> | ToolResult;
+  getPomodoroState(
+    args: GetPomodoroStateArgs,
+  ): Promise<ToolResult> | ToolResult;
 }
 
 // =============================================================================
 // Validators
 // =============================================================================
 
-function validateStartPomodoro(args: Record<string, unknown>): ValidationResult {
+function validateStartPomodoro(
+  args: Record<string, unknown>,
+): ValidationResult {
   const coerceNumber = (value: unknown): number | undefined => {
     if (typeof value === "number") return value;
-    if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+    if (
+      typeof value === "string" &&
+      value.trim() !== "" &&
+      !Number.isNaN(Number(value))
+    ) {
       return Number(value);
     }
     return undefined;
@@ -97,7 +115,10 @@ function validateStartPomodoro(args: Record<string, unknown>): ValidationResult 
 
   const sessionDuration = coerceNumber(args.sessionDuration);
   if (args.sessionDuration !== undefined) {
-    if (sessionDuration === undefined || !VALID_SESSION_DURATIONS.includes(sessionDuration as SessionDuration)) {
+    if (
+      sessionDuration === undefined ||
+      !VALID_SESSION_DURATIONS.includes(sessionDuration as SessionDuration)
+    ) {
       return {
         valid: false,
         error: `Invalid sessionDuration '${args.sessionDuration}'. Valid: ${VALID_SESSION_DURATIONS.join(", ")} minutes`,
@@ -108,7 +129,10 @@ function validateStartPomodoro(args: Record<string, unknown>): ValidationResult 
 
   const breakDuration = coerceNumber(args.breakDuration);
   if (args.breakDuration !== undefined) {
-    if (breakDuration === undefined || !VALID_BREAK_DURATIONS.includes(breakDuration as BreakDuration)) {
+    if (
+      breakDuration === undefined ||
+      !VALID_BREAK_DURATIONS.includes(breakDuration as BreakDuration)
+    ) {
       return {
         valid: false,
         error: `Invalid breakDuration '${args.breakDuration}'. Valid: ${VALID_BREAK_DURATIONS.join(", ")} minutes`,
@@ -235,9 +259,9 @@ export interface PomodoroRuntimeOptions {
   breakDuration?: BreakDuration;
 }
 
-export function createRuntime(
+function createRuntime(
   options: PomodoroRuntimeOptions | undefined,
-  host: ExtensionHostEnvironment
+  host: ExtensionHostEnvironment,
 ): ExtensionRuntimeContribution {
   const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
   const sessionDuration = options?.sessionDuration ?? DEFAULT_SESSION_DURATION;
@@ -305,11 +329,19 @@ export function createRuntime(
   };
 
   const deriveSlotState = (state: PomodoroStateData) => {
-    const { state: phase, remainingTime, isBreak, sessionsCompleted: completed = 0 } = state;
+    const {
+      state: phase,
+      remainingTime,
+      isBreak,
+      sessionsCompleted: completed = 0,
+    } = state;
     const remainingMs = remainingTime * 1000;
-    const badge = phase === "running" || phase === "paused" ? formatTime(remainingMs) : null;
+    const badge =
+      phase === "running" || phase === "paused"
+        ? formatTime(remainingMs)
+        : null;
 
-    const items: any[] = [];
+    const items: ListPanelItem[] = [];
 
     const getPhaseLabel = (): string => {
       if (isBreak) {
@@ -327,7 +359,7 @@ export function createRuntime(
       }
     };
 
-    const getPhaseStatus = (): string => {
+    const getPhaseStatus = (): ItemStatus => {
       if (phase === "running") {
         return isBreak ? "success" : "active";
       }
@@ -340,7 +372,10 @@ export function createRuntime(
     items.push({
       id: "status",
       label: getPhaseLabel(),
-      sublabel: phase !== "idle" ? `${formatTime(remainingMs)} remaining` : `${manager.getSessionDurationMinutes()} min session`,
+      sublabel:
+        phase !== "idle"
+          ? `${formatTime(remainingMs)} remaining`
+          : `${manager.getSessionDurationMinutes()} min session`,
       status: getPhaseStatus(),
     });
 
@@ -352,7 +387,7 @@ export function createRuntime(
       });
     }
 
-    const actions: any[] = [];
+    const actions: PanelAction[] = [];
 
     if (phase === "idle") {
       actions.push({
@@ -437,27 +472,23 @@ export function createRuntime(
   };
 }
 
-export { createRuntime as createPomodoroRuntime };
-// NOTE: UI exports removed to avoid pulling React into main process
-// export { createPomodoroUISlot, type PomodoroUISlotOptions } from "./ui.js";
-
 import {
-  createExtension,
+  createExtension as defineExtension,
   type RagdollExtension,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 
 /**
  * Create the pomodoro extension.
  */
-function createPomodoroExtension(config?: Record<string, unknown>): RagdollExtension {
-  return createExtension({
+export function createExtension(
+  config?: Record<string, unknown>,
+): RagdollExtension {
+  return defineExtension({
     id: DEFAULT_EXTENSION_ID,
     name: "Pomodoro Timer",
     version: "0.1.0",
     description: "Pomodoro-style focus sessions and notifications",
-    createRuntime: (host, _context) => createRuntime(config as PomodoroRuntimeOptions | undefined, host),
+    createRuntime: (host, _context) =>
+      createRuntime(config as PomodoroRuntimeOptions | undefined, host),
   });
 }
-
-export { createPomodoroExtension as createExtension };
-export default createPomodoroExtension;

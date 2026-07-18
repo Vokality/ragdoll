@@ -4,68 +4,25 @@ import * as path from "path";
 import * as os from "os";
 import * as net from "net";
 import { RagdollPanel } from "./ragdoll-panel";
+import {
+  VALID_ACTIONS,
+  VALID_MOODS,
+  VALID_THEMES,
+  VALID_TONES,
+  VALID_VARIANTS,
+} from "./types";
 import type {
-  FacialMood,
+  ActionId,
   BubbleTone,
-  PomodoroDuration,
-  TaskStatus,
-  Task,
+  FacialMood,
+  ThemeId,
+  VariantId,
 } from "./types";
 
 const MAX_BUBBLE_CHARACTERS = 240;
 
-const VALID_MOODS: readonly FacialMood[] = [
-  "neutral",
-  "smile",
-  "frown",
-  "laugh",
-  "angry",
-  "sad",
-  "surprise",
-  "confusion",
-  "thinking",
-] as const;
-const VALID_ACTIONS = ["wink", "talk", "shake"] as const;
-const VALID_TONES: readonly BubbleTone[] = ["default", "whisper", "shout"];
-const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
-const VALID_VARIANTS = ["human", "einstein"] as const;
-type ThemeId = (typeof VALID_THEMES)[number];
-type VariantId = (typeof VALID_VARIANTS)[number];
-type ActionId = (typeof VALID_ACTIONS)[number];
-
 let outputChannel: vscode.OutputChannel | null = null;
 const shownErrorKeys = new Set<string>();
-let currentTasks: Task[] = [];
-let currentPomodoroState: {
-  state: string;
-  remainingTime: number;
-  isBreak: boolean;
-} | null = null;
-
-export function updateTasks(tasks: Task[]): void {
-  currentTasks = tasks;
-}
-
-export function getTasks(): Task[] {
-  return currentTasks;
-}
-
-export function updatePomodoroState(state: {
-  state: string;
-  remainingTime: number;
-  isBreak: boolean;
-}): void {
-  currentPomodoroState = state;
-}
-
-export function getPomodoroState(): {
-  state: string;
-  remainingTime: number;
-  isBreak: boolean;
-} | null {
-  return currentPomodoroState;
-}
-
 // Socket-based IPC paths
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
 const SOCKET_PATH =
@@ -116,9 +73,8 @@ function notifyErrorOnce(key: string, message: string): void {
 function getThemeSetting(): ThemeId {
   const config = vscode.workspace.getConfiguration("emote");
   const theme = config.get<string>("theme", "default");
-  return VALID_THEMES.includes(theme as ThemeId)
-    ? (theme as ThemeId)
-    : "default";
+  if (!isTheme(theme)) throw new Error(`Unknown Emote theme: ${theme}`);
+  return theme;
 }
 
 function setThemeSetting(themeId: ThemeId): Thenable<void> {
@@ -129,9 +85,8 @@ function setThemeSetting(themeId: ThemeId): Thenable<void> {
 function getVariantSetting(): VariantId {
   const config = vscode.workspace.getConfiguration("emote");
   const variant = config.get<string>("variant", "human");
-  return VALID_VARIANTS.includes(variant as VariantId)
-    ? (variant as VariantId)
-    : "human";
+  if (!isVariant(variant)) throw new Error(`Unknown Emote variant: ${variant}`);
+  return variant;
 }
 
 function setVariantSetting(variantId: VariantId): Thenable<void> {
@@ -149,19 +104,7 @@ type MCPCommand = {
   text?: unknown;
   tone?: unknown;
   themeId?: unknown;
-  sessionDuration?: unknown;
-  breakDuration?: unknown;
-  taskId?: unknown;
-  status?: unknown;
-  blockedReason?: unknown;
 };
-
-const VALID_TASK_STATUSES: readonly TaskStatus[] = [
-  "todo",
-  "in_progress",
-  "blocked",
-  "done",
-];
 
 type ValidatedCommand =
   | { type: "show" }
@@ -170,42 +113,16 @@ type ValidatedCommand =
   | { type: "setMood"; mood: FacialMood; duration?: number }
   | { type: "triggerAction"; action: ActionId; duration?: number }
   | {
-    type: "setHeadPose";
-    yawDegrees?: number;
-    pitchDegrees?: number;
-    duration?: number;
-  }
+      type: "setHeadPose";
+      yawDegrees?: number;
+      pitchDegrees?: number;
+      duration?: number;
+    }
   | { type: "setSpeechBubble"; text: string | null; tone?: BubbleTone }
-  | { type: "setTheme"; themeId: ThemeId }
-  | {
-    type: "startPomodoro";
-    sessionDuration?: PomodoroDuration;
-    breakDuration?: PomodoroDuration;
-  }
-  | { type: "pausePomodoro" }
-  | { type: "resetPomodoro" }
-  | { type: "getPomodoroState" }
-  | { type: "addTask"; text: string; status?: TaskStatus }
-  | {
-    type: "updateTaskStatus";
-    taskId: string;
-    status: TaskStatus;
-    blockedReason?: string;
-  }
-  | { type: "setActiveTask"; taskId: string }
-  | { type: "removeTask"; taskId: string }
-  | { type: "completeActiveTask" }
-  | { type: "clearCompletedTasks" }
-  | { type: "clearAllTasks" }
-  | { type: "expandTasks" }
-  | { type: "collapseTasks" }
-  | { type: "toggleTasks" }
-  | { type: "listTasks" }
-  | { type: "listTasks" };
+  | { type: "setTheme"; themeId: ThemeId };
 
 type ValidationResult =
-  | { ok: true; command: ValidatedCommand }
-  | { ok: false; reason: string };
+  { ok: true; command: ValidatedCommand } | { ok: false; reason: string };
 
 function ensureIpcDirectory(): void {
   if (os.platform() !== "win32" && !fs.existsSync(IPC_DIR)) {
@@ -223,8 +140,11 @@ function cleanupStaleSocket(): void {
       fs.unlinkSync(SOCKET_PATH);
       logMessage("info", "Removed stale socket file");
     }
-  } catch {
-    // Ignore - will fail on listen if still in use
+  } catch (error) {
+    logMessage("warn", "Could not remove stale socket file", {
+      error: String(error),
+      path: SOCKET_PATH,
+    });
   }
 }
 
@@ -356,107 +276,6 @@ function validateMcpCommand(raw: MCPCommand): ValidationResult {
       }
       return { ok: true, command: { type: "setTheme", themeId: raw.themeId } };
     }
-    case "startPomodoro": {
-      const sessionDuration = coerceNumber(raw.sessionDuration);
-      const breakDuration = coerceNumber(raw.breakDuration);
-      const validDurations: PomodoroDuration[] = [5, 15, 30, 60, 120];
-      const validSession =
-        sessionDuration === undefined ||
-        validDurations.includes(sessionDuration as PomodoroDuration);
-      const validBreak =
-        breakDuration === undefined ||
-        validDurations.includes(breakDuration as PomodoroDuration);
-      if (!validSession || !validBreak) {
-        return {
-          ok: false,
-          reason:
-            "Invalid pomodoro duration. Must be 5, 15, 30, 60, or 120 minutes",
-        };
-      }
-      return {
-        ok: true,
-        command: {
-          type: "startPomodoro",
-          sessionDuration: sessionDuration as PomodoroDuration | undefined,
-          breakDuration: breakDuration as PomodoroDuration | undefined,
-        },
-      };
-    }
-    case "pausePomodoro":
-      return { ok: true, command: { type: "pausePomodoro" } };
-    case "resetPomodoro":
-      return { ok: true, command: { type: "resetPomodoro" } };
-    case "getPomodoroState":
-      return { ok: true, command: { type: "getPomodoroState" } };
-    case "addTask": {
-      if (typeof raw.text !== "string" || raw.text.trim().length === 0) {
-        return { ok: false, reason: "Task requires text" };
-      }
-      const status =
-        typeof raw.status === "string" &&
-          VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
-          ? (raw.status as TaskStatus)
-          : undefined;
-      return {
-        ok: true,
-        command: { type: "addTask", text: raw.text.trim(), status },
-      };
-    }
-    case "updateTaskStatus": {
-      if (typeof raw.taskId !== "string") {
-        return { ok: false, reason: "updateTaskStatus requires taskId" };
-      }
-      if (
-        typeof raw.status !== "string" ||
-        !VALID_TASK_STATUSES.includes(raw.status as TaskStatus)
-      ) {
-        return {
-          ok: false,
-          reason:
-            "updateTaskStatus requires valid status (todo, in_progress, blocked, done)",
-        };
-      }
-      const blockedReason =
-        typeof raw.blockedReason === "string" ? raw.blockedReason : undefined;
-      return {
-        ok: true,
-        command: {
-          type: "updateTaskStatus",
-          taskId: raw.taskId,
-          status: raw.status as TaskStatus,
-          blockedReason,
-        },
-      };
-    }
-    case "setActiveTask": {
-      if (typeof raw.taskId !== "string") {
-        return { ok: false, reason: "setActiveTask requires taskId" };
-      }
-      return {
-        ok: true,
-        command: { type: "setActiveTask", taskId: raw.taskId },
-      };
-    }
-    case "removeTask": {
-      if (typeof raw.taskId !== "string") {
-        return { ok: false, reason: "removeTask requires taskId" };
-      }
-      return { ok: true, command: { type: "removeTask", taskId: raw.taskId } };
-    }
-    case "completeActiveTask":
-      return { ok: true, command: { type: "completeActiveTask" } };
-    case "clearCompletedTasks":
-      return { ok: true, command: { type: "clearCompletedTasks" } };
-    case "clearAllTasks":
-      return { ok: true, command: { type: "clearAllTasks" } };
-    case "expandTasks":
-      return { ok: true, command: { type: "expandTasks" } };
-    case "collapseTasks":
-      return { ok: true, command: { type: "collapseTasks" } };
-    case "toggleTasks":
-      return { ok: true, command: { type: "toggleTasks" } };
-    case "listTasks":
-      return { ok: true, command: { type: "listTasks" } };
     default:
       return { ok: false, reason: `Unknown command type "${raw.type}"` };
   }
@@ -510,7 +329,7 @@ function installMcpServer(extensionPath: string): void {
 function getMcpConfig(): string {
   const config = {
     emote: {
-      command: "node",
+      command: "bun",
       args: [STABLE_MCP_SERVER],
     },
   };
@@ -720,27 +539,27 @@ export function activate(context: vscode.ExtensionContext): void {
           description: string;
           id: ThemeId;
         }> = [
-            {
-              label: "Default",
-              description: "Warm, human-like appearance",
-              id: "default",
-            },
-            {
-              label: "Robot",
-              description: "Metallic, futuristic robot",
-              id: "robot",
-            },
-            {
-              label: "Alien",
-              description: "Green, otherworldly alien",
-              id: "alien",
-            },
-            {
-              label: "Monochrome",
-              description: "Classic black and white",
-              id: "monochrome",
-            },
-          ];
+          {
+            label: "Default",
+            description: "Warm, human-like appearance",
+            id: "default",
+          },
+          {
+            label: "Robot",
+            description: "Metallic, futuristic robot",
+            id: "robot",
+          },
+          {
+            label: "Alien",
+            description: "Green, otherworldly alien",
+            id: "alien",
+          },
+          {
+            label: "Monochrome",
+            description: "Classic black and white",
+            id: "monochrome",
+          },
+        ];
 
         const currentTheme = getThemeSetting();
         const selected = await vscode.window.showQuickPick(themeOptions, {
@@ -783,17 +602,18 @@ export function activate(context: vscode.ExtensionContext): void {
           description: string;
           id: VariantId;
         }> = [
-            {
-              label: "Human",
-              description: "Standard human character with balanced proportions",
-              id: "human",
-            },
-            {
-              label: "Einstein",
-              description: "Einstein caricature with wild hair and bushy mustache",
-              id: "einstein",
-            },
-          ];
+          {
+            label: "Human",
+            description: "Standard human character with balanced proportions",
+            id: "human",
+          },
+          {
+            label: "Einstein",
+            description:
+              "Einstein caricature with wild hair and bushy mustache",
+            id: "einstein",
+          },
+        ];
 
         const currentVariant = getVariantSetting();
         const selected = await vscode.window.showQuickPick(variantOptions, {
@@ -811,156 +631,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       },
     ),
-  );
-
-  // Pomodoro commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "emote.startPomodoro",
-      (sessionDuration?: number, breakDuration?: number) => {
-        const panel =
-          RagdollPanel.currentPanel ??
-          RagdollPanel.createOrShow(context.extensionUri);
-        panel.postMessage({
-          type: "startPomodoro",
-          sessionDuration: sessionDuration as PomodoroDuration | undefined,
-          breakDuration: breakDuration as PomodoroDuration | undefined,
-        });
-      },
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.pausePomodoro", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "pausePomodoro" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.resetPomodoro", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "resetPomodoro" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.getPomodoroState", () => {
-      // This will be handled by webview response
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "getPomodoroState" });
-      }
-      return null;
-    }),
-  );
-
-  // Task commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "emote.addTask",
-      (text: string, status?: TaskStatus) => {
-        const panel =
-          RagdollPanel.currentPanel ??
-          RagdollPanel.createOrShow(context.extensionUri);
-        panel.postMessage({ type: "addTask", text, status });
-      },
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "emote.updateTaskStatus",
-      (taskId: string, status: TaskStatus, blockedReason?: string) => {
-        if (RagdollPanel.currentPanel) {
-          RagdollPanel.currentPanel.postMessage({
-            type: "updateTaskStatus",
-            taskId,
-            status,
-            blockedReason,
-          });
-        }
-      },
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.setActiveTask", (taskId: string) => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({
-          type: "setActiveTask",
-          taskId,
-        });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.removeTask", (taskId: string) => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "removeTask", taskId });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.completeActiveTask", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "completeActiveTask" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.clearCompletedTasks", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "clearCompletedTasks" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.clearAllTasks", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "clearAllTasks" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.expandTasks", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "expandTasks" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.collapseTasks", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "collapseTasks" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.toggleTasks", () => {
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "toggleTasks" });
-      }
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emote.listTasks", () => {
-      // Request tasks from webview first
-      if (RagdollPanel.currentPanel) {
-        RagdollPanel.currentPanel.postMessage({ type: "listTasks" });
-      }
-      // Return current stored tasks (will be updated by webview)
-      return getTasks();
-    }),
   );
 
   // Watch for configuration changes
@@ -1020,46 +690,13 @@ function startSocketServer(context: vscode.ExtensionContext): void {
           const result = validateMcpCommand(command);
 
           if (result.ok) {
-            // Special handling for commands that return data
-            if (result.command.type === "listTasks") {
-              // Request fresh tasks from webview
-              if (RagdollPanel.currentPanel) {
-                RagdollPanel.currentPanel.postMessage({ type: "listTasks" });
-              }
-              // Return current stored tasks (webview will update them)
-              const tasks = getTasks();
-              logMessage("info", "Processed MCP command", {
-                type: result.command.type,
-              });
-              socket.write(
-                JSON.stringify({ ok: true, type: result.command.type, tasks }) +
-                "\n",
-              );
-            } else if (result.command.type === "getPomodoroState") {
-              // Request fresh pomodoro state from webview
-              if (RagdollPanel.currentPanel) {
-                RagdollPanel.currentPanel.postMessage({
-                  type: "getPomodoroState",
-                });
-              }
-              // Return current stored state (webview will update it)
-              const state = getPomodoroState();
-              logMessage("info", "Processed MCP command", {
-                type: result.command.type,
-              });
-              socket.write(
-                JSON.stringify({ ok: true, type: result.command.type, state }) +
-                "\n",
-              );
-            } else {
-              handleValidatedCommand(result.command);
-              logMessage("info", "Processed MCP command", {
-                type: result.command.type,
-              });
-              socket.write(
-                JSON.stringify({ ok: true, type: result.command.type }) + "\n",
-              );
-            }
+            handleValidatedCommand(result.command);
+            logMessage("info", "Processed MCP command", {
+              type: result.command.type,
+            });
+            socket.write(
+              JSON.stringify({ ok: true, type: result.command.type }) + "\n",
+            );
           } else {
             logMessage("warn", "Rejected MCP command", {
               reason: result.reason,
@@ -1117,8 +754,11 @@ function startSocketServer(context: vscode.ExtensionContext): void {
           if (fs.existsSync(SOCKET_PATH)) {
             fs.unlinkSync(SOCKET_PATH);
           }
-        } catch {
-          // Ignore cleanup errors
+        } catch (error) {
+          logMessage("warn", "Could not remove socket file during shutdown", {
+            error: String(error),
+            path: SOCKET_PATH,
+          });
         }
       }
       logMessage("info", "Socket server stopped");
@@ -1168,61 +808,6 @@ function handleValidatedCommand(command: ValidatedCommand): void {
       break;
     case "setTheme":
       void vscode.commands.executeCommand("emote.setTheme", command.themeId);
-      break;
-    case "startPomodoro":
-      void vscode.commands.executeCommand(
-        "emote.startPomodoro",
-        command.sessionDuration,
-        command.breakDuration,
-      );
-      break;
-    case "pausePomodoro":
-      void vscode.commands.executeCommand("emote.pausePomodoro");
-      break;
-    case "resetPomodoro":
-      void vscode.commands.executeCommand("emote.resetPomodoro");
-      break;
-    case "addTask":
-      void vscode.commands.executeCommand(
-        "emote.addTask",
-        command.text,
-        command.status,
-      );
-      break;
-    case "updateTaskStatus":
-      void vscode.commands.executeCommand(
-        "emote.updateTaskStatus",
-        command.taskId,
-        command.status,
-        command.blockedReason,
-      );
-      break;
-    case "setActiveTask":
-      void vscode.commands.executeCommand(
-        "emote.setActiveTask",
-        command.taskId,
-      );
-      break;
-    case "removeTask":
-      void vscode.commands.executeCommand("emote.removeTask", command.taskId);
-      break;
-    case "completeActiveTask":
-      void vscode.commands.executeCommand("emote.completeActiveTask");
-      break;
-    case "clearCompletedTasks":
-      void vscode.commands.executeCommand("emote.clearCompletedTasks");
-      break;
-    case "clearAllTasks":
-      void vscode.commands.executeCommand("emote.clearAllTasks");
-      break;
-    case "expandTasks":
-      void vscode.commands.executeCommand("emote.expandTasks");
-      break;
-    case "collapseTasks":
-      void vscode.commands.executeCommand("emote.collapseTasks");
-      break;
-    case "toggleTasks":
-      void vscode.commands.executeCommand("emote.toggleTasks");
       break;
   }
 }

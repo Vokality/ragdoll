@@ -13,7 +13,7 @@ import type {
   ConfigValues,
   ExtensionConfigStatus,
   HostConfigCapability,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 
 // =============================================================================
 // Types
@@ -68,13 +68,15 @@ export class ConfigManager implements HostConfigCapability {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    try {
-      const stored = await this.config.loadValues();
-      if (stored) {
-        this.values = { ...this.values, ...stored };
+    const stored = await this.config.loadValues();
+    if (stored) {
+      for (const [key, value] of Object.entries(stored)) {
+        const field = this.config.schema?.[key];
+        if (!field) throw new Error(`Unknown config field: ${key}`);
+        const error = this.validateValue(key, value, field);
+        if (error) throw new Error(error);
       }
-    } catch (error) {
-      this.log("error", "Failed to load config:", error);
+      this.values = { ...this.values, ...stored };
     }
 
     this.initialized = true;
@@ -98,7 +100,10 @@ export class ConfigManager implements HostConfigCapability {
 
     if (schema) {
       for (const [key, field] of Object.entries(schema)) {
-        if (field.required && (this.values[key] === undefined || this.values[key] === "")) {
+        if (
+          field.required &&
+          (this.values[key] === undefined || this.values[key] === "")
+        ) {
           missingFields.push(key);
         }
       }
@@ -137,18 +142,14 @@ export class ConfigManager implements HostConfigCapability {
     const schema = this.config.schema;
 
     // Validate against schema if present
-    if (schema && schema[key]) {
-      const field = schema[key];
-      const error = this.validateValue(key, value, field);
-      if (error) {
-        throw new Error(error);
-      }
-    }
+    const field = schema?.[key];
+    if (!field) throw new Error(`Unknown config field: ${key}`);
+    const error = this.validateValue(key, value, field);
+    if (error) throw new Error(error);
 
-    this.values[key] = value;
-
-    // Save to storage
-    await this.config.saveValues(this.values);
+    const nextValues = { ...this.values, [key]: value };
+    await this.config.saveValues(nextValues);
+    this.values = nextValues;
 
     // Notify listeners
     this.emitChange();
@@ -171,22 +172,18 @@ export class ConfigManager implements HostConfigCapability {
     const schema = this.config.schema;
 
     // Validate all values first
-    if (schema) {
-      for (const [key, value] of Object.entries(values)) {
-        if (schema[key]) {
-          const error = this.validateValue(key, value, schema[key]);
-          if (error) {
-            throw new Error(error);
-          }
-        }
+    for (const [key, value] of Object.entries(values)) {
+      const field = schema?.[key];
+      if (!field) throw new Error(`Unknown config field: ${key}`);
+      const error = this.validateValue(key, value, field);
+      if (error) {
+        throw new Error(error);
       }
     }
 
-    // Apply all values
-    Object.assign(this.values, values);
-
-    // Save to storage
-    await this.config.saveValues(this.values);
+    const nextValues = { ...this.values, ...values };
+    await this.config.saveValues(nextValues);
+    this.values = nextValues;
 
     // Notify listeners
     this.emitChange();
@@ -198,18 +195,19 @@ export class ConfigManager implements HostConfigCapability {
    * Clear all config values
    */
   async clear(): Promise<void> {
-    this.values = {};
+    const nextValues: ConfigValues = {};
 
     // Re-apply defaults
     if (this.config.schema) {
       for (const [key, field] of Object.entries(this.config.schema)) {
         if (field.default !== undefined) {
-          this.values[key] = field.default as string | number | boolean;
+          nextValues[key] = field.default as string | number | boolean;
         }
       }
     }
 
-    await this.config.saveValues(this.values);
+    await this.config.saveValues(nextValues);
+    this.values = nextValues;
     this.emitChange();
   }
 
@@ -220,7 +218,7 @@ export class ConfigManager implements HostConfigCapability {
   private validateValue(
     key: string,
     value: unknown,
-    field: ConfigSchema[string]
+    field: ConfigSchema[string],
   ): string | null {
     // Type check
     if (field.type === "string" && typeof value !== "string") {
@@ -235,11 +233,21 @@ export class ConfigManager implements HostConfigCapability {
 
     // String-specific validation
     if (field.type === "string" && typeof value === "string") {
-      const stringField = field as { minLength?: number; maxLength?: number; pattern?: string };
-      if (stringField.minLength !== undefined && value.length < stringField.minLength) {
+      const stringField = field as {
+        minLength?: number;
+        maxLength?: number;
+        pattern?: string;
+      };
+      if (
+        stringField.minLength !== undefined &&
+        value.length < stringField.minLength
+      ) {
         return `${key} must be at least ${stringField.minLength} characters`;
       }
-      if (stringField.maxLength !== undefined && value.length > stringField.maxLength) {
+      if (
+        stringField.maxLength !== undefined &&
+        value.length > stringField.maxLength
+      ) {
         return `${key} must be at most ${stringField.maxLength} characters`;
       }
       if (stringField.pattern) {
@@ -284,7 +292,10 @@ export class ConfigManager implements HostConfigCapability {
     }
   }
 
-  private log(level: "debug" | "info" | "warn" | "error", ...args: unknown[]): void {
+  private log(
+    level: "debug" | "info" | "warn" | "error",
+    ...args: unknown[]
+  ): void {
     const logger = this.config.logger;
     if (logger) {
       logger[level](`[Config:${this.config.extensionId}]`, ...args);
@@ -303,6 +314,8 @@ export class ConfigManager implements HostConfigCapability {
 // Factory Function
 // =============================================================================
 
-export function createConfigManager(config: ConfigManagerConfig): ConfigManager {
+export function createConfigManager(
+  config: ConfigManagerConfig,
+): ConfigManager {
   return new ConfigManager(config);
 }

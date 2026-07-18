@@ -1,17 +1,16 @@
 /**
- * Extension Loader - Discovers and loads extensions from npm packages.
+ * Extension Loader - Discovers and loads extensions from package directories.
  *
- * Extensions are npm packages that:
+ * Extension packages:
  * 1. Have `"ragdollExtension": true` in their package.json
- * 2. Export either:
- *    - A `createExtension(config?)` function that returns a RagdollExtension
- *    - A default export that is a RagdollExtension
- *    - An `extension` named export that is a RagdollExtension
+ * 2. Export a `createExtension(config?)` function that returns a RagdollExtension
  *
  * @example
  * ```ts
- * const loader = new ExtensionLoader(registry, {
- *   searchPaths: [path.join(process.cwd(), "node_modules")],
+ * const loader = createLoader(registry, {
+ *   packageRoots: [{ path: extensionsDirectory, layout: "installed" }],
+ *   fileSystem: hostFileSystem,
+ *   hostEnvironment,
  * });
  *
  * // Discover and load all extensions
@@ -24,6 +23,11 @@
  */
 
 import type { ExtensionRegistry } from "./registry.js";
+import { z } from "zod";
+import {
+  ConfigSchemaSchema,
+  OAuthConfigSchema,
+} from "./types/config-schema.js";
 import type {
   ExtensionContributionMetadata,
   ExtensionHostEnvironment,
@@ -31,8 +35,7 @@ import type {
   RegisterOptions,
   RegistryCapabilityEvent,
   RagdollExtension,
-  ConfigSchema,
-  OAuthConfig,
+  ExtensionHostCapability,
 } from "./types.js";
 
 // =============================================================================
@@ -42,36 +45,58 @@ import type {
 /**
  * Extended ragdollExtension field in package.json
  */
-export interface ExtensionPackageManifest {
-  /** Custom extension ID (defaults to package name) */
-  id?: string;
-  /** Human-readable name */
-  name?: string;
-  /** Short description */
-  description?: string;
-  /** Entry point (relative to package root) */
-  entry?: string;
-  /** Whether users can disable this extension */
-  canDisable?: boolean;
-  /** Capabilities this extension provides */
-  capabilities?: Array<"tools" | "slots" | "services" | "stateChannels">;
-  /** Host capabilities required by this extension */
-  requiredCapabilities?: string[];
-  /** Configuration passed to createExtension() (legacy) */
-  config?: Record<string, unknown>;
+const ExtensionPackageManifestSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    entry: z
+      .string()
+      .min(1)
+      .refine(
+        (entry) =>
+          !entry.startsWith("/") &&
+          !entry.startsWith("\\") &&
+          !entry.split(/[\\/]/).includes(".."),
+        "entry must stay within the extension package",
+      ),
+    canDisable: z.boolean(),
+    capabilities: z
+      .array(z.enum(["tools", "slots", "services", "stateChannels"]))
+      .refine((values) => new Set(values).size === values.length, {
+        message: "capabilities must not contain duplicates",
+      }),
+    requiredCapabilities: z
+      .array(
+        z.enum([
+          "storage",
+          "notifications",
+          "timers",
+          "scheduler",
+          "ipc",
+          "logger",
+          "oauth",
+          "config",
+        ]),
+      )
+      .refine((values) => new Set(values).size === values.length, {
+        message: "requiredCapabilities must not contain duplicates",
+      }),
+    configSchema: ConfigSchemaSchema.optional(),
+    oauth: OAuthConfigSchema.optional(),
+  })
+  .strict();
 
-  /**
-   * Configuration schema - defines what config the extension needs
-   * The host will prompt users for these values and pass them to the extension
-   */
-  configSchema?: ConfigSchema;
+export type ExtensionPackageManifest = z.infer<
+  typeof ExtensionPackageManifestSchema
+>;
 
-  /**
-   * OAuth configuration - if present, the host handles OAuth flow
-   * and provides tokens to the extension via host.oauth
-   */
-  oauth?: OAuthConfig;
-}
+const ExtensionPackageJsonSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+  description: z.string().optional(),
+  ragdollExtension: ExtensionPackageManifestSchema.optional(),
+});
 
 /**
  * Metadata from a package.json that identifies a ragdoll extension
@@ -79,10 +104,14 @@ export interface ExtensionPackageManifest {
 export interface ExtensionPackageJson {
   name: string;
   version: string;
-  main?: string;
-  module?: string;
-  exports?: Record<string, unknown> | string;
-  ragdollExtension?: boolean | ExtensionPackageManifest;
+  description?: string;
+  ragdollExtension?: ExtensionPackageManifest;
+}
+
+export function parseExtensionPackageJson(
+  content: string,
+): ExtensionPackageJson {
+  return ExtensionPackageJsonSchema.parse(JSON.parse(content));
 }
 
 /**
@@ -96,9 +125,9 @@ export interface ExtensionPackageInfo {
   description?: string;
   version: string;
   canDisable: boolean;
-  configSchema?: ConfigSchema;
-  oauth?: OAuthConfig;
-  requiredCapabilities?: string[];
+  configSchema?: ExtensionPackageManifest["configSchema"];
+  oauth?: ExtensionPackageManifest["oauth"];
+  requiredCapabilities: ExtensionHostCapability[];
 }
 
 /**
@@ -118,28 +147,19 @@ export interface LoadResult {
  */
 export interface ExtensionLoaderConfig {
   /**
-   * Paths to search for node_modules directories.
-   * Defaults to common locations relative to process.cwd().
+   * Package roots to search. The host decides whether these are an installed
+   * dependency tree, a user extension directory, or another package store.
    */
-  searchPaths?: string[];
+  packageRoots: ExtensionPackageRoot[];
 
   /**
-   * Custom function to read a file (for testing/alternative environments).
-   * Defaults to using fs.promises.readFile.
+   * Filesystem adapter supplied by the host runtime.
    */
-  readFile?: (path: string) => Promise<string>;
-
-  /**
-   * Custom function to read directory contents.
-   * Defaults to using fs.promises.readdir.
-   */
-  readDir?: (path: string) => Promise<string[]>;
-
-  /**
-   * Custom function to check if a path exists.
-   * Defaults to using fs.promises.access.
-   */
-  pathExists?: (path: string) => Promise<boolean>;
+  fileSystem: {
+    readFile(path: string): Promise<string>;
+    readDirectory(path: string): Promise<string[]>;
+    pathExists(path: string): Promise<boolean>;
+  };
 
   /**
    * Custom function to dynamically import a module.
@@ -156,7 +176,9 @@ export interface ExtensionLoaderConfig {
   /**
    * Default options to pass when registering extensions (aside from host/config).
    */
-  registerOptions?: Omit<RegisterOptions, "host" | "config"> & { config?: Record<string, unknown> };
+  registerOptions?: Omit<RegisterOptions, "host" | "config"> & {
+    config?: Record<string, unknown>;
+  };
 
   /**
    * Static host environment to provide to every extension.
@@ -166,7 +188,9 @@ export interface ExtensionLoaderConfig {
   /**
    * Resolve a host environment for a specific extension manifest.
    */
-  getHostEnvironment?: (manifest: ExtensionManifest) => ExtensionHostEnvironment;
+  getHostEnvironment?: (
+    manifest: ExtensionManifest,
+  ) => ExtensionHostEnvironment;
 
   /**
    * Called whenever an extension contribution is fully registered.
@@ -179,53 +203,35 @@ export interface ExtensionLoaderConfig {
   onCapabilityRegistered?: (event: RegistryCapabilityEvent) => void;
 }
 
+export interface ExtensionPackageRoot {
+  path: string;
+  layout: "packages" | "installed";
+}
+
 /**
  * Module exports from an extension package
  */
 interface ExtensionModuleExports {
-  default?: RagdollExtension | ((config?: Record<string, unknown>) => RagdollExtension);
-  extension?: RagdollExtension;
   createExtension?: (config?: Record<string, unknown>) => RagdollExtension;
 }
 
 type NormalizedLoaderConfig = {
-  searchPaths: string[];
+  packageRoots: ExtensionPackageRoot[];
   readFile: (path: string) => Promise<string>;
-  readDir: (path: string) => Promise<string[]>;
+  readDirectory: (path: string) => Promise<string[]>;
   pathExists: (path: string) => Promise<boolean>;
   importModule: (modulePath: string) => Promise<unknown>;
   continueOnError: boolean;
-  registerOptions: Omit<RegisterOptions, "host" | "config"> & { config?: Record<string, unknown> };
+  registerOptions: Omit<RegisterOptions, "host" | "config"> & {
+    config?: Record<string, unknown>;
+  };
   hostEnvironment?: ExtensionHostEnvironment;
-  getHostEnvironment?: (manifest: ExtensionManifest) => ExtensionHostEnvironment;
+  getHostEnvironment?: (
+    manifest: ExtensionManifest,
+  ) => ExtensionHostEnvironment;
   onContributionLoaded?: (metadata: ExtensionContributionMetadata) => void;
   onCapabilityRegistered?: (event: RegistryCapabilityEvent) => void;
 };
-
-// =============================================================================
-// Default Implementations
-// =============================================================================
-
-async function defaultReadFile(filePath: string): Promise<string> {
-  const fs = await import("fs/promises");
-  return fs.readFile(filePath, "utf-8");
-}
-
-async function defaultReadDir(dirPath: string): Promise<string[]> {
-  const fs = await import("fs/promises");
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
-  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-}
-
-async function defaultPathExists(checkPath: string): Promise<boolean> {
-  const fs = await import("fs/promises");
-  try {
-    await fs.access(checkPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function defaultImportModule(modulePath: string): Promise<unknown> {
   return import(modulePath);
@@ -236,7 +242,7 @@ async function defaultImportModule(modulePath: string): Promise<unknown> {
 // =============================================================================
 
 /**
- * Discovers and loads ragdoll extensions from npm packages.
+ * Discovers and loads Ragdoll extension packages through host-provided adapters.
  */
 export class ExtensionLoader {
   private registry: ExtensionRegistry;
@@ -245,13 +251,13 @@ export class ExtensionLoader {
   private packageInfoCache: Map<string, ExtensionPackageInfo> = new Map(); // packageName -> info
   private registryDisposers: Array<() => void> = [];
 
-  constructor(registry: ExtensionRegistry, config: ExtensionLoaderConfig = {}) {
+  constructor(registry: ExtensionRegistry, config: ExtensionLoaderConfig) {
     this.registry = registry;
     this.config = {
-      searchPaths: config.searchPaths ?? [],
-      readFile: config.readFile ?? defaultReadFile,
-      readDir: config.readDir ?? defaultReadDir,
-      pathExists: config.pathExists ?? defaultPathExists,
+      packageRoots: config.packageRoots,
+      readFile: config.fileSystem.readFile,
+      readDirectory: config.fileSystem.readDirectory,
+      pathExists: config.fileSystem.pathExists,
       importModule: config.importModule ?? defaultImportModule,
       continueOnError: config.continueOnError ?? true,
       registerOptions: config.registerOptions ?? {},
@@ -263,7 +269,9 @@ export class ExtensionLoader {
 
     if (this.config.onContributionLoaded) {
       const dispose = this.registry.on("extension:registered", (event) => {
-        const metadata = this.registry.getContributionMetadata(event.extensionId);
+        const metadata = this.registry.getContributionMetadata(
+          event.extensionId,
+        );
         if (metadata) {
           this.config.onContributionLoaded?.(metadata);
         }
@@ -308,8 +316,8 @@ export class ExtensionLoader {
   async discoverPackages(): Promise<string[]> {
     const extensionPackages: string[] = [];
 
-    for (const searchPath of this.config.searchPaths) {
-      const packages = await this.scanDirectory(searchPath);
+    for (const packageRoot of this.config.packageRoots) {
+      const packages = await this.scanDirectory(packageRoot);
       extensionPackages.push(...packages);
     }
 
@@ -318,82 +326,45 @@ export class ExtensionLoader {
   }
 
   /**
-   * Scan a node_modules directory for extension packages.
-   * Also handles user extensions directories where packages are in subdirectories
-   * named by extension ID rather than package name.
+   * Scan a package root according to its explicitly configured layout.
    */
-  private async scanDirectory(nodeModulesPath: string): Promise<string[]> {
+  private async scanDirectory(root: ExtensionPackageRoot): Promise<string[]> {
     const extensions: string[] = [];
 
-    if (!(await this.config.pathExists(nodeModulesPath))) {
+    if (!(await this.config.pathExists(root.path))) {
       return extensions;
     }
 
-    // Check if this is a user extensions directory (not node_modules)
-    // User extensions are installed in subdirectories named by extension ID
-    const isUserExtensionsDir = !nodeModulesPath.includes("node_modules");
+    const entries = await this.config.readDirectory(root.path);
+    if (root.layout === "installed") {
+      for (const entry of entries) {
+        if (entry.startsWith(".")) continue;
+        const packagePath = this.joinPath(root.path, entry);
+        const packageJsonPath = this.joinPath(packagePath, "package.json");
+        if (!(await this.config.pathExists(packageJsonPath))) continue;
+        const packageJson = parseExtensionPackageJson(
+          await this.config.readFile(packageJsonPath),
+        );
+        if (packageJson.ragdollExtension) extensions.push(packageJson.name);
+      }
+      return extensions;
+    }
 
-    try {
-      if (isUserExtensionsDir) {
-        // For user extensions directory, scan subdirectories recursively
-        // Each subdirectory contains an extension with its own package.json
-        const entries = await this.config.readDir(nodeModulesPath);
-
-        for (const entry of entries) {
-          // Skip hidden files/directories and temp files
-          if (entry.startsWith(".")) {
-            continue;
-          }
-
-          const subdirPath = this.joinPath(nodeModulesPath, entry);
-
-          // Check if this subdirectory contains a package.json
-          const packageJsonPath = this.joinPath(subdirPath, "package.json");
-          if (await this.config.pathExists(packageJsonPath)) {
-            try {
-              const content = await this.config.readFile(packageJsonPath);
-              const pkg = JSON.parse(content) as ExtensionPackageJson;
-
-              // If it's an extension package, use the package name from package.json
-              if (pkg.ragdollExtension && pkg.name) {
-                extensions.push(pkg.name);
-              }
-            } catch {
-              // Skip invalid package.json files
-              continue;
-            }
+    for (const entry of entries) {
+      if (entry.startsWith("@")) {
+        const scopePath = this.joinPath(root.path, entry);
+        for (const scopedPackage of await this.config.readDirectory(
+          scopePath,
+        )) {
+          const packagePath = this.joinPath(scopePath, scopedPackage);
+          if (await this.isExtensionPackage(packagePath)) {
+            extensions.push(`${entry}/${scopedPackage}`);
           }
         }
       } else {
-        // Standard node_modules structure
-        const entries = await this.config.readDir(nodeModulesPath);
-
-        for (const entry of entries) {
-          // Handle scoped packages (@org/package)
-          if (entry.startsWith("@")) {
-            const scopePath = this.joinPath(nodeModulesPath, entry);
-            const scopedPackages = await this.config.readDir(scopePath);
-
-            for (const scopedPkg of scopedPackages) {
-              const pkgName = `${entry}/${scopedPkg}`;
-              const pkgPath = this.joinPath(scopePath, scopedPkg);
-
-              if (await this.isExtensionPackage(pkgPath)) {
-                extensions.push(pkgName);
-              }
-            }
-          } else {
-            // Regular package
-            const pkgPath = this.joinPath(nodeModulesPath, entry);
-
-            if (await this.isExtensionPackage(pkgPath)) {
-              extensions.push(entry);
-            }
-          }
-        }
+        const packagePath = this.joinPath(root.path, entry);
+        if (await this.isExtensionPackage(packagePath)) extensions.push(entry);
       }
-    } catch {
-      // Directory read failed, skip silently
     }
 
     return extensions;
@@ -409,24 +380,19 @@ export class ExtensionLoader {
       return false;
     }
 
-    try {
-      const content = await this.config.readFile(packageJsonPath);
-      const pkg = JSON.parse(content) as ExtensionPackageJson;
-      return !!pkg.ragdollExtension;
-    } catch {
-      return false;
-    }
+    const content = await this.config.readFile(packageJsonPath);
+    return Boolean(parseExtensionPackageJson(content).ragdollExtension);
   }
 
   /**
    * Load a specific extension package by name.
    *
-   * @param packageName - The npm package name (e.g., "@example/my-extension")
+   * @param packageName - The package name (e.g., "@example/my-extension")
    * @param config - Optional configuration to pass to createExtension()
    */
   async loadPackage(
     packageName: string,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<LoadResult> {
     // Check if already loaded
     if (this.loadedPackages.has(packageName)) {
@@ -440,7 +406,8 @@ export class ExtensionLoader {
 
     try {
       // Read package.json to get metadata and resolve package path
-      const { packageJson, packagePath } = await this.readPackageJsonWithPath(packageName);
+      const { packageJson, packagePath } =
+        await this.readPackageJsonWithPath(packageName);
       if (!packageJson || !packagePath) {
         return {
           packageName,
@@ -450,47 +417,60 @@ export class ExtensionLoader {
         };
       }
 
-      // Extract and cache package info
-      const packageInfo = this.extractPackageInfo(packageName, packagePath, packageJson) ?? undefined;
-      if (packageInfo) {
-        this.packageInfoCache.set(packageName, packageInfo);
+      const packageManifest = packageJson.ragdollExtension;
+      if (!packageManifest) {
+        return {
+          packageName,
+          extensionId: "",
+          success: false,
+          error: `Package '${packageName}' is not a Ragdoll extension`,
+        };
       }
 
-      // Determine extension configuration
-      const extensionConfig = this.resolveExtensionConfig(packageJson, config);
+      const packageInfo = this.extractPackageInfo(
+        packageName,
+        packagePath,
+        packageJson,
+      );
+      if (!packageInfo) {
+        throw new Error(
+          `Package '${packageName}' is missing extension metadata.`,
+        );
+      }
+      this.packageInfoCache.set(packageName, packageInfo);
 
-      // Resolve the entry point
-      const entryPoint = this.resolveEntryPoint(packageJson);
-      const fullModulePath = this.joinPath(packagePath, entryPoint);
+      const fullModulePath = this.joinPath(packagePath, packageManifest.entry);
 
       // Import the module using the full resolved path
       const moduleExports = (await this.config.importModule(
-        fullModulePath
+        fullModulePath,
       )) as ExtensionModuleExports;
 
       // Extract the extension
-      const extension = this.extractExtension(
-        moduleExports,
-        extensionConfig.config
-      );
+      const extension = this.extractExtension(moduleExports, config);
 
       if (!extension) {
         return {
           packageName,
           extensionId: "",
           success: false,
-          error: `Package '${packageName}' does not export a valid extension`,
+          error: `Package '${packageName}' must export a createExtension(config?) factory`,
         };
       }
 
-      // Override extension ID if specified
-      const extensionId = extensionConfig.id ?? extension.manifest.id;
-
-      // Create wrapper extension if ID override is needed
-      const finalExtension =
-        extensionId !== extension.manifest.id
-          ? this.createIdOverrideWrapper(extension, extensionId)
-          : extension;
+      // Package metadata augments the runtime manifest without exposing host details
+      // to the extension implementation.
+      const extensionId = packageManifest.id;
+      const finalExtension = this.createManifestWrapper(extension, {
+        id: extensionId,
+        name: packageManifest.name,
+        version: packageJson.version,
+        description:
+          packageManifest.description ??
+          packageJson.description ??
+          extension.manifest.description,
+        requiredCapabilities: packageManifest.requiredCapabilities,
+      });
 
       const host = this.resolveHostEnvironment(finalExtension.manifest);
       const baseOptions = this.config.registerOptions ?? {};
@@ -499,8 +479,20 @@ export class ExtensionLoader {
       await this.registry.register(finalExtension, {
         ...baseOptions,
         host,
-        config: extensionConfig.config ?? baseOptions.config,
+        config: config ?? baseOptions.config,
       });
+
+      const contribution = this.registry.getContributionMetadata(extensionId);
+      try {
+        this.assertDeclaredCapabilities(
+          packageName,
+          packageManifest.capabilities,
+          contribution,
+        );
+      } catch (error) {
+        await this.registry.unregister(extensionId);
+        throw error;
+      }
 
       // Track loaded package
       this.loadedPackages.set(packageName, extensionId);
@@ -517,7 +509,9 @@ export class ExtensionLoader {
         extensionId: "",
         success: false,
         error:
-          error instanceof Error ? error.message : "Unknown error loading package",
+          error instanceof Error
+            ? error.message
+            : "Unknown error loading package",
       };
     }
   }
@@ -525,7 +519,7 @@ export class ExtensionLoader {
   /**
    * Unload a previously loaded package.
    *
-   * @param packageName - The npm package name to unload
+   * @param packageName - The package name to unload
    */
   async unloadPackage(packageName: string): Promise<boolean> {
     const extensionId = this.loadedPackages.get(packageName);
@@ -533,23 +527,24 @@ export class ExtensionLoader {
       return false;
     }
 
-    const unregistered = await this.registry.unregister(extensionId);
-    if (unregistered) {
-      this.loadedPackages.delete(packageName);
+    try {
+      return await this.registry.unregister(extensionId);
+    } finally {
+      if (!this.registry.has(extensionId)) {
+        this.loadedPackages.delete(packageName);
+      }
     }
-
-    return unregistered;
   }
 
   /**
    * Reload a package (unload then load again).
    *
-   * @param packageName - The npm package name to reload
+   * @param packageName - The package name to reload
    * @param config - Optional new configuration
    */
   async reloadPackage(
     packageName: string,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<LoadResult> {
     await this.unloadPackage(packageName);
     return this.loadPackage(packageName, config);
@@ -563,7 +558,7 @@ export class ExtensionLoader {
       ([packageName, extensionId]) => ({
         packageName,
         extensionId,
-      })
+      }),
     );
   }
 
@@ -578,13 +573,16 @@ export class ExtensionLoader {
    * Get package info for an extension without loading it.
    * Returns configuration requirements (configSchema, oauth, etc.)
    */
-  async getPackageInfo(packageName: string): Promise<ExtensionPackageInfo | null> {
+  async getPackageInfo(
+    packageName: string,
+  ): Promise<ExtensionPackageInfo | null> {
     // Check cache first
     if (this.packageInfoCache.has(packageName)) {
       return this.packageInfoCache.get(packageName)!;
     }
 
-    const { packageJson, packagePath } = await this.readPackageJsonWithPath(packageName);
+    const { packageJson, packagePath } =
+      await this.readPackageJsonWithPath(packageName);
     if (!packageJson || !packagePath) {
       return null;
     }
@@ -625,81 +623,55 @@ export class ExtensionLoader {
   private extractPackageInfo(
     packageName: string,
     packagePath: string,
-    packageJson: ExtensionPackageJson
+    packageJson: ExtensionPackageJson,
   ): ExtensionPackageInfo | null {
     const ragdollExt = packageJson.ragdollExtension;
     if (!ragdollExt) return null;
 
-    const manifest = typeof ragdollExt === "boolean" ? {} : ragdollExt;
-
     return {
       packageName,
       packagePath,
-      extensionId: manifest.id ?? packageName,
-      name: manifest.name ?? packageJson.name,
-      description: manifest.description,
+      extensionId: ragdollExt.id,
+      name: ragdollExt.name,
+      description: ragdollExt.description,
       version: packageJson.version,
-      canDisable: manifest.canDisable ?? true,
-      configSchema: manifest.configSchema,
-      oauth: manifest.oauth,
-      requiredCapabilities: manifest.requiredCapabilities,
+      canDisable: ragdollExt.canDisable,
+      configSchema: ragdollExt.configSchema,
+      oauth: ragdollExt.oauth,
+      requiredCapabilities: ragdollExt.requiredCapabilities,
     };
   }
 
   /**
    * Read and parse package.json for a package, returning both the parsed JSON and the package path.
    */
-  private async readPackageJsonWithPath(
-    packageName: string
-  ): Promise<{ packageJson: ExtensionPackageJson | null; packagePath: string | null }> {
-    // Try to find the package in search paths
-    for (const searchPath of this.config.searchPaths) {
-      // First, try standard node_modules structure
-      const packagePath = this.joinPath(searchPath, ...packageName.split("/"));
-      const packageJsonPath = this.joinPath(packagePath, "package.json");
-
-      if (await this.config.pathExists(packageJsonPath)) {
-        try {
-          const content = await this.config.readFile(packageJsonPath);
-          const packageJson = JSON.parse(content) as ExtensionPackageJson;
-          return { packageJson, packagePath };
-        } catch {
-          continue;
-        }
+  private async readPackageJsonWithPath(packageName: string): Promise<{
+    packageJson: ExtensionPackageJson | null;
+    packagePath: string | null;
+  }> {
+    for (const root of this.config.packageRoots) {
+      if (root.layout === "packages") {
+        const packagePath = this.joinPath(root.path, ...packageName.split("/"));
+        const packageJsonPath = this.joinPath(packagePath, "package.json");
+        if (!(await this.config.pathExists(packageJsonPath))) continue;
+        return {
+          packageJson: parseExtensionPackageJson(
+            await this.config.readFile(packageJsonPath),
+          ),
+          packagePath,
+        };
       }
 
-      // If not found and this is a user extensions directory, search subdirectories
-      const isUserExtensionsDir = !searchPath.includes("node_modules");
-      if (isUserExtensionsDir) {
-        try {
-          const entries = await this.config.readDir(searchPath);
-
-          for (const entry of entries) {
-            // Skip hidden files/directories
-            if (entry.startsWith(".")) {
-              continue;
-            }
-
-            const subdirPath = this.joinPath(searchPath, entry);
-            const subdirPackageJsonPath = this.joinPath(subdirPath, "package.json");
-
-            if (await this.config.pathExists(subdirPackageJsonPath)) {
-              try {
-                const content = await this.config.readFile(subdirPackageJsonPath);
-                const packageJson = JSON.parse(content) as ExtensionPackageJson;
-
-                // Check if this package.json matches the package name we're looking for
-                if (packageJson.name === packageName) {
-                  return { packageJson, packagePath: subdirPath };
-                }
-              } catch {
-                continue;
-              }
-            }
-          }
-        } catch {
-          // Directory read failed, continue to next search path
-          continue;
+      for (const entry of await this.config.readDirectory(root.path)) {
+        if (entry.startsWith(".")) continue;
+        const packagePath = this.joinPath(root.path, entry);
+        const packageJsonPath = this.joinPath(packagePath, "package.json");
+        if (!(await this.config.pathExists(packageJsonPath))) continue;
+        const packageJson = parseExtensionPackageJson(
+          await this.config.readFile(packageJsonPath),
+        );
+        if (packageJson.name === packageName) {
+          return { packageJson, packagePath };
         }
       }
     }
@@ -707,80 +679,24 @@ export class ExtensionLoader {
     return { packageJson: null, packagePath: null };
   }
 
-  /**
-   * Resolve the entry point file for a package based on its package.json.
-   * Checks in order: exports, module, main, or defaults to "index.js".
-   */
-  private resolveEntryPoint(packageJson: ExtensionPackageJson): string {
-    // Check exports field (modern packages)
-    if (packageJson.exports) {
-      if (typeof packageJson.exports === "string") {
-        return packageJson.exports;
-      }
-      // If exports is an object, try common patterns
-      if (typeof packageJson.exports === "object") {
-        const exportsObj = packageJson.exports as Record<string, unknown>;
-        if (typeof exportsObj["."] === "string") {
-          return exportsObj["."];
-        }
-        if (typeof exportsObj["import"] === "string") {
-          return exportsObj["import"];
-        }
-        if (typeof exportsObj["default"] === "string") {
-          return exportsObj["default"];
-        }
-      }
-    }
-
-    // Check module field (ES modules)
-    if (packageJson.module) {
-      return packageJson.module;
-    }
-
-    // Check main field (CommonJS or fallback)
-    if (packageJson.main) {
-      return packageJson.main;
-    }
-
-    // Default to index.js
-    return "index.js";
-  }
-
-  /**
-   * Resolve extension configuration from package.json and overrides.
-   */
-  private resolveHostEnvironment(manifest: ExtensionManifest): ExtensionHostEnvironment {
+  private resolveHostEnvironment(
+    manifest: ExtensionManifest,
+  ): ExtensionHostEnvironment {
     if (this.config.getHostEnvironment) {
       const env = this.config.getHostEnvironment(manifest);
       if (env) {
         return env;
       }
       throw new Error(
-        `Host environment resolver did not return a value for extension '${manifest.id}'.`
+        `Host environment resolver did not return a value for extension '${manifest.id}'.`,
       );
     }
     if (this.config.hostEnvironment) {
       return this.config.hostEnvironment;
     }
     throw new Error(
-      `No host environment provided for extension '${manifest.id}'. Configure hostEnvironment or getHostEnvironment when creating the loader.`
+      `No host environment provided for extension '${manifest.id}'. Configure hostEnvironment or getHostEnvironment when creating the loader.`,
     );
-  }
-
-  private resolveExtensionConfig(
-    packageJson: ExtensionPackageJson,
-    overrideConfig?: Record<string, unknown>
-  ): { id?: string; config?: Record<string, unknown> } {
-    const ragdollExt = packageJson.ragdollExtension;
-
-    if (typeof ragdollExt === "boolean") {
-      return { config: overrideConfig };
-    }
-
-    return {
-      id: ragdollExt?.id,
-      config: overrideConfig ?? ragdollExt?.config,
-    };
   }
 
   /**
@@ -788,69 +704,69 @@ export class ExtensionLoader {
    */
   private extractExtension(
     exports: ExtensionModuleExports,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): RagdollExtension | null {
-    // Try createExtension function first
     if (typeof exports.createExtension === "function") {
       return exports.createExtension(config);
-    }
-
-    // Try named 'extension' export
-    if (exports.extension && this.isValidExtension(exports.extension)) {
-      return exports.extension;
-    }
-
-    // Try default export
-    if (exports.default) {
-      // Default could be a factory function
-      if (typeof exports.default === "function") {
-        const result = exports.default(config);
-        if (this.isValidExtension(result)) {
-          return result;
-        }
-      }
-      // Or a direct extension object
-      if (this.isValidExtension(exports.default)) {
-        return exports.default as RagdollExtension;
-      }
     }
 
     return null;
   }
 
   /**
-   * Check if an object looks like a valid RagdollExtension.
-   */
-  private isValidExtension(obj: unknown): obj is RagdollExtension {
-    if (!obj || typeof obj !== "object") {
-      return false;
-    }
-
-    const ext = obj as RagdollExtension;
-    const manifest = ext.manifest;
-    return (
-      typeof manifest?.id === "string" &&
-      typeof manifest.name === "string" &&
-      typeof manifest.version === "string" &&
-      typeof ext.activate === "function"
-    );
-  }
-
-  /**
    * Create a wrapper extension that overrides the ID.
    */
-  private createIdOverrideWrapper(
+  private createManifestWrapper(
     extension: RagdollExtension,
-    newId: string
+    packageMetadata: Pick<
+      ExtensionManifest,
+      "id" | "name" | "version" | "description" | "requiredCapabilities"
+    >,
   ): RagdollExtension {
+    const requiredCapabilities = [
+      ...new Set([
+        ...(extension.manifest.requiredCapabilities ?? []),
+        ...(packageMetadata.requiredCapabilities ?? []),
+      ]),
+    ];
     return {
       manifest: {
         ...extension.manifest,
-        id: newId,
+        ...packageMetadata,
+        requiredCapabilities,
       },
       activate: extension.activate.bind(extension),
       deactivate: extension.deactivate?.bind(extension),
     };
+  }
+
+  private assertDeclaredCapabilities(
+    packageName: string,
+    declared: ExtensionPackageManifest["capabilities"],
+    contribution: ExtensionContributionMetadata | undefined,
+  ): void {
+    if (!declared || !contribution) return;
+
+    type PackageCapability = NonNullable<
+      ExtensionPackageManifest["capabilities"]
+    >[number];
+    const actual = new Set<PackageCapability>();
+    if (contribution.tools.length > 0) actual.add("tools");
+    if (contribution.services.length > 0) actual.add("services");
+    if (contribution.stateChannels.length > 0) actual.add("stateChannels");
+    if (contribution.slots.length > 0) actual.add("slots");
+
+    const expected = new Set(declared);
+    const missing = declared.filter((capability) => !actual.has(capability));
+    const undeclared = [...actual].filter(
+      (capability) => !expected.has(capability),
+    );
+    if (missing.length > 0 || undeclared.length > 0) {
+      throw new Error(
+        `Package '${packageName}' capability manifest does not match its runtime contribution` +
+          ` (missing: ${missing.join(", ") || "none"}; undeclared: ${undeclared.join(", ") || "none"}).`,
+      );
+    }
   }
 
   dispose(): void {
@@ -864,7 +780,26 @@ export class ExtensionLoader {
    * Join path segments (simple cross-platform implementation).
    */
   private joinPath(...segments: string[]): string {
-    return segments.join("/").replace(/\/+/g, "/");
+    const joined = segments.join("/").replaceAll("\\", "/");
+    const prefix = joined.startsWith("/") ? "/" : "";
+    const normalized: string[] = [];
+
+    for (const segment of joined.split("/")) {
+      if (!segment || segment === ".") {
+        continue;
+      }
+      if (
+        segment === ".." &&
+        normalized.length > 0 &&
+        normalized.at(-1) !== ".."
+      ) {
+        normalized.pop();
+        continue;
+      }
+      normalized.push(segment);
+    }
+
+    return `${prefix}${normalized.join("/")}`;
   }
 }
 
@@ -877,13 +812,10 @@ export class ExtensionLoader {
  *
  * @example
  * ```ts
- * import path from "path";
- *
  * const loader = createLoader(registry, {
- *   searchPaths: [
- *     path.join(process.cwd(), "node_modules"),
- *     path.join(__dirname, "..", "node_modules"),
- *   ],
+ *   packageRoots: [{ path: extensionsDirectory, layout: "installed" }],
+ *   fileSystem: hostFileSystem,
+ *   hostEnvironment,
  * });
  *
  * await loader.discoverAndLoad();
@@ -891,7 +823,7 @@ export class ExtensionLoader {
  */
 export function createLoader(
   registry: ExtensionRegistry,
-  config?: ExtensionLoaderConfig
+  config: ExtensionLoaderConfig,
 ): ExtensionLoader {
   return new ExtensionLoader(registry, config);
 }

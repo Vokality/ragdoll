@@ -9,14 +9,10 @@
   "asar": {
     "smartUnpack": true
   },
-  "files": [
-    "dist/**/*",
-    "package.json"
-  ],
+  "files": ["dist/**/*", "package.json"],
   "nodeGypRebuild": false,
   "npmRebuild": false,
   "buildDependenciesFromSource": false,
-  "afterPack": "./scripts/after-pack.js",
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"],
@@ -37,4 +33,3 @@
     "allowToChangeInstallationDirectory": true
   }
 }
-

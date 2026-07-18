@@ -6,17 +6,19 @@ export interface StreamingHandlers {
   onStreamEnd: () => void;
 }
 
+export type ChatSendResult =
+  { success: true } | { success: false; error: string };
+
 export interface ChatGateway {
   fetchSettings(): Promise<Partial<ChatSettings> | undefined>;
   persistSettings(settings: Partial<ChatSettings>): Promise<void>;
   fetchConversation(): Promise<ChatMessage[]>;
   persistConversation(messages: ChatMessage[]): Promise<void>;
   clearConversation(): Promise<void>;
-  sendMessage(
-    message: string,
-    conversationHistory: ChatMessage[]
-  ): Promise<{ success: boolean; error?: string }>;
+  sendMessage(conversationHistory: ChatMessage[]): Promise<ChatSendResult>;
   subscribeToStreaming(handlers: StreamingHandlers): () => void;
-  onFunctionCall(callback: (name: string, args: Record<string, unknown>) => void): () => void;
+  onFunctionCall(
+    callback: (name: string, args: Record<string, unknown>) => void,
+  ): () => void;
   clearApiKey(): Promise<void>;
 }

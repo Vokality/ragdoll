@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import type { ExtensionMessage } from "./types";
-import { updateTasks, updatePomodoroState } from "./extension";
+import { randomBytes } from "node:crypto";
+import type { ExtensionMessage, WebviewMessage } from "./types";
 
 export class RagdollPanel {
   public static currentPanel: RagdollPanel | undefined;
@@ -11,11 +11,6 @@ export class RagdollPanel {
   private disposables: vscode.Disposable[] = [];
   private isReady = false;
   private pendingMessages: ExtensionMessage[] = [];
-  private lastPomodoroState: {
-    state: string;
-    remainingTime: number;
-    isBreak: boolean;
-  } | null = null;
 
   public static createOrShow(extensionUri: vscode.Uri): RagdollPanel {
     const column = vscode.ViewColumn.Beside;
@@ -77,7 +72,15 @@ export class RagdollPanel {
 
     // Handle messages from the webview
     this.panel.webview.onDidReceiveMessage(
-      (message) => {
+      (value: unknown) => {
+        if (!isWebviewMessage(value)) {
+          vscode.window.showErrorMessage(
+            "Emote received an invalid message from its webview.",
+          );
+          return;
+        }
+
+        const message = value;
         if (message.type === "ready") {
           this.isReady = true;
           // Send any pending messages
@@ -87,68 +90,6 @@ export class RagdollPanel {
           this.pendingMessages = [];
         } else if (message.type === "error") {
           vscode.window.showErrorMessage(`Ragdoll: ${message.message}`);
-        } else if (message.type === "tasksUpdate") {
-          // Store tasks for MCP server access
-          updateTasks(message.tasks);
-        } else if (message.type === "pomodoroStateUpdate") {
-          const newState = {
-            state: message.state.state,
-            remainingTime: message.state.remainingTime,
-            isBreak: message.state.isBreak,
-          };
-
-          // Detect timer completion and show notification
-          if (this.lastPomodoroState) {
-            const prevState = this.lastPomodoroState.state;
-            const prevRemaining = this.lastPomodoroState.remainingTime;
-            const prevIsBreak = this.lastPomodoroState.isBreak;
-
-            // Timer completed: transition from running to idle (break completed)
-            if (
-              prevState === "running" &&
-              prevIsBreak &&
-              newState.state === "idle"
-            ) {
-              vscode.window.showInformationMessage(
-                "🍅 Pomodoro: Break's over! Time to get back to work! 💪",
-                { modal: false },
-              );
-            }
-            // Session completed: transition from running (session) to running (break)
-            else if (
-              prevState === "running" &&
-              !prevIsBreak &&
-              newState.state === "running" &&
-              newState.isBreak
-            ) {
-              vscode.window.showInformationMessage(
-                "🍅 Pomodoro: Focus session complete! Time for a break! ☕",
-                { modal: false },
-              );
-            }
-            // Timer reached zero while running (fallback detection)
-            else if (
-              prevState === "running" &&
-              prevRemaining > 0 &&
-              newState.remainingTime === 0
-            ) {
-              if (prevIsBreak) {
-                vscode.window.showInformationMessage(
-                  "🍅 Pomodoro: Break's over! Time to get back to work! 💪",
-                  { modal: false },
-                );
-              } else {
-                vscode.window.showInformationMessage(
-                  "🍅 Pomodoro: Focus session complete! Time for a break! ☕",
-                  { modal: false },
-                );
-              }
-            }
-          }
-
-          // Store pomodoro state for MCP server access
-          updatePomodoroState(newState);
-          this.lastPomodoroState = newState;
         }
       },
       null,
@@ -232,11 +173,17 @@ export class RagdollPanel {
 }
 
 function getNonce(): string {
-  let text = "";
-  const possible =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  return randomBytes(16).toString("hex");
+}
+
+function isWebviewMessage(value: unknown): value is WebviewMessage {
+  if (!value || typeof value !== "object") {
+    return false;
   }
-  return text;
+
+  const message = value as Record<string, unknown>;
+  return (
+    message.type === "ready" ||
+    (message.type === "error" && typeof message.message === "string")
+  );
 }

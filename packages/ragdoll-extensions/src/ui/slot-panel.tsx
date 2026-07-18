@@ -1,8 +1,7 @@
 /**
  * SlotPanel - Renders an extension UI slot's panel as a bottom sheet.
  *
- * Supports both list-based panels (with items, sections, actions)
- * and custom panels (with a React component).
+ * Supports serializable list-based panels with items, sections, and actions.
  */
 
 import {
@@ -39,18 +38,12 @@ type AnimationState = "entering" | "visible" | "exiting" | "hidden";
  * Panel component for an extension UI slot.
  *
  * Renders as a bottom sheet with the slot's panel configuration.
- * Handles both list-based and custom panel types.
+ * The panel contract is serializable so it can cross process boundaries.
  */
 export function SlotPanel({ slot, onClose }: SlotPanelProps) {
   const state = useSlotState(slot);
 
-  return (
-    <SlotPanelBase
-      isOpen={true}
-      onClose={onClose}
-      panel={state.panel}
-    />
-  );
+  return <SlotPanelBase isOpen={true} onClose={onClose} panel={state.panel} />;
 }
 
 // =============================================================================
@@ -67,7 +60,8 @@ interface SlotPanelBaseProps {
  * Base panel component that can be used directly with a panel config.
  */
 export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
-  const [animationState, setAnimationState] = useState<AnimationState>("hidden");
+  const [animationState, setAnimationState] =
+    useState<AnimationState>("hidden");
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Handle open/close with animation states
@@ -128,12 +122,7 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
           <div style={styles.handle} />
         </div>
 
-        {/* Render based on panel type */}
-        {panel.type === "list" ? (
-          <ListPanel config={panel} onClose={handleClose} />
-        ) : (
-          <CustomPanel config={panel} onClose={handleClose} />
-        )}
+        <ListPanel config={panel} onClose={handleClose} />
       </div>
     </>
   );
@@ -149,9 +138,11 @@ interface ListPanelProps {
 }
 
 function ListPanel({ config, onClose }: ListPanelProps) {
-  const { title, emptyMessage, emptyIcon, items, sections, actions } = config;
+  const { title, emptyMessage, items, sections, actions } = config;
 
-  const hasItems = (items && items.length > 0) || (sections && sections.some(s => s.items.length > 0));
+  const hasItems =
+    (items && items.length > 0) ||
+    (sections && sections.some((s) => s.items.length > 0));
 
   return (
     <>
@@ -172,7 +163,6 @@ function ListPanel({ config, onClose }: ListPanelProps) {
       <div style={styles.content}>
         {!hasItems ? (
           <div style={styles.emptyState}>
-            {emptyIcon && <span style={styles.emptyIcon}>{emptyIcon}</span>}
             <p style={styles.emptyText}>{emptyMessage ?? "No items"}</p>
           </div>
         ) : sections ? (
@@ -203,43 +193,6 @@ function ListPanel({ config, onClose }: ListPanelProps) {
 }
 
 // =============================================================================
-// Custom Panel Renderer
-// =============================================================================
-
-interface CustomPanelProps {
-  config: { type: "custom"; title?: string; component: React.ComponentType<{ onClose: () => void }> };
-  onClose: () => void;
-}
-
-function CustomPanel({ config, onClose }: CustomPanelProps) {
-  const { title, component: CustomComponent } = config;
-
-  return (
-    <>
-      {/* Optional header for custom panels */}
-      {title && (
-        <div style={styles.header}>
-          <h2 style={styles.title}>{title}</h2>
-          <button
-            onClick={onClose}
-            style={styles.closeButton}
-            className="slot-panel-close"
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </button>
-        </div>
-      )}
-
-      {/* Custom content */}
-      <div style={styles.customContent}>
-        <CustomComponent onClose={onClose} />
-      </div>
-    </>
-  );
-}
-
-// =============================================================================
 // Panel Section Component
 // =============================================================================
 
@@ -248,7 +201,9 @@ interface PanelSectionProps {
 }
 
 function PanelSection({ section }: PanelSectionProps) {
-  const [isCollapsed, setIsCollapsed] = useState(section.defaultCollapsed ?? false);
+  const [isCollapsed, setIsCollapsed] = useState(
+    section.defaultCollapsed ?? false,
+  );
 
   return (
     <section style={styles.section}>
@@ -258,10 +213,14 @@ function PanelSection({ section }: PanelSectionProps) {
             ...styles.sectionTitle,
             cursor: section.collapsible ? "pointer" : "default",
           }}
-          onClick={section.collapsible ? () => setIsCollapsed(!isCollapsed) : undefined}
+          onClick={
+            section.collapsible ? () => setIsCollapsed(!isCollapsed) : undefined
+          }
         >
           {section.collapsible && (
-            <span style={{ marginRight: "8px" }}>{isCollapsed ? "▸" : "▾"}</span>
+            <span style={{ marginRight: "8px" }}>
+              {isCollapsed ? "▸" : "▾"}
+            </span>
           )}
           {section.title} ({section.items.length})
         </h3>
@@ -349,7 +308,9 @@ function PanelItem({ item, index }: PanelItemProps) {
         >
           {item.label}
         </span>
-        {item.sublabel && <span style={styles.itemSublabel}>{item.sublabel}</span>}
+        {item.sublabel && (
+          <span style={styles.itemSublabel}>{item.sublabel}</span>
+        )}
       </div>
     </li>
   );
@@ -384,7 +345,14 @@ function ActionButton({ action }: ActionButtonProps) {
 
 function CloseIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -393,7 +361,14 @@ function CloseIcon() {
 
 function CheckIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -408,7 +383,8 @@ function getStatusStyle(status?: ItemStatus): CSSProperties {
     case "active":
       return {
         borderColor: "var(--accent, #5a9bc4)",
-        boxShadow: "0 0 0 1px var(--accent-glow, rgba(90, 155, 196, 0.3)), 0 0 12px var(--accent-glow, rgba(90, 155, 196, 0.3))",
+        boxShadow:
+          "0 0 0 1px var(--accent-glow, rgba(90, 155, 196, 0.3)), 0 0 12px var(--accent-glow, rgba(90, 155, 196, 0.3))",
       };
     case "success":
       return {
@@ -430,7 +406,9 @@ function getStatusStyle(status?: ItemStatus): CSSProperties {
   }
 }
 
-function getActionVariantStyle(variant?: PanelAction["variant"]): CSSProperties {
+function getActionVariantStyle(
+  variant?: PanelAction["variant"],
+): CSSProperties {
   switch (variant) {
     case "primary":
       return {
@@ -619,10 +597,6 @@ const styles: Record<string, CSSProperties> = {
     overflow: "auto",
     padding: "16px 20px 24px",
   },
-  customContent: {
-    flex: 1,
-    overflow: "auto",
-  },
   emptyState: {
     display: "flex",
     flexDirection: "column",
@@ -630,11 +604,6 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "center",
     padding: "40px 20px",
     textAlign: "center",
-  },
-  emptyIcon: {
-    fontSize: "48px",
-    marginBottom: "16px",
-    opacity: 0.3,
   },
   emptyText: {
     fontSize: "16px",
@@ -691,7 +660,8 @@ const styles: Record<string, CSSProperties> = {
     backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
     borderRadius: "var(--radius-md, 10px)",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
-    transition: "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease",
+    transition:
+      "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease",
   },
   itemMedia: {
     width: "48px",
@@ -712,7 +682,8 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
     flexShrink: 0,
     marginTop: "2px",
-    transition: "border-color 150ms ease, background 150ms ease, transform 150ms ease",
+    transition:
+      "border-color 150ms ease, background 150ms ease, transform 150ms ease",
     padding: 0,
   },
   checkboxChecked: {

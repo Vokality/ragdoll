@@ -29,14 +29,14 @@ Emote lets AI assistants step out of the chat window and into a lively character
 
 ```bash
 cd apps/emote
-bun install
+bun install --frozen-lockfile
 bun run verify
 bun run build
-npx vsce package --no-dependencies
+bun run package
 code --install-extension emote-*.vsix
 ```
 
-> Bun installs workspaces quickly, while production builds still rely on `vsce` for Marketplace compatibility.
+> Bun owns dependency installation and command execution. The `package` script invokes `vsce` through `bunx` for Marketplace compatibility.
 
 ## MCP Setup
 
@@ -47,7 +47,7 @@ code --install-extension emote-*.vsix
 {
   "mcpServers": {
     "emote": {
-      "command": "node",
+      "command": "bun",
       "args": ["~/.emote/mcp-server.js"]
     }
   }
@@ -73,7 +73,7 @@ The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activat
 | `Emote: Set Head Pose`          | Tilt the head using yaw/pitch degrees.                       |
 | `Emote: Set Speech Bubble`      | Show retro terminal text with tones (default/whisper/shout). |
 | `Emote: Set Theme`              | Swap between Default, Robot, Alien, or Monochrome.           |
-| `Emote: Set Character Variant`  | Choose between Human or Einstein character variants.          |
+| `Emote: Set Character Variant`  | Choose between Human or Einstein character variants.         |
 | `Emote: Copy MCP Configuration` | Copy the JSON block shown above.                             |
 
 ### MCP Tools

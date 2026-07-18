@@ -54,10 +54,12 @@ export const ConfigFieldSchema = z.discriminatedUnion("type", [
     description: z.string().optional(),
     required: z.boolean().optional(),
     default: z.string().optional(),
-    options: z.array(z.object({
-      value: z.string(),
-      label: z.string(),
-    })),
+    options: z.array(
+      z.object({
+        value: z.string(),
+        label: z.string(),
+      }),
+    ),
   }),
 ]);
 
@@ -212,7 +214,9 @@ export interface ExtensionConfigStatus {
 /**
  * Convert a JSON config schema to a Zod schema for runtime validation.
  */
-export function configSchemaToZod(schema: ConfigSchema): z.ZodObject<Record<string, z.ZodTypeAny>> {
+export function configSchemaToZod(
+  schema: ConfigSchema,
+): z.ZodObject<Record<string, z.ZodTypeAny>> {
   const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const [key, field] of Object.entries(schema)) {
@@ -239,7 +243,10 @@ export function configSchemaToZod(schema: ConfigSchema): z.ZodObject<Record<stri
         break;
       }
       case "select": {
-        const values = field.options.map(o => o.value) as [string, ...string[]];
+        const values = field.options.map((o) => o.value) as [
+          string,
+          ...string[],
+        ];
         fieldSchema = z.enum(values);
         break;
       }
@@ -265,7 +272,7 @@ export function configSchemaToZod(schema: ConfigSchema): z.ZodObject<Record<stri
  */
 export function validateConfigValues(
   schema: ConfigSchema,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
 ): { success: true; data: ConfigValues } | { success: false; error: string } {
   const zodSchema = configSchemaToZod(schema);
   const result = zodSchema.safeParse(values);
@@ -288,7 +295,7 @@ export function validateConfigValues(
  */
 export function getMissingRequiredFields(
   schema: ConfigSchema,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
 ): string[] {
   const missing: string[] = [];
 
@@ -309,7 +316,7 @@ export function getMissingRequiredFields(
  */
 export function applyConfigDefaults(
   schema: ConfigSchema,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
 ): ConfigValues {
   const result: ConfigValues = { ...values } as ConfigValues;
 

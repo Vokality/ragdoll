@@ -16,8 +16,7 @@ const variantRegistry = new Map<string, CharacterVariant>([
 export function getVariant(id: string): CharacterVariant {
   const variant = variantRegistry.get(id);
   if (!variant) {
-    console.warn(`Variant "${id}" not found, using default "human" variant`);
-    return humanVariant;
+    throw new Error(`Unknown character variant: ${id}`);
   }
   return variant;
 }

@@ -1,52 +1,200 @@
 import type { ChatMessage } from "../domain/chat";
-import { mergeSettings, type ChatSettings } from "../domain/settings";
-import type { ChatGateway, StreamingHandlers } from "./ports/chat-gateway";
+import { appendMessage, getVisibleMessages } from "../domain/chat";
+import type { ChatSettings } from "../domain/settings";
+import { DEFAULT_SETTINGS, mergeSettings } from "../domain/settings";
+import type { ChatGateway } from "./ports/chat-gateway";
+import type {
+  CharacterThemeId,
+  CharacterVariantId,
+} from "../../electron/electron-api";
 
-export interface HydratedChatState {
-  messages: ChatMessage[];
+export interface ChatSnapshot {
   settings: ChatSettings;
+  visibleMessages: ChatMessage[];
+  isStreaming: boolean;
+  isLoading: boolean;
+  error: string | null;
 }
 
+const INITIAL_SNAPSHOT: ChatSnapshot = {
+  settings: DEFAULT_SETTINGS,
+  visibleMessages: [],
+  isStreaming: false,
+  isLoading: false,
+  error: null,
+};
+
 export class ChatService {
+  private messages: ChatMessage[] = [];
+  private streamingContent = "";
+  private snapshot = INITIAL_SNAPSHOT;
+  private readonly listeners = new Set<() => void>();
+  private unsubscribeStreaming: (() => void) | null = null;
+  private startPromise: Promise<void> | null = null;
+
   constructor(private readonly gateway: ChatGateway) {}
 
-  async hydrate(): Promise<HydratedChatState> {
+  readonly getSnapshot = (): ChatSnapshot => this.snapshot;
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  start(): Promise<void> {
+    if (this.startPromise) return this.startPromise;
+
+    this.unsubscribeStreaming = this.gateway.subscribeToStreaming({
+      onText: (text) => {
+        this.streamingContent += text;
+        this.publish();
+      },
+      onStreamEnd: () => this.finishStream(),
+    });
+    this.startPromise = this.hydrate().catch((error: unknown) => {
+      this.reportError(error);
+    });
+    return this.startPromise;
+  }
+
+  stop(): void {
+    this.unsubscribeStreaming?.();
+    this.unsubscribeStreaming = null;
+    this.startPromise = null;
+  }
+
+  readonly sendMessage = async (
+    message: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    const trimmed = message.trim();
+    if (!trimmed) return { success: false, error: "Message is empty" };
+    if (this.snapshot.isLoading) {
+      return { success: false, error: "Already processing" };
+    }
+
+    this.messages = appendMessage(this.messages, {
+      role: "user",
+      content: trimmed,
+    });
+    this.streamingContent = "";
+    this.publish({ isLoading: true, isStreaming: true, error: null });
+
+    let result: Awaited<ReturnType<ChatGateway["sendMessage"]>>;
+    try {
+      result = await this.gateway.sendMessage(this.messages);
+    } catch (error) {
+      result = { success: false, error: this.getErrorMessage(error) };
+    }
+    if (!result.success) {
+      this.streamingContent = "";
+      this.publish({
+        isLoading: false,
+        isStreaming: false,
+        error: result.error,
+      });
+    }
+    return result;
+  };
+
+  readonly changeTheme = async (theme: CharacterThemeId): Promise<boolean> => {
+    try {
+      await this.gateway.persistSettings({ theme });
+      this.publish({
+        settings: { ...this.snapshot.settings, theme },
+        error: null,
+      });
+      return true;
+    } catch (error) {
+      this.reportError(error);
+      return false;
+    }
+  };
+
+  readonly changeVariant = async (
+    variant: CharacterVariantId,
+  ): Promise<boolean> => {
+    try {
+      await this.gateway.persistSettings({ variant });
+      this.publish({
+        settings: { ...this.snapshot.settings, variant },
+        error: null,
+      });
+      return true;
+    } catch (error) {
+      this.reportError(error);
+      return false;
+    }
+  };
+
+  readonly clearConversation = async (): Promise<boolean> => {
+    try {
+      await this.gateway.clearConversation();
+      this.messages = [];
+      this.streamingContent = "";
+      this.publish({ error: null });
+      return true;
+    } catch (error) {
+      this.reportError(error);
+      return false;
+    }
+  };
+
+  readonly clearApiKey = async (): Promise<boolean> => {
+    try {
+      await this.gateway.clearApiKey();
+      return true;
+    } catch (error) {
+      this.reportError(error);
+      return false;
+    }
+  };
+
+  readonly onFunctionCall = (
+    callback: (name: string, args: Record<string, unknown>) => void,
+  ): (() => void) => this.gateway.onFunctionCall(callback);
+
+  private async hydrate(): Promise<void> {
     const [settings, messages] = await Promise.all([
       this.gateway.fetchSettings(),
       this.gateway.fetchConversation(),
     ]);
+    this.messages = messages;
+    this.publish({ settings: mergeSettings(settings) });
+  }
 
-    return {
-      messages,
-      settings: mergeSettings(settings),
+  private finishStream(): void {
+    if (this.streamingContent) {
+      this.messages = appendMessage(this.messages, {
+        role: "assistant",
+        content: this.streamingContent,
+      });
+      void this.gateway
+        .persistConversation(this.messages)
+        .catch((error: unknown) => this.reportError(error));
+    }
+    this.streamingContent = "";
+    this.publish({ isLoading: false, isStreaming: false });
+  }
+
+  private publish(update: Partial<ChatSnapshot> = {}): void {
+    this.snapshot = {
+      ...this.snapshot,
+      ...update,
+      visibleMessages: getVisibleMessages(
+        this.messages,
+        (update.isStreaming ?? this.snapshot.isStreaming)
+          ? this.streamingContent
+          : null,
+      ),
     };
+    for (const listener of this.listeners) listener();
   }
 
-  sendMessage(message: string, conversationHistory: ChatMessage[]) {
-    return this.gateway.sendMessage(message, conversationHistory);
+  private reportError(error: unknown): void {
+    this.publish({ error: this.getErrorMessage(error) });
   }
 
-  subscribeToStreaming(handlers: StreamingHandlers) {
-    return this.gateway.subscribeToStreaming(handlers);
-  }
-
-  onFunctionCall(callback: (name: string, args: Record<string, unknown>) => void) {
-    return this.gateway.onFunctionCall(callback);
-  }
-
-  async updateSettings(settings: Partial<ChatSettings>) {
-    await this.gateway.persistSettings(settings);
-  }
-
-  async persistConversation(messages: ChatMessage[]) {
-    await this.gateway.persistConversation(messages);
-  }
-
-  async clearConversation() {
-    await this.gateway.clearConversation();
-  }
-
-  async clearApiKey() {
-    await this.gateway.clearApiKey();
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 }

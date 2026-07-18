@@ -22,7 +22,11 @@ import type { ExtensionUISlot, SlotButtonProps } from "./types.js";
  * />
  * ```
  */
-export function SlotButton({ slot, isActive = false, onClick }: SlotButtonProps) {
+export function SlotButton({
+  slot,
+  isActive = false,
+  onClick,
+}: SlotButtonProps) {
   const state = useSlotState(slot);
 
   // Don't render if slot is not visible

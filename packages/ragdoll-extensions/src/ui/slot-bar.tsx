@@ -54,13 +54,6 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
     return visibleSlots.find((s) => s.id === activeSlotId) ?? null;
   }, [visibleSlots, activeSlotId]);
 
-  // Auto-close panel if active slot becomes invisible
-  useMemo(() => {
-    if (activeSlotId && !visibleSlots.some((s) => s.id === activeSlotId)) {
-      setActiveSlotId(null);
-    }
-  }, [activeSlotId, visibleSlots]);
-
   const handleSlotClick = useCallback((slotId: string) => {
     setActiveSlotId((current) => (current === slotId ? null : slotId));
   }, []);
@@ -88,12 +81,7 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
       </div>
 
       {/* Render active slot's panel */}
-      {activeSlot && (
-        <SlotPanel
-          slot={activeSlot}
-          onClose={handleClosePanel}
-        />
-      )}
+      {activeSlot && <SlotPanel slot={activeSlot} onClose={handleClosePanel} />}
     </>
   );
 }
@@ -132,12 +120,7 @@ export interface ControlledSlotBarProps {
  *         activeSlotId={activeSlotId}
  *         onSlotClick={setActiveSlotId}
  *       />
- *       {activeSlotId && (
- *         <MyCustomPanel
- *           slot={slots.find(s => s.id === activeSlotId)}
- *           onClose={() => setActiveSlotId(null)}
- *         />
- *       )}
+ *       {activeSlotId && <span>Active slot: {activeSlotId}</span>}
  *     </>
  *   );
  * }
@@ -157,7 +140,7 @@ export function ControlledSlotBar({
     (slotId: string) => {
       onSlotClick(activeSlotId === slotId ? null : slotId);
     },
-    [activeSlotId, onSlotClick]
+    [activeSlotId, onSlotClick],
   );
 
   // Don't render if no visible slots

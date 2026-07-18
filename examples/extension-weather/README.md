@@ -1,139 +1,42 @@
 # Example Weather Extension
 
-This is an example extension package that demonstrates how to create distributable Ragdoll extensions.
+A self-contained Ragdoll extension package demonstrating the canonical manifest and factory export.
 
-## What This Demonstrates
-
-1. **Package Structure** - How to set up `package.json` with `ragdollExtension` config
-2. **Extension Factory** - Using `createExtension()` to define tools
-3. **Auto-Discovery** - How the ExtensionLoader finds and loads your package
-4. **Multiple Export Formats** - Supporting various import patterns
-
-## Installation
+## Build
 
 ```bash
-# In a project using @vokality/ragdoll-extensions
-bun add @example/ragdoll-extension-weather
+bun run --filter @example/ragdoll-extension-weather build
 ```
 
-## Usage
+## Package contract
 
-### Auto-Discovery (Recommended)
+`package.json` declares the extension ID, entrypoint, provided tool capability, config schema, and absence of required host capabilities. `src/index.ts` exports one canonical factory:
 
-If your project uses the ExtensionLoader, the extension is automatically discovered:
+```ts
+import { createExtension } from "@example/ragdoll-extension-weather";
 
-```typescript
-import { createRegistry, createLoader } from "@vokality/ragdoll-extensions";
-import path from "path";
+const weather = createExtension({ defaultUnits: "fahrenheit" });
+await registry.register(weather, { host });
+```
 
-const registry = createRegistry();
+The package loader calls the same factory and supplies validated host config:
+
+```ts
+import { createLoader } from "@vokality/ragdoll-extensions/loader";
+
 const loader = createLoader(registry, {
-  searchPaths: [path.join(process.cwd(), "node_modules")],
+  packageRoots: [{ path: extensionsDirectory, layout: "installed" }],
+  fileSystem: hostFileSystem,
+  hostEnvironment: host,
 });
 
-// This will find and load the weather extension automatically
-await loader.discoverAndLoad();
-```
-
-### Manual Registration
-
-```typescript
-import { createRegistry } from "@vokality/ragdoll-extensions";
-import { createWeatherExtension } from "@example/ragdoll-extension-weather";
-
-const registry = createRegistry();
-
-const weatherExtension = createWeatherExtension({
-  defaultUnits: "fahrenheit",
-});
-
-await registry.register(weatherExtension);
-```
-
-## Tools Provided
-
-### `getWeather`
-
-Get the current weather for a location.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `location` | string | Yes | City name (e.g., "New York", "London") |
-| `units` | string | No | Temperature units: "celsius" or "fahrenheit" |
-
-**Example:**
-
-```typescript
-const result = await registry.executeTool("getWeather", {
-  location: "Tokyo",
-  units: "celsius",
-});
-
-// Result:
-// {
-//   success: true,
-//   data: {
-//     location: "tokyo",
-//     temperature: 28,
-//     units: "celsius",
-//     condition: "humid",
-//     humidity: 85
-//   }
-// }
-```
-
-## Configuration
-
-Configure via `package.json`:
-
-```json
-{
-  "ragdollExtension": {
-    "id": "weather",
-    "config": {
-      "defaultUnits": "celsius"
-    }
-  }
-}
-```
-
-Or pass config when creating manually:
-
-```typescript
-createWeatherExtension({
-  defaultUnits: "fahrenheit",
-  apiKey: "your-api-key", // For real weather APIs
+await loader.loadPackage("@example/ragdoll-extension-weather", {
+  defaultUnits: "celsius",
 });
 ```
 
-## Creating Your Own Extension
+## Tool
 
-Use this example as a template:
+`getWeather` accepts a city name and optional `celsius` or `fahrenheit` units. It uses deterministic mock data so the example needs no network or secret.
 
-1. **Create package.json** with `ragdollExtension` field:
-   ```json
-   {
-     "name": "@your-org/ragdoll-extension-xyz",
-     "ragdollExtension": true
-   }
-   ```
-
-2. **Export your extension** (one of these):
-   ```typescript
-   // Option 1: Named export
-   export const extension = createExtension({ ... });
-
-   // Option 2: Factory function (receives config)
-   export function createExtension(config) { ... }
-
-   // Option 3: Default export
-   export default myExtension;
-   ```
-
-3. **Publish to npm** and users can auto-discover it!
-
-## License
-
-MIT
+Use this package as the structural template for new extensions; replace its domain behavior and package metadata rather than adding host-specific imports.

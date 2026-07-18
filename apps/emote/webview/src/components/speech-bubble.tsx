@@ -14,7 +14,7 @@ export function SpeechBubble({
 }: SpeechBubbleProps) {
   if (!text) return null;
 
-  // Theme-aware colors (matching TaskDrawer pattern)
+  // Derive the bubble palette from the active character theme.
   const textColor = theme?.colors.hair.light ?? "#f1f5f9";
   const border = theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)";
   const background = theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.15)";

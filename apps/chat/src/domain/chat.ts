@@ -8,7 +8,10 @@ export interface ChatMessage {
 /**
  * Append a new message to the existing conversation history.
  */
-export function appendMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
+export function appendMessage(
+  messages: ChatMessage[],
+  message: ChatMessage,
+): ChatMessage[] {
   return [...messages, message];
 }
 
@@ -19,7 +22,7 @@ export function appendMessage(messages: ChatMessage[], message: ChatMessage): Ch
 export function getVisibleMessages(
   messages: ChatMessage[],
   streamingContent?: string | null,
-  limit = 2
+  limit = 2,
 ): ChatMessage[] {
   const history = streamingContent
     ? [...messages, { role: "assistant" as const, content: streamingContent }]

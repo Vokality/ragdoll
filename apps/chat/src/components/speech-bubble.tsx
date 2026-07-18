@@ -54,9 +54,7 @@ export function SpeechBubble({ text, isStreaming }: SpeechBubbleProps) {
       >
         <div style={{ ...styles.content, color: textColor }}>
           {text || ""}
-          {isStreaming && (
-            <span style={styles.cursor}>▌</span>
-          )}
+          {isStreaming && <span style={styles.cursor}>▌</span>}
         </div>
       </div>
     </>

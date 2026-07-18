@@ -16,7 +16,7 @@ import type {
   OAuthTokens,
   OAuthState,
   HostOAuthCapability,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 
 // =============================================================================
 // Types
@@ -55,7 +55,8 @@ type OAuthStateListener = (state: OAuthState) => void;
 // =============================================================================
 
 function generateRandomString(length: number): string {
-  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const possible =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const values = crypto.randomBytes(length);
   return Array.from(values)
     .map((x) => possible[x % possible.length])
@@ -131,7 +132,12 @@ export class OAuthManager implements HostOAuthCapability {
         }
       }
     } catch (error) {
-      this.log("error", "Failed to initialize OAuth:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.setState({
+        status: "error",
+        isAuthenticated: false,
+        error: message,
+      });
     }
 
     this.initialized = true;
@@ -193,7 +199,10 @@ export class OAuthManager implements HostOAuthCapability {
     }
 
     // Check if token is expired or about to expire (within 60 seconds)
-    if (this.tokens.expiresAt && Date.now() >= this.tokens.expiresAt - 60 * 1000) {
+    if (
+      this.tokens.expiresAt &&
+      Date.now() >= this.tokens.expiresAt - 60 * 1000
+    ) {
       // Try to refresh
       if (this.tokens.refreshToken) {
         try {
@@ -284,7 +293,9 @@ export class OAuthManager implements HostOAuthCapability {
       this.tokens = {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+        expiresAt: data.expires_in
+          ? Date.now() + data.expires_in * 1000
+          : undefined,
         scope: data.scope,
         tokenType: data.token_type,
       };
@@ -351,7 +362,9 @@ export class OAuthManager implements HostOAuthCapability {
       this.tokens = {
         accessToken: data.access_token,
         refreshToken: data.refresh_token ?? this.tokens.refreshToken,
-        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+        expiresAt: data.expires_in
+          ? Date.now() + data.expires_in * 1000
+          : undefined,
         scope: data.scope ?? this.tokens.scope,
         tokenType: data.token_type ?? this.tokens.tokenType,
       };
@@ -422,7 +435,10 @@ export class OAuthManager implements HostOAuthCapability {
     }
   }
 
-  private log(level: "debug" | "info" | "warn" | "error", ...args: unknown[]): void {
+  private log(
+    level: "debug" | "info" | "warn" | "error",
+    ...args: unknown[]
+  ): void {
     const logger = this.config.logger;
     if (logger) {
       logger[level](`[OAuth:${this.config.extensionId}]`, ...args);

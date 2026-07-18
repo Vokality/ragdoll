@@ -54,7 +54,7 @@ export function useSlotState(slot: ExtensionUISlot): SlotState {
   return useSyncExternalStore(
     slot.state.subscribe,
     slot.state.getState,
-    slot.state.getState // Server snapshot (same as client for our use case)
+    slot.state.getState, // Server snapshot (same as client for our use case)
   );
 }
 
@@ -65,11 +65,7 @@ export function useSlotState(slot: ExtensionUISlot): SlotState {
  * @returns Current slot state
  */
 export function useSlotStateStore(store: SlotStateStore): SlotState {
-  return useSyncExternalStore(
-    store.subscribe,
-    store.getState,
-    store.getState
-  );
+  return useSyncExternalStore(store.subscribe, store.getState, store.getState);
 }
 
 // =============================================================================
@@ -111,10 +107,7 @@ export function useSlotBadge(slot: ExtensionUISlot): number | string | null {
  * @returns Whether the slot is visible
  */
 export function useSlotVisible(slot: ExtensionUISlot): boolean {
-  const getSnapshot = useCallback(
-    () => slot.state.getState().visible,
-    [slot]
-  );
+  const getSnapshot = useCallback(() => slot.state.getState().visible, [slot]);
 
   return useSyncExternalStore(slot.state.subscribe, getSnapshot, getSnapshot);
 }
@@ -144,7 +137,7 @@ export function useSlotRegistry(registry: SlotRegistry): ExtensionUISlot[] {
     (callback: () => void) => {
       return registry.subscribe(() => callback());
     },
-    [registry]
+    [registry],
   );
 
   return useSyncExternalStore(subscribe, registry.getSlots, registry.getSlots);
@@ -197,13 +190,13 @@ export function useVisibleSlots(slots: ExtensionUISlot[]): ExtensionUISlot[] {
           // Increment version on any change
           versionRef.current++;
           callback();
-        })
+        }),
       );
       return () => {
         unsubscribes.forEach((unsub) => unsub());
       };
     },
-    [slots]
+    [slots],
   );
 
   // Get snapshot with stable reference
@@ -243,7 +236,7 @@ export function useVisibleSlots(slots: ExtensionUISlot[]): ExtensionUISlot[] {
  * @returns Tuple of [activeSlotId, setActiveSlotId, activeSlot]
  */
 export function useActiveSlot(
-  slots: ExtensionUISlot[]
+  slots: ExtensionUISlot[],
 ): [string | null, (id: string | null) => void, ExtensionUISlot | null] {
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
 

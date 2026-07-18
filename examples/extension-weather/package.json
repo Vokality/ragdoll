@@ -6,23 +6,54 @@
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
   "ragdollExtension": {
     "id": "weather",
-    "config": {
-      "defaultUnits": "celsius"
+    "name": "Weather",
+    "description": "Example weather lookup tools",
+    "capabilities": [
+      "tools"
+    ],
+    "requiredCapabilities": [],
+    "entry": "./dist/index.js",
+    "canDisable": true,
+    "configSchema": {
+      "defaultUnits": {
+        "type": "select",
+        "label": "Default units",
+        "options": [
+          {
+            "label": "Celsius",
+            "value": "celsius"
+          },
+          {
+            "label": "Fahrenheit",
+            "value": "fahrenheit"
+          }
+        ],
+        "default": "celsius"
+      }
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "prebuild": "bun run clean",
+    "build": "bunx --bun --no-install tsc",
+    "dev": "bunx --bun --no-install tsc --watch",
+    "typecheck": "bunx --bun --no-install tsc --noEmit",
+    "clean": "bun run ../../scripts/clean.ts dist"
   },
   "dependencies": {
-    "@vokality/ragdoll-extensions": "file:../../packages/ragdoll-extensions"
+    "@vokality/ragdoll-extensions": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "catalog:"
   }
 }

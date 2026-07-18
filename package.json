@@ -2,6 +2,10 @@
   "name": "ragdoll-monorepo",
   "version": "0.1.1",
   "private": true,
+  "packageManager": "bun@1.3.14",
+  "engines": {
+    "bun": "1.3.14"
+  },
   "description": "Ragdoll monorepo - animated character framework and apps",
   "type": "module",
   "license": "MIT",
@@ -10,42 +14,48 @@
     "type": "git",
     "url": "git+https://github.com/vokality/ragdoll.git"
   },
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "apps/*",
+      "examples/*"
+    ],
+    "catalog": {
+      "@types/react": "^19.2.17",
+      "@types/react-dom": "^19.2.3",
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7",
+      "typescript": "^7.0.2",
+      "vite": "^8.1.5",
+      "zod": "^4.4.3"
+    }
+  },
   "scripts": {
-    "build": "bun run build:ragdoll && bun run build:extension-framework && bun run build:extension-packages && bun run build:emote && bun run build:chat",
-    "build:ragdoll": "cd packages/ragdoll && bun run build",
-    "build:extension-framework": "cd packages/ragdoll-extensions && bun run build",
-    "build:extension-packages": "bun run build:ext-character && bun run build:ext-tasks && bun run build:ext-pomodoro && bun run build:ext-spotify",
-    "build:ext-character": "cd packages/ragdoll-extension-character && bun run build",
-    "build:ext-tasks": "cd packages/ragdoll-extension-tasks && bun run build",
-    "build:ext-pomodoro": "cd packages/ragdoll-extension-pomodoro && bun run build",
-    "build:ext-spotify": "cd packages/ragdoll-extension-spotify && bun run build",
-    "build:chat": "cd apps/chat && bun run build",
-    "build:emote": "cd apps/emote && bun run build",
-    "dev": "cd apps/demo && bun run dev",
-    "dev:emote": "cd apps/emote && bun run dev",
-    "dev:chat": "cd apps/chat && bun run electron:dev",
-    "lint": "eslint .",
-    "typecheck": "bun run typecheck:ragdoll && bun run typecheck:extensions && bun run typecheck:chat",
-    "typecheck:ragdoll": "cd packages/ragdoll && bunx tsc --noEmit",
-    "typecheck:extensions": "cd packages/ragdoll-extensions && bunx tsc --noEmit",
-    "typecheck:demo": "cd apps/demo && bunx tsc --noEmit",
-    "typecheck:emote": "cd apps/emote && bun run typecheck",
-    "typecheck:chat": "cd apps/chat && bun run typecheck",
-    "format": "bunx prettier --write .",
-    "clean": "rm -rf packages/*/dist apps/*/dist"
+    "build": "bun run build:libraries && bun run build:examples && bun run build:apps",
+    "build:libraries": "bun run --filter @vokality/ragdoll build && bun run --filter @vokality/ragdoll-extensions build && bun run --filter '@vokality/ragdoll-extension-*' build",
+    "build:examples": "bun run --filter '@example/*' build",
+    "build:apps": "bun run --filter lumen build && bun run --filter emote build",
+    "dev": "bun run dev:chat",
+    "dev:emote": "bun run --filter emote dev",
+    "dev:chat": "bun run --filter lumen electron:dev",
+    "lint": "bunx --bun --no-install oxlint .",
+    "test": "bun run build:libraries && bun run --workspaces --if-present test",
+    "test:ragdoll": "bun run --filter @vokality/ragdoll test",
+    "test:extensions": "bun run --filter @vokality/ragdoll-extensions test",
+    "typecheck": "bun run build:libraries && bun run typecheck:libraries && bun run --filter '@example/*' typecheck && bun run --filter lumen typecheck && bun run --filter emote typecheck",
+    "typecheck:libraries": "bun run --filter @vokality/ragdoll typecheck && bun run --filter @vokality/ragdoll-extensions typecheck && bun run --filter '@vokality/ragdoll-extension-*' typecheck",
+    "typecheck:ragdoll": "bun run --filter @vokality/ragdoll typecheck",
+    "typecheck:extensions": "bun run --filter @vokality/ragdoll-extensions typecheck",
+    "typecheck:emote": "bun run --filter emote typecheck",
+    "typecheck:chat": "bun run --filter lumen typecheck",
+    "verify:packages": "bun run build:libraries && bun run build:examples && bun run scripts/verify-packages.ts",
+    "format": "bunx --bun --no-install prettier --write .",
+    "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist apps/chat/dist apps/emote/dist examples/extension-weather/dist"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@types/bun": "^1.3.3",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.48.0"
+    "@types/bun": "^1.3.14",
+    "oxlint": "^1.74.0",
+    "prettier": "^3.9.5",
+    "typescript": "~7.0.2"
   }
 }

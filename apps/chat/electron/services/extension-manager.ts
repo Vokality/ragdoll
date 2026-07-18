@@ -9,16 +9,11 @@
  * - Syncs state changes to the renderer via IPC
  */
 
-import * as path from "path";
-import * as fs from "fs";
 import {
   createRegistry,
-  createLoader,
   type ExtensionRegistry,
-  type ExtensionLoader,
   type ToolDefinition,
   type ToolResult,
-  type LoadResult,
   type ExtensionHostEnvironment,
   type ExtensionHostCapability,
   type NotificationCallback,
@@ -27,25 +22,26 @@ import {
   type ConfigValues,
   type OAuthConfig,
   type OAuthTokens,
+  type RegistryCapabilityEvent,
+  type RagdollExtension,
+  type SerializedSlotState,
+  serializeSlotState,
+} from "@vokality/ragdoll-extensions";
+import {
+  createLoader,
+  type ExtensionLoader,
+  type ExtensionLoaderConfig,
   type ExtensionPackageInfo,
-} from "@vokality/ragdoll-extensions/core";
+  type LoadResult,
+} from "@vokality/ragdoll-extensions/loader";
 import { OAuthManager, createOAuthManager } from "./oauth-manager.js";
 import { ConfigManager, createConfigManager } from "./config-manager.js";
+import type { ExtensionStorage } from "../infrastructure/extension-storage.js";
+import type { ExtensionMessageBus } from "./extension-message-bus.js";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export type ToolExecutionCallback = (
-  toolName: string,
-  args: Record<string, unknown>
-) => void;
-
-export type StateChangeCallback = (
-  extensionId: string,
-  channelId: string,
-  state: unknown
-) => void;
 
 export interface ExtensionInfo {
   packageName: string;
@@ -58,18 +54,30 @@ export interface ExtensionInfo {
 }
 
 export interface ExtensionManagerConfig {
-  onToolExecution?: ToolExecutionCallback;
-  onStateChange?: StateChangeCallback;
-  onSlotStateChange?: (extensionId: string, slotId: string, state: unknown) => void;
+  onSlotStateChange?: (
+    extensionId: string,
+    slotId: string,
+    state: SerializedSlotState,
+  ) => void;
+  onSlotsChange?: () => void;
   onNotification?: NotificationCallback;
-  searchPaths: string[];
-  autoDiscover?: boolean;
+  packageRoots: ExtensionLoaderConfig["packageRoots"];
   disabledExtensions?: string[];
-  userDataPath: string;
   /** Function to open URLs in system browser (for OAuth) */
   openExternal: (url: string) => Promise<void>;
   /** Base redirect URI for OAuth (e.g., "lumen://oauth") */
   oauthRedirectBase: string;
+  builtInExtensions: readonly BuiltInExtensionDefinition[];
+  fileSystem: ExtensionLoaderConfig["fileSystem"];
+  storage: ExtensionStorage;
+  messageBus: ExtensionMessageBus;
+}
+
+export interface BuiltInExtensionDefinition {
+  packageName: string;
+  canDisable: boolean;
+  capabilities: readonly ("tools" | "services" | "stateChannels" | "slots")[];
+  createExtension: () => RagdollExtension;
 }
 
 // =============================================================================
@@ -81,42 +89,59 @@ export class ExtensionManager {
   private loader: ExtensionLoader;
   private config: ExtensionManagerConfig;
   private initialized = false;
-  private stateChannelUnsubscribers: Array<() => void> = [];
-  private slotStateUnsubscribers: Array<() => void> = [];
+  private slotStateUnsubscribers = new Map<string, () => void>();
+  private registryUnsubscribers: Array<() => void> = [];
 
   // Per-extension state management
   private oauthManagers = new Map<string, OAuthManager>();
   private configManagers = new Map<string, ConfigManager>();
   private packageInfoCache = new Map<string, ExtensionPackageInfo>();
   private loadedExtensions: ExtensionInfo[] = [];
+  private disabledExtensions: Set<string>;
 
   constructor(config: ExtensionManagerConfig) {
     this.config = config;
+    this.disabledExtensions = new Set(config.disabledExtensions ?? []);
     this.registry = createRegistry();
 
     // Use getHostEnvironment to provide extension-specific capabilities
     this.loader = createLoader(this.registry, {
-      searchPaths: config.searchPaths,
+      packageRoots: config.packageRoots,
       continueOnError: true,
+      fileSystem: config.fileSystem,
       getHostEnvironment: (manifest) => this.createHostEnvironment(manifest),
     });
+
+    this.registryUnsubscribers.push(
+      this.registry.on("capability:registered", (event) => {
+        this.subscribeToCapability(event as RegistryCapabilityEvent);
+      }),
+      this.registry.on("capability:removed", (event) => {
+        this.unsubscribeFromCapability(event as RegistryCapabilityEvent);
+      }),
+    );
   }
 
   // ===========================================================================
   // Host Environment Creation
   // ===========================================================================
 
-  private createHostEnvironment(manifest: ExtensionManifest): ExtensionHostEnvironment {
+  private createHostEnvironment(
+    manifest: ExtensionManifest,
+  ): ExtensionHostEnvironment {
     const extensionId = manifest.id;
     const packageInfo = this.packageInfoCache.get(extensionId);
 
     // Determine capabilities based on package requirements
     const capabilities = new Set<ExtensionHostCapability>([
       "storage",
-      "notifications",
       "ipc",
       "logger",
     ]);
+
+    if (this.config.onNotification) {
+      capabilities.add("notifications");
+    }
 
     if (packageInfo?.oauth) {
       capabilities.add("oauth");
@@ -138,7 +163,11 @@ export class ExtensionManager {
 
     // Get OAuth capability if extension requires it
     const oauth = packageInfo?.oauth
-      ? this.getOrCreateOAuthManager(extensionId, packageInfo.oauth, packageInfo.configSchema)
+      ? this.getOrCreateOAuthManager(
+          extensionId,
+          packageInfo.oauth,
+          packageInfo.configSchema,
+        )
       : undefined;
 
     // Get Config capability if extension has config schema
@@ -154,78 +183,15 @@ export class ExtensionManager {
       ipc,
       oauth,
       config,
-      getDataPath: () => path.join(this.config.userDataPath, "extensions", extensionId),
-      schedulePersistence: async (_extensionId: string, reason: string) => {
-        logger.debug(`Persistence scheduled: ${reason}`);
-      },
     };
   }
 
-  private createStorageCapability(_extensionId: string) {
-    return {
-      read: async <T>(extId: string, key: string): Promise<T | undefined> => {
-        try {
-          const filePath = path.join(this.config.userDataPath, "extensions", extId, "storage.json");
-          if (!fs.existsSync(filePath)) return undefined;
-          const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-          return data[key] as T;
-        } catch {
-          return undefined;
-        }
-      },
-      write: async <T>(extId: string, key: string, value: T): Promise<void> => {
-        const filePath = path.join(this.config.userDataPath, "extensions", extId, "storage.json");
-        const dir = path.dirname(filePath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        let data: Record<string, unknown> = {};
-        if (fs.existsSync(filePath)) {
-          try {
-            data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-          } catch {
-            // Ignore parse errors, use empty data object
-          }
-        }
-        data[key] = value;
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-      },
-      delete: async (extId: string, key: string): Promise<void> => {
-        const filePath = path.join(this.config.userDataPath, "extensions", extId, "storage.json");
-        if (!fs.existsSync(filePath)) return;
-        try {
-          const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-          delete data[key];
-          fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-        } catch {
-          // Ignore errors when deleting storage key
-        }
-      },
-      list: async (extId: string): Promise<string[]> => {
-        const filePath = path.join(this.config.userDataPath, "extensions", extId, "storage.json");
-        if (!fs.existsSync(filePath)) return [];
-        try {
-          const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-          return Object.keys(data);
-        } catch {
-          return [];
-        }
-      },
-    };
+  private createStorageCapability(extensionId: string) {
+    return this.config.storage.forExtension(extensionId);
   }
 
-  private createIpcCapability(_extensionId: string) {
-    return {
-      publish: (topic: string, payload: unknown) => {
-        if (this.config.onToolExecution && topic.startsWith("extension-tool:")) {
-          const data = payload as { tool: string; args: Record<string, unknown> };
-          this.config.onToolExecution(data.tool, data.args);
-        }
-      },
-      subscribe: (_topic: string, _handler: (payload: unknown) => void): (() => void) => {
-        return () => {};
-      },
-    };
+  private createIpcCapability(extensionId: string) {
+    return this.config.messageBus.forExtension(extensionId);
   }
 
   // ===========================================================================
@@ -235,7 +201,7 @@ export class ExtensionManager {
   private getOrCreateOAuthManager(
     extensionId: string,
     oauthConfig: OAuthConfig,
-    configSchema?: ConfigSchema
+    configSchema?: ConfigSchema,
   ): OAuthManager {
     if (this.oauthManagers.has(extensionId)) {
       return this.oauthManagers.get(extensionId)!;
@@ -250,11 +216,17 @@ export class ExtensionManager {
       oauthConfig,
       extensionId,
       // Use getter so clientId is fetched dynamically when needed
-      getClientId: () => (configManager?.getValues().clientId as string) ?? "",
+      getClientId: () => {
+        const clientId = configManager?.getValues().clientId;
+        return typeof clientId === "string" ? clientId : "";
+      },
       redirectUri: `${this.config.oauthRedirectBase}/${extensionId}`,
       loadTokens: async (): Promise<OAuthTokens | null> => {
         const storage = this.createStorageCapability(extensionId);
-        const tokens = await storage.read<OAuthTokens>(extensionId, "oauth_tokens");
+        const tokens = await storage.read<OAuthTokens>(
+          extensionId,
+          "oauth_tokens",
+        );
         return tokens ?? null;
       },
       saveTokens: async (tokens) => {
@@ -325,7 +297,7 @@ export class ExtensionManager {
 
   private getOrCreateConfigManager(
     extensionId: string,
-    schema: ConfigSchema
+    schema: ConfigSchema,
   ): ConfigManager {
     if (this.configManagers.has(extensionId)) {
       return this.configManagers.get(extensionId)!;
@@ -366,21 +338,17 @@ export class ExtensionManager {
    * Get config schema for an extension.
    */
   getConfigSchema(extensionId: string): ConfigSchema | null {
-    // First try from config manager
-    const manager = this.configManagers.get(extensionId);
-    if (manager) {
-      return manager.getSchema() ?? null;
-    }
-
-    // Fallback to package info cache
-    const info = this.packageInfoCache.get(extensionId);
-    return info?.configSchema ?? null;
+    return this.configManagers.get(extensionId)?.getSchema() ?? null;
   }
 
   /**
    * Set config value for an extension.
    */
-  async setConfigValue(extensionId: string, key: string, value: string | number | boolean) {
+  async setConfigValue(
+    extensionId: string,
+    key: string,
+    value: string | number | boolean,
+  ) {
     const manager = this.configManagers.get(extensionId);
     if (!manager) {
       throw new Error(`No config manager for extension: ${extensionId}`);
@@ -407,7 +375,10 @@ export class ExtensionManager {
     // Initialize config managers for extensions that need it
     for (const [extensionId, info] of this.packageInfoCache) {
       if (info.configSchema) {
-        const manager = this.getOrCreateConfigManager(extensionId, info.configSchema);
+        const manager = this.getOrCreateConfigManager(
+          extensionId,
+          info.configSchema,
+        );
         await manager.initialize();
       }
     }
@@ -415,34 +386,65 @@ export class ExtensionManager {
     // Initialize OAuth managers and load tokens
     for (const [extensionId, info] of this.packageInfoCache) {
       if (info.oauth) {
-        const manager = this.getOrCreateOAuthManager(extensionId, info.oauth, info.configSchema);
+        const manager = this.getOrCreateOAuthManager(
+          extensionId,
+          info.oauth,
+          info.configSchema,
+        );
         await manager.initialize();
       }
     }
 
-    // Now load extensions
-    const autoDiscover = this.config.autoDiscover ?? true;
-    if (autoDiscover) {
-      const results = await this.discoverAndLoadPackages();
-
-      for (const result of results) {
-        if (result.success && result.packageInfo) {
-          this.loadedExtensions.push({
-            packageName: result.packageName,
-            id: result.packageInfo.extensionId,
-            name: result.packageInfo.name,
-            description: result.packageInfo.description ?? "",
-            canDisable: result.packageInfo.canDisable,
-            hasConfigSchema: !!result.packageInfo.configSchema,
-            hasOAuth: !!result.packageInfo.oauth,
-          });
-        }
-      }
-    }
-
-    this.subscribeToStateChannels();
-    this.subscribeToSlots();
+    await this.loadBuiltInExtensions();
+    await this.discoverAndLoadPackages();
     this.initialized = true;
+  }
+
+  private async loadBuiltInExtensions(): Promise<void> {
+    for (const definition of this.config.builtInExtensions) {
+      const extension = definition.createExtension();
+      if (this.isExtensionDisabled(extension.manifest.id)) continue;
+
+      await this.registry.register(extension, {
+        host: this.createHostEnvironment(extension.manifest),
+      });
+      const actual = this.registry.getContributionMetadata(
+        extension.manifest.id,
+      );
+      if (!actual) {
+        throw new Error(
+          `Built-in extension '${extension.manifest.id}' was not registered`,
+        );
+      }
+      const expected = [...definition.capabilities].sort();
+      const received = [
+        ...(actual.tools.length > 0 ? (["tools"] as const) : []),
+        ...(actual.services.length > 0 ? (["services"] as const) : []),
+        ...(actual.stateChannels.length > 0
+          ? (["stateChannels"] as const)
+          : []),
+        ...(actual.slots.length > 0 ? (["slots"] as const) : []),
+      ].sort();
+      if (
+        expected.length !== received.length ||
+        expected.some((capability, index) => capability !== received[index])
+      ) {
+        await this.registry.unregister(extension.manifest.id);
+        throw new Error(
+          `Built-in extension '${extension.manifest.id}' declared ${expected.join(", ")} but registered ${received.join(", ")}`,
+        );
+      }
+
+      this.loadedExtensions.push({
+        packageName: definition.packageName,
+        id: extension.manifest.id,
+        name: extension.manifest.name,
+        description: extension.manifest.description ?? "",
+        canDisable: definition.canDisable,
+        hasConfigSchema: false,
+        hasOAuth: false,
+      });
+    }
   }
 
   // ===========================================================================
@@ -454,23 +456,31 @@ export class ExtensionManager {
     const results: LoadResult[] = [];
 
     for (const packageName of packages) {
-      const info = this.packageInfoCache.get(packageName) ??
-        await this.loader.getPackageInfo(packageName);
+      const info =
+        this.getCachedPackageInfo(packageName) ??
+        (await this.loader.getPackageInfo(packageName));
 
-      if (info && this.isExtensionDisabled(info.extensionId)) {
+      if (!info) {
+        throw new Error(`Package metadata is unavailable for '${packageName}'`);
+      }
+      await this.initializePackageInfo(info);
+
+      if (this.isExtensionDisabled(info.extensionId)) {
         continue;
       }
 
       // Check if extension is configured (has required config)
-      if (info?.configSchema) {
+      if (info.configSchema) {
         const configManager = this.configManagers.get(info.extensionId);
-        if (configManager && !configManager.isConfigured()) {
-          console.info(`[ExtensionManager] Skipping ${info.extensionId}: not configured`);
+        if (!configManager?.isConfigured()) {
+          console.info(
+            `[ExtensionManager] Skipping ${info.extensionId}: not configured`,
+          );
           continue;
         }
       }
 
-      const result = await this.loader.loadPackage(packageName);
+      const result = await this.loadPackage(packageName);
       results.push(result);
     }
 
@@ -478,42 +488,38 @@ export class ExtensionManager {
   }
 
   private isExtensionDisabled(extensionId: string): boolean {
-    return this.config.disabledExtensions?.includes(extensionId) ?? false;
+    return this.disabledExtensions.has(extensionId);
   }
 
   // ===========================================================================
   // State Subscriptions
   // ===========================================================================
 
-  private subscribeToStateChannels(): void {
-    const channels = this.registry.getStateChannels();
-    for (const { extensionId, channel } of channels) {
-      const unsubscribe = channel.subscribe((state) => {
-        this.config.onStateChange?.(extensionId, channel.id, state);
+  private subscribeToCapability(event: RegistryCapabilityEvent): void {
+    if (event.capabilityType === "slot") {
+      if (this.slotStateUnsubscribers.has(event.capabilityId)) return;
+      const entry = this.registry.getSlot(event.capabilityId);
+      if (!entry) return;
+      const unsubscribe = entry.slot.state.subscribe(() => {
+        const state = entry.slot.state.getState();
+        this.config.onSlotStateChange?.(
+          entry.extensionId,
+          entry.slot.id,
+          serializeSlotState(state),
+        );
       });
-      this.stateChannelUnsubscribers.push(unsubscribe);
+      this.slotStateUnsubscribers.set(event.capabilityId, unsubscribe);
+      this.config.onSlotsChange?.();
     }
   }
 
-  private subscribeToSlots(): void {
-    const slots = this.registry.getSlots();
-    for (const { extensionId, slot } of slots) {
-      const unsubscribe = slot.state.subscribe(() => {
-        const state = slot.state.getState();
-        this.config.onSlotStateChange?.(extensionId, slot.id, {
-          ...state,
-          panel: this.serializePanel(state.panel),
-        });
-      });
-      this.slotStateUnsubscribers.push(unsubscribe);
-    }
-  }
-
-  private serializePanel(panel: unknown): unknown {
-    return JSON.parse(JSON.stringify(panel, (_key, value) => {
-      if (typeof value === "function") return undefined;
-      return value;
-    }));
+  private unsubscribeFromCapability(event: RegistryCapabilityEvent): void {
+    const subscriptions =
+      event.capabilityType === "slot" ? this.slotStateUnsubscribers : undefined;
+    const unsubscribe = subscriptions?.get(event.capabilityId);
+    unsubscribe?.();
+    subscriptions?.delete(event.capabilityId);
+    if (event.capabilityType === "slot") this.config.onSlotsChange?.();
   }
 
   // ===========================================================================
@@ -536,7 +542,10 @@ export class ExtensionManager {
     return this.registry.validateTool(toolName, args);
   }
 
-  async executeTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+  async executeTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
     return this.registry.executeTool(toolName, args);
   }
 
@@ -561,7 +570,9 @@ export class ExtensionManager {
 
     for (const [extensionId, info] of this.packageInfoCache) {
       // Check if already in loaded extensions
-      const isLoaded = this.loadedExtensions.some((ext) => ext.id === extensionId);
+      const isLoaded = this.loadedExtensions.some(
+        (ext) => ext.id === extensionId,
+      );
 
       if (!isLoaded) {
         discovered.push({
@@ -581,7 +592,69 @@ export class ExtensionManager {
   }
 
   getDisabledExtensions(): string[] {
-    return this.config.disabledExtensions ?? [];
+    return [...this.disabledExtensions];
+  }
+
+  async setDisabledExtensions(extensionIds: string[]): Promise<void> {
+    const next = new Set(extensionIds);
+    const extensions = this.getDiscoveredExtensions();
+    for (const extensionId of next) {
+      const extension = extensions.find(({ id }) => id === extensionId);
+      if (!extension) throw new Error(`Unknown extension: ${extensionId}`);
+      if (!extension.canDisable) {
+        throw new Error(`Extension '${extensionId}' is required`);
+      }
+    }
+
+    const toDisable = extensions.filter(
+      ({ id }) => next.has(id) && !this.disabledExtensions.has(id),
+    );
+    const toEnable = extensions.filter(
+      ({ id }) => !next.has(id) && this.disabledExtensions.has(id),
+    );
+
+    const disabled: ExtensionInfo[] = [];
+    const enabled: ExtensionInfo[] = [];
+    try {
+      for (const extension of toDisable) {
+        if (!(await this.unloadPackage(extension.packageName))) {
+          throw new Error(`Failed to disable extension '${extension.id}'`);
+        }
+        disabled.push(extension);
+      }
+      for (const extension of toEnable) {
+        const result = await this.loadPackage(extension.packageName);
+        if (!result.success) {
+          throw new Error(
+            result.error ?? `Failed to enable extension '${extension.id}'`,
+          );
+        }
+        enabled.push(extension);
+      }
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      for (const extension of enabled.reverse()) {
+        if (!(await this.unloadPackage(extension.packageName))) {
+          rollbackErrors.push(`could not unload '${extension.id}'`);
+        }
+      }
+      for (const extension of disabled.reverse()) {
+        const result = await this.loadPackage(extension.packageName);
+        if (!result.success) {
+          rollbackErrors.push(
+            result.error ?? `could not reload '${extension.id}'`,
+          );
+        }
+      }
+      const reason = error instanceof Error ? error.message : String(error);
+      if (rollbackErrors.length > 0) {
+        throw new Error(
+          `${reason}; rollback failed: ${rollbackErrors.join(", ")}`,
+        );
+      }
+      throw error;
+    }
+    this.disabledExtensions = next;
   }
 
   // ===========================================================================
@@ -611,15 +684,17 @@ export class ExtensionManager {
   }
 
   getLoadedPackages(): string[] {
-    return this.loadedExtensions.map((ext) => ext.packageName);
+    return this.loader
+      .getLoadedPackages()
+      .map(({ packageName }) => packageName);
   }
 
   async loadPackage(
     packageName: string,
-    _config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<LoadResult> {
     // Check if package info is cached, if not load it
-    let info: ExtensionPackageInfo | undefined = this.packageInfoCache.get(packageName);
+    let info = this.getCachedPackageInfo(packageName);
     if (!info) {
       const loaded = await this.loader.getPackageInfo(packageName);
       if (loaded) {
@@ -628,37 +703,21 @@ export class ExtensionManager {
       }
     }
 
-    // Initialize config manager if needed
-    if (info?.configSchema) {
-      const manager = this.getOrCreateConfigManager(info.extensionId, info.configSchema);
-      await manager.initialize();
-    }
+    if (info) await this.initializePackageInfo(info);
 
-    // Initialize OAuth manager if needed
-    if (info?.oauth) {
-      const manager = this.getOrCreateOAuthManager(info.extensionId, info.oauth, info.configSchema);
-      await manager.initialize();
-    }
-
-    const result = await this.loader.loadPackage(packageName);
+    const result = await this.loader.loadPackage(packageName, config);
 
     if (result.success && result.packageInfo) {
-      this.loadedExtensions.push({
-        packageName: result.packageName,
-        id: result.packageInfo.extensionId,
-        name: result.packageInfo.name,
-        description: result.packageInfo.description ?? "",
-        canDisable: result.packageInfo.canDisable,
-        hasConfigSchema: !!result.packageInfo.configSchema,
-        hasOAuth: !!result.packageInfo.oauth,
-      });
+      this.recordLoadedExtension(result.packageName, result.packageInfo);
     }
 
     return result;
   }
 
   async unloadPackage(packageName: string): Promise<boolean> {
-    const extension = this.loadedExtensions.find((ext) => ext.packageName === packageName);
+    const extension = this.loadedExtensions.find(
+      (ext) => ext.packageName === packageName,
+    );
     if (!extension) {
       return false;
     }
@@ -670,11 +729,9 @@ export class ExtensionManager {
       this.oauthManagers.delete(extension.id);
       this.configManagers.get(extension.id)?.destroy();
       this.configManagers.delete(extension.id);
-      this.packageInfoCache.delete(extension.id);
-
       // Remove from loaded extensions
       this.loadedExtensions = this.loadedExtensions.filter(
-        (ext) => ext.packageName !== packageName
+        (ext) => ext.packageName !== packageName,
       );
     }
 
@@ -683,7 +740,7 @@ export class ExtensionManager {
 
   async reloadPackage(
     packageName: string,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<LoadResult> {
     await this.unloadPackage(packageName);
     return this.loadPackage(packageName, config);
@@ -698,7 +755,7 @@ export class ExtensionManager {
       extensionId,
       slotId: slot.id,
       label: slot.label,
-      icon: typeof slot.icon === "string" ? slot.icon : { type: "component" as const },
+      icon: slot.icon,
       priority: slot.priority ?? 0,
     }));
   }
@@ -706,35 +763,58 @@ export class ExtensionManager {
   getSlotState(slotId: string) {
     const slotEntry = this.registry.getSlot(slotId);
     if (!slotEntry) return null;
-    const state = slotEntry.slot.state.getState();
-    return {
-      badge: state.badge,
-      visible: state.visible,
-      panel: this.serializePanel(state.panel),
-    };
+    return serializeSlotState(slotEntry.slot.state.getState());
   }
 
-  async executeSlotAction(slotId: string, actionType: string, actionId: string) {
+  async executeSlotAction(
+    slotId: string,
+    actionType: string,
+    actionId: string,
+  ) {
     const slotEntry = this.registry.getSlot(slotId);
     if (!slotEntry) {
       return { success: false, error: `Slot not found: ${slotId}` };
     }
 
     try {
-      const state = slotEntry.slot.state.getState();
-      const panel = state.panel as any;
+      const panel = slotEntry.slot.state.getState().panel;
+      const items = [
+        ...(panel.items ?? []),
+        ...(panel.sections?.flatMap((section) => section.items) ?? []),
+      ];
+      const action =
+        actionType === "panel-action"
+          ? panel.actions?.find((candidate) => candidate.id === actionId)
+          : actionType === "section-action"
+            ? panel.sections
+                ?.flatMap((section) => section.actions ?? [])
+                .find((candidate) => candidate.id === actionId)
+            : undefined;
+      const item =
+        actionType === "item-click" || actionType === "item-toggle"
+          ? items.find((candidate) => candidate.id === actionId)
+          : undefined;
+      const callback =
+        actionType === "item-click"
+          ? item?.onClick
+          : actionType === "item-toggle"
+            ? item?.onToggle
+            : action?.onClick;
 
-      if (actionType === "panel-action" && panel.actions) {
-        const action = panel.actions.find((a: any) => a.id === actionId);
-        if (action?.onClick) {
-          await action.onClick();
-          return { success: true };
-        }
+      if (callback) {
+        await callback();
+        return { success: true };
       }
 
-      return { success: false, error: `Action not found: ${actionType}:${actionId}` };
+      return {
+        success: false,
+        error: `Action not found: ${actionType}:${actionId}`,
+      };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -760,41 +840,71 @@ export class ExtensionManager {
   // ===========================================================================
 
   async destroy(): Promise<void> {
-    for (const unsubscribe of this.stateChannelUnsubscribers) unsubscribe();
-    for (const unsubscribe of this.slotStateUnsubscribers) unsubscribe();
+    for (const unsubscribe of this.slotStateUnsubscribers.values())
+      unsubscribe();
+    for (const unsubscribe of this.registryUnsubscribers) unsubscribe();
     for (const manager of this.oauthManagers.values()) manager.destroy();
     for (const manager of this.configManagers.values()) manager.destroy();
 
-    this.stateChannelUnsubscribers = [];
-    this.slotStateUnsubscribers = [];
+    this.slotStateUnsubscribers.clear();
+    this.registryUnsubscribers = [];
     this.oauthManagers.clear();
     this.configManagers.clear();
     this.loadedExtensions = [];
+    this.config.messageBus.clear();
 
     await this.registry.destroy();
     this.initialized = false;
   }
-}
 
-// =============================================================================
-// Singleton
-// =============================================================================
-
-let instance: ExtensionManager | null = null;
-
-export function getExtensionManager(config?: ExtensionManagerConfig): ExtensionManager {
-  if (!instance && config) {
-    instance = new ExtensionManager(config);
+  private getCachedPackageInfo(
+    packageName: string,
+  ): ExtensionPackageInfo | undefined {
+    for (const info of this.packageInfoCache.values()) {
+      if (info.packageName === packageName) return info;
+    }
+    return undefined;
   }
-  if (!instance) {
-    throw new Error("ExtensionManager must be initialized with config first");
-  }
-  return instance;
-}
 
-export async function resetExtensionManager(): Promise<void> {
-  if (instance) {
-    await instance.destroy();
-    instance = null;
+  private recordLoadedExtension(
+    packageName: string,
+    info: ExtensionPackageInfo,
+  ): void {
+    const extension: ExtensionInfo = {
+      packageName,
+      id: info.extensionId,
+      name: info.name,
+      description: info.description ?? "",
+      canDisable: info.canDisable,
+      hasConfigSchema: Boolean(info.configSchema),
+      hasOAuth: Boolean(info.oauth),
+    };
+    const existingIndex = this.loadedExtensions.findIndex(
+      (loaded) => loaded.packageName === packageName,
+    );
+    if (existingIndex === -1) {
+      this.loadedExtensions.push(extension);
+    } else {
+      this.loadedExtensions[existingIndex] = extension;
+    }
+  }
+
+  private async initializePackageInfo(
+    info: ExtensionPackageInfo,
+  ): Promise<void> {
+    this.packageInfoCache.set(info.extensionId, info);
+    if (info.configSchema) {
+      await this.getOrCreateConfigManager(
+        info.extensionId,
+        info.configSchema,
+      ).initialize();
+    }
+    if (info.oauth) {
+      await this.getOrCreateOAuthManager(
+        info.extensionId,
+        info.oauth,
+        info.configSchema,
+      ).initialize();
+    }
   }
 }

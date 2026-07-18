@@ -1,15 +1,15 @@
 /**
- * UI State Module - React-free state utilities for extension slots.
+ * React-free contracts and state utilities for extension-contributed slots.
  *
  * This module provides state management utilities that can be used in any
- * environment (Node.js, Electron main process, browser) without requiring React.
+ * environment (Bun, Electron main process, browser) without requiring React.
  *
  * For React components and hooks, use "@vokality/ragdoll-extensions/ui".
  *
  * @example
  * ```ts
  * // In Electron main process or extension code
- * import { createSlotState } from "@vokality/ragdoll-extensions/ui/state";
+ * import { createSlotState } from "@vokality/ragdoll-extensions/slots";
  *
  * const slotState = createSlotState({
  *   badge: 0,
@@ -27,6 +27,17 @@
  * Status indicator for list items
  */
 export type ItemStatus = "default" | "active" | "success" | "warning" | "error";
+
+export type PresetIconName =
+  | "checklist"
+  | "timer"
+  | "calendar"
+  | "bell"
+  | "settings"
+  | "bookmark"
+  | "flag"
+  | "star"
+  | "music";
 
 /**
  * A single item in a list panel
@@ -139,6 +150,98 @@ export interface SlotStateStore {
   subscribe(callback: SlotStateCallback): () => void;
 }
 
+/**
+ * A React-free slot contribution accepted by the extension registry.
+ */
+export interface ExtensionSlot {
+  /** Globally unique slot identifier (prefer `<extension-id>.<slot-name>`). */
+  id: string;
+  /** Accessible label displayed by the host. */
+  label: string;
+  /** Host-provided icon identifier. */
+  icon: PresetIconName;
+  /** Ordering priority (higher values are shown first). */
+  priority?: number;
+  /** Observable slot state. */
+  state: SlotStateStore;
+}
+
+/** Action metadata safe to send across a process boundary. */
+export type SerializedPanelAction = Omit<PanelAction, "onClick">;
+
+/** Item metadata safe to send across a process boundary. */
+export type SerializedListPanelItem = Omit<
+  ListPanelItem,
+  "onClick" | "onToggle"
+> & {
+  canClick: boolean;
+  canToggle: boolean;
+};
+
+/** Section metadata safe to send across a process boundary. */
+export type SerializedListPanelSection = Omit<
+  ListPanelSection,
+  "items" | "actions"
+> & {
+  items: SerializedListPanelItem[];
+  actions?: SerializedPanelAction[];
+};
+
+/** List panel data with executable callbacks removed. */
+export type SerializedListPanelConfig = Omit<
+  ListPanelConfig,
+  "items" | "sections" | "actions"
+> & {
+  items?: SerializedListPanelItem[];
+  sections?: SerializedListPanelSection[];
+  actions?: SerializedPanelAction[];
+};
+
+/** Slot state safe to send across IPC or another structured-clone boundary. */
+export interface SerializedSlotState {
+  badge: number | string | null;
+  visible: boolean;
+  panel: SerializedListPanelConfig;
+}
+
+function serializeAction({
+  onClick: _onClick,
+  ...action
+}: PanelAction): SerializedPanelAction {
+  return action;
+}
+
+function serializeItem({
+  onClick,
+  onToggle,
+  ...item
+}: ListPanelItem): SerializedListPanelItem {
+  return {
+    ...item,
+    canClick: typeof onClick === "function",
+    canToggle: typeof onToggle === "function",
+  };
+}
+
+/** Remove executable callbacks while preserving which actions the host supports. */
+export function serializeSlotState(state: SlotState): SerializedSlotState {
+  const panel = state.panel;
+  return {
+    badge: state.badge,
+    visible: state.visible,
+    panel: {
+      ...panel,
+      items: panel.items?.map(serializeItem),
+      actions: panel.actions?.map(serializeAction),
+      sections: panel.sections?.map((section) => ({
+        ...section,
+        items: section.items.map(serializeItem),
+        actions: section.actions?.map(serializeAction),
+      })),
+    },
+  };
+}
+
 // =============================================================================
 // Mutable Slot State Store
 // =============================================================================
@@ -165,7 +268,9 @@ export interface MutableSlotStateStore extends SlotStateStore {
  * @param initialState - Initial state for the slot
  * @returns A mutable store that can be used in slot definitions
  */
-export function createSlotState(initialState: SlotState): MutableSlotStateStore {
+export function createSlotState(
+  initialState: SlotState,
+): MutableSlotStateStore {
   let state: SlotState = { ...initialState };
   const listeners = new Set<SlotStateCallback>();
 
@@ -248,7 +353,7 @@ export interface DerivedSlotStateOptions<TSource> {
  * @returns A read-only slot state store
  */
 export function createDerivedSlotState<TSource>(
-  options: DerivedSlotStateOptions<TSource>
+  options: DerivedSlotStateOptions<TSource>,
 ): SlotStateStore {
   const { getSourceState, subscribeToSource, deriveState } = options;
 
@@ -306,7 +411,7 @@ export function createListSlotState(
     badge?: number | string | null;
     visible?: boolean;
     emptyMessage?: string;
-  } = {}
+  } = {},
 ): SlotState {
   return {
     badge: options.badge ?? null,

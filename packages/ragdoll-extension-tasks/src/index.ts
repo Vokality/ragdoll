@@ -12,8 +12,6 @@
  * - listTasks: Get all tasks with their IDs, status, and text
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import type {
   ExtensionHostEnvironment,
   ExtensionRuntimeContribution,
@@ -21,8 +19,11 @@ import type {
   ExtensionTool,
   ToolResult,
   ValidationResult,
-} from "@vokality/ragdoll-extensions/core";
-import { createSlotState } from "@vokality/ragdoll-extensions/ui/state";
+} from "@vokality/ragdoll-extensions";
+import {
+  createSlotState,
+  type ListPanelSection,
+} from "@vokality/ragdoll-extensions/slots";
 import {
   TaskManager,
   createTaskManager,
@@ -87,11 +88,17 @@ export type ListTasksArgs = Record<string, never>;
  */
 export interface TaskToolHandler {
   addTask(args: AddTaskArgs): Promise<ToolResult> | ToolResult;
-  updateTaskStatus(args: UpdateTaskStatusArgs): Promise<ToolResult> | ToolResult;
+  updateTaskStatus(
+    args: UpdateTaskStatusArgs,
+  ): Promise<ToolResult> | ToolResult;
   setActiveTask(args: SetActiveTaskArgs): Promise<ToolResult> | ToolResult;
   removeTask(args: RemoveTaskArgs): Promise<ToolResult> | ToolResult;
-  completeActiveTask(args: CompleteActiveTaskArgs): Promise<ToolResult> | ToolResult;
-  clearCompletedTasks(args: ClearCompletedTasksArgs): Promise<ToolResult> | ToolResult;
+  completeActiveTask(
+    args: CompleteActiveTaskArgs,
+  ): Promise<ToolResult> | ToolResult;
+  clearCompletedTasks(
+    args: ClearCompletedTasksArgs,
+  ): Promise<ToolResult> | ToolResult;
   clearAllTasks(args: ClearAllTasksArgs): Promise<ToolResult> | ToolResult;
   listTasks(args: ListTasksArgs): Promise<ToolResult> | ToolResult;
 }
@@ -118,7 +125,9 @@ function validateAddTask(args: Record<string, unknown>): ValidationResult {
   return { valid: true };
 }
 
-function validateUpdateTaskStatus(args: Record<string, unknown>): ValidationResult {
+function validateUpdateTaskStatus(
+  args: Record<string, unknown>,
+): ValidationResult {
   if (!args.taskId || typeof args.taskId !== "string") {
     return { valid: false, error: "taskId is required and must be a string" };
   }
@@ -131,7 +140,10 @@ function validateUpdateTaskStatus(args: Record<string, unknown>): ValidationResu
       error: `Invalid status '${args.status}'. Valid: ${VALID_TASK_STATUSES.join(", ")}`,
     };
   }
-  if (args.blockedReason !== undefined && typeof args.blockedReason !== "string") {
+  if (
+    args.blockedReason !== undefined &&
+    typeof args.blockedReason !== "string"
+  ) {
     return { valid: false, error: "blockedReason must be a string" };
   }
   return { valid: true };
@@ -200,14 +212,16 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
               },
               blockedReason: {
                 type: "string",
-                description: "Reason for blocking (only when status is blocked)",
+                description:
+                  "Reason for blocking (only when status is blocked)",
               },
             },
             required: ["taskId", "status"],
           },
         },
       },
-      handler: (args, _ctx) => handler.updateTaskStatus(args as unknown as UpdateTaskStatusArgs),
+      handler: (args, _ctx) =>
+        handler.updateTaskStatus(args as unknown as UpdateTaskStatusArgs),
       validate: validateUpdateTaskStatus,
     },
     {
@@ -228,7 +242,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.setActiveTask(args as unknown as SetActiveTaskArgs),
+      handler: (args, _ctx) =>
+        handler.setActiveTask(args as unknown as SetActiveTaskArgs),
       validate: validateTaskId,
     },
     {
@@ -249,7 +264,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.removeTask(args as unknown as RemoveTaskArgs),
+      handler: (args, _ctx) =>
+        handler.removeTask(args as unknown as RemoveTaskArgs),
       validate: validateTaskId,
     },
     {
@@ -327,74 +343,28 @@ const DEFAULT_TASK_STATE: TaskState = {
 
 const DEFAULT_EXTENSION_ID = "tasks";
 const DEFAULT_STORAGE_KEY = "state";
-const STATE_FILENAME = "tasks-state.json";
-
-async function resolveStateFilePath(
-  host: ExtensionHostEnvironment,
-  extensionId: string
-): Promise<string | null> {
-  if (!host.getDataPath) {
-    return null;
-  }
-  try {
-    const basePath = await host.getDataPath(extensionId);
-    if (!basePath) {
-      return null;
-    }
-    const filePath = join(basePath, STATE_FILENAME);
-    await mkdir(dirname(filePath), { recursive: true });
-    return filePath;
-  } catch (error) {
-    host.logger?.warn?.(`[${extensionId}] Failed to resolve task data path`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
-
-async function readStateFromFile(filePath: string): Promise<TaskState | undefined> {
-  try {
-    const raw = await readFile(filePath, "utf-8");
-    return JSON.parse(raw) as TaskState;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
 async function loadPersistedTaskState(
   host: ExtensionHostEnvironment,
   extensionId: string,
-  filePath: string | null,
   storageKey: string,
-  fallback?: TaskState
+  fallback?: TaskState,
 ): Promise<TaskState> {
-  if (filePath) {
-    try {
-      const state = await readStateFromFile(filePath);
-      if (state) {
-        return state;
-      }
-    } catch (error) {
-      host.logger?.warn?.(`[${extensionId}] Failed to read task state file`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   if (host.storage) {
     try {
-      const stored = await host.storage.read<TaskState>(extensionId, storageKey);
+      const stored = await host.storage.read<TaskState>(
+        extensionId,
+        storageKey,
+      );
       if (stored) {
         return stored;
       }
     } catch (error) {
-      host.logger?.warn?.(`[${extensionId}] Failed to load task state from storage`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      host.logger?.warn?.(
+        `[${extensionId}] Failed to load task state from storage`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
 
@@ -410,19 +380,17 @@ export interface TaskRuntimeOptions {
   extensionId?: string;
 }
 
-export async function createRuntime(
+async function createRuntime(
   options: TaskRuntimeOptions | undefined,
-  host: ExtensionHostEnvironment
+  host: ExtensionHostEnvironment,
 ): Promise<ExtensionRuntimeContribution> {
   const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
   const storageKey = options?.storageKey ?? DEFAULT_STORAGE_KEY;
-  const stateFilePath = await resolveStateFilePath(host, extensionId);
   const startingState = await loadPersistedTaskState(
     host,
     extensionId,
-    stateFilePath,
     storageKey,
-    options?.initialState
+    options?.initialState,
   );
 
   const manager = createTaskManager(startingState);
@@ -430,18 +398,8 @@ export async function createRuntime(
 
   const persistState = async (state: TaskState): Promise<void> => {
     try {
-      let persisted = false;
-      if (stateFilePath) {
-        await mkdir(dirname(stateFilePath), { recursive: true });
-        await writeFile(stateFilePath, JSON.stringify(state, null, 2), "utf-8");
-        persisted = true;
-      } else if (host.storage) {
+      if (host.storage) {
         await host.storage.write(extensionId, storageKey, state);
-        persisted = true;
-      }
-
-      if (persisted) {
-        await host.schedulePersistence?.(extensionId, "tasks-state-changed");
       }
     } catch (error) {
       host.logger?.error?.(`[${extensionId}] Failed to persist task state`, {
@@ -534,7 +492,7 @@ export async function createRuntime(
     const activeTasks = tasks.filter((t) => t.status !== "done");
     const completedTasks = tasks.filter((t) => t.status === "done");
 
-    const sections: any[] = [];
+    const sections: ListPanelSection[] = [];
 
     if (activeTasks.length > 0) {
       sections.push({
@@ -544,7 +502,12 @@ export async function createRuntime(
           id: task.id,
           label: task.text,
           sublabel: task.blockedReason,
-          status: task.id === activeTaskId ? "active" : task.status === "blocked" ? "error" : "default",
+          status:
+            task.id === activeTaskId
+              ? "active"
+              : task.status === "blocked"
+                ? "error"
+                : "default",
           checkable: true,
           checked: false,
           onToggle: () => {
@@ -623,27 +586,23 @@ export async function createRuntime(
   };
 }
 
-export { createRuntime as createTaskRuntime };
-// NOTE: UI exports removed to avoid pulling React into main process
-// export { createTaskUISlot, type TaskUISlotOptions } from "./ui.js";
-
 import {
-  createExtension,
+  createExtension as defineExtension,
   type RagdollExtension,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 
 /**
  * Create the tasks extension.
  */
-function createTasksExtension(config?: Record<string, unknown>): RagdollExtension {
-  return createExtension({
+export function createExtension(
+  config?: Record<string, unknown>,
+): RagdollExtension {
+  return defineExtension({
     id: DEFAULT_EXTENSION_ID,
     name: "Task Manager",
     version: "0.1.0",
     description: "Task tracking and management tools",
-    createRuntime: (host, _context) => createRuntime(config as TaskRuntimeOptions | undefined, host),
+    createRuntime: (host, _context) =>
+      createRuntime(config as TaskRuntimeOptions | undefined, host),
   });
 }
-
-export { createTasksExtension as createExtension };
-export default createTasksExtension;

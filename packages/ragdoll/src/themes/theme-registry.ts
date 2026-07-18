@@ -22,8 +22,7 @@ const themes = new Map<string, RagdollTheme>([
 export function getTheme(themeId: string): RagdollTheme {
   const theme = themes.get(themeId);
   if (!theme) {
-    console.warn(`Theme "${themeId}" not found, using default`);
-    return defaultTheme;
+    throw new Error(`Unknown theme: ${themeId}`);
   }
   return theme;
 }

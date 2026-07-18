@@ -1,36 +1,17 @@
 /**
  * @vokality/ragdoll-extensions
  *
- * Extension framework for Ragdoll - register tools, handlers, and plugins
- * that integrate with AI agents.
+ * React-free extension contracts, registry, and slot state.
+ *
+ * For React UI components, use "@vokality/ragdoll-extensions/ui".
  *
  * @example
  * ```ts
- * import {
- *   createExtension,
- *   createRegistry,
- *   createCharacterExtension,
- * } from "@vokality/ragdoll-extensions";
+ * // In a host process
+ * import { createRegistry } from "@vokality/ragdoll-extensions";
  *
- * // Create a registry
  * const registry = createRegistry();
- *
- * // Register the character extension
- * const characterExtension = createCharacterExtension({
- *   handler: {
- *     setMood: async ({ mood }) => ({ success: true }),
- *     triggerAction: async ({ action }) => ({ success: true }),
- *     setHeadPose: async (args) => ({ success: true }),
- *     setSpeechBubble: async (args) => ({ success: true }),
- *   },
- * });
- * await registry.register(characterExtension);
- *
- * // Get all tools for OpenAI
- * const tools = registry.getAllTools();
- *
- * // Execute a tool
- * const result = await registry.executeTool("setMood", { mood: "smile" });
+ * await registry.register(extension, { host });
  * ```
  */
 
@@ -68,6 +49,7 @@ export type {
   // Registry types
   RegistryEventType,
   RegistryEvent,
+  RegistryCapabilityEvent,
   RegistryEventCallback,
   RegisterOptions,
 
@@ -88,6 +70,77 @@ export type {
 } from "./types.js";
 
 // =============================================================================
+// Config Schema Types
+// =============================================================================
+
+export type {
+  // Config field types
+  ConfigField,
+  ConfigSchema,
+  ConfigValues,
+  ExtensionConfigStatus,
+
+  // OAuth types
+  OAuthConfig,
+  OAuthTokens,
+  OAuthConnectionStatus,
+  OAuthState,
+  OAuthEventType,
+  OAuthEvent,
+  OAuthEventCallback,
+  HostOAuthCapability,
+} from "./types/config-schema.js";
+
+// Re-export Zod schema utilities
+export {
+  ConfigFieldSchema,
+  ConfigSchemaSchema,
+  OAuthConfigSchema,
+  OAuthTokensSchema,
+  OAuthStateSchema,
+  configSchemaToZod,
+  validateConfigValues,
+  getMissingRequiredFields,
+  applyConfigDefaults,
+  z,
+} from "./types/config-schema.js";
+
+// Host config capability
+export type { HostConfigCapability } from "./types/host-environment.js";
+
+// =============================================================================
+// React-free Slot Contracts and State
+// =============================================================================
+
+export type {
+  PresetIconName,
+  ItemStatus,
+  ListPanelItem,
+  PanelAction,
+  ListPanelSection,
+  ListPanelConfig,
+  PanelConfig,
+  SlotState,
+  SlotStateCallback,
+  SlotStateStore,
+  MutableSlotStateStore,
+  DerivedSlotStateOptions,
+  ExtensionSlot,
+  SerializedPanelAction,
+  SerializedListPanelItem,
+  SerializedListPanelSection,
+  SerializedListPanelConfig,
+  SerializedSlotState,
+} from "./slots.js";
+export {
+  createSlotState,
+  createDerivedSlotState,
+  createHiddenSlotState,
+  createListSlotState,
+  serializeSlotState,
+} from "./slots.js";
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -98,104 +151,3 @@ export { createExtension } from "./create-extension.js";
 // =============================================================================
 
 export { ExtensionRegistry, createRegistry } from "./registry.js";
-
-// =============================================================================
-// Loader
-// =============================================================================
-
-export { ExtensionLoader, createLoader } from "./loader.js";
-export type {
-  ExtensionPackageJson,
-  LoadResult,
-  ExtensionLoaderConfig,
-} from "./loader.js";
-
-// =============================================================================
-// NOTE: Built-in extensions have been moved to standalone packages.
-// Apps should import them directly:
-//
-//   import { createCharacterRuntime } from "@vokality/ragdoll-extension-character";
-//   import { createTaskRuntime } from "@vokality/ragdoll-extension-tasks";
-//   import { createPomodoroRuntime } from "@vokality/ragdoll-extension-pomodoro";
-//   import { createSpotifyRuntime } from "@vokality/ragdoll-extension-spotify";
-//
-// The framework package no longer re-exports extensions to avoid circular dependencies.
-// =============================================================================
-
-// =============================================================================
-// UI Components and Utilities
-// =============================================================================
-
-export {
-  // State management
-  createSlotState,
-  createDerivedSlotState,
-  createHiddenSlotState,
-  createListSlotState,
-
-  // React hooks
-  useSlotState,
-  useSlotStateStore,
-  useSlotBadge,
-  useSlotVisible,
-  useSlotRegistry,
-  useVisibleSlots,
-  useActiveSlot,
-
-  // React components
-  SlotButton,
-  SlotButtonStateless,
-  SlotPanel,
-  SlotPanelBase,
-  SlotBar,
-  ControlledSlotBar,
-
-  // Icons
-  presetIcons,
-  getSlotIcon,
-} from "./ui/index.js";
-
-// NOTE: UI slot helpers have been moved to extension packages.
-// Import them directly from the extension packages:
-//
-//   import { createTaskUISlot } from "@vokality/ragdoll-extension-tasks";
-//   import { createPomodoroUISlot } from "@vokality/ragdoll-extension-pomodoro";
-//   import { createSpotifyUISlot } from "@vokality/ragdoll-extension-spotify";
-
-
-export type {
-  // Icon types
-  PresetIconName,
-  SlotIcon,
-  IconProps,
-
-  // Panel types
-  ItemStatus,
-  ListPanelItem,
-  PanelAction,
-  ListPanelSection,
-  ListPanelConfig,
-  CustomPanelConfig,
-  CustomPanelProps,
-  PanelConfig,
-
-  // Slot types
-  SlotState,
-  SlotStateCallback,
-  SlotStateStore,
-  ExtensionUISlot,
-  MutableSlotStateStore,
-  DerivedSlotStateOptions,
-
-  // Registry types
-  SlotRegistryEventType,
-  SlotRegistryEvent,
-  SlotRegistryEventCallback,
-  SlotRegistry,
-
-  // Component prop types
-  SlotButtonProps,
-  SlotPanelProps,
-  SlotBarProps,
-  ControlledSlotBarProps,
-} from "./ui/index.js";

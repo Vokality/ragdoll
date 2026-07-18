@@ -1,5 +1,5 @@
 {
-  "extends": "../ragdoll-extensions/tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",

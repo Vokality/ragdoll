@@ -1,38 +1,8 @@
-import { useState, useEffect, type CSSProperties } from "react";
-
-interface ConfigField {
-  type: "string" | "number" | "boolean" | "select";
-  label: string;
-  description?: string;
-  required?: boolean;
-  default?: string | number | boolean;
-  placeholder?: string;
-  secret?: boolean;
-  minLength?: number;
-  maxLength?: number;
-  pattern?: string;
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: Array<{ value: string; label: string }>;
-}
-
-interface ConfigSchema {
-  [key: string]: ConfigField;
-}
-
-interface ExtensionConfigStatus {
-  isConfigured: boolean;
-  missingFields: string[];
-  values: Record<string, unknown>;
-}
-
-interface OAuthState {
-  status: "disconnected" | "connecting" | "connected" | "error" | "expired";
-  isAuthenticated: boolean;
-  expiresAt?: number;
-  error?: string;
-}
+import type { CSSProperties } from "react";
+import type { ConfigField } from "@vokality/ragdoll-extensions";
+import type { OAuthState } from "../../electron/electron-api";
+import type { ExtensionManagementService } from "../application/extension-management-service";
+import { useExtensionConfiguration } from "../hooks/use-extension-configuration";
 
 interface ExtensionConfigModalProps {
   isOpen: boolean;
@@ -41,8 +11,8 @@ interface ExtensionConfigModalProps {
   extensionName: string;
   hasOAuth: boolean;
   hasConfig: boolean;
-  configSchema?: ConfigSchema;
   onConfigured?: () => void;
+  service: ExtensionManagementService;
 }
 
 export function ExtensionConfigModal({
@@ -52,151 +22,21 @@ export function ExtensionConfigModal({
   extensionName,
   hasOAuth,
   hasConfig,
-  configSchema: initialConfigSchema,
   onConfigured,
+  service,
 }: ExtensionConfigModalProps) {
-  const [configStatus, setConfigStatus] = useState<ExtensionConfigStatus | null>(null);
-  const [configSchema, setConfigSchema] = useState<ConfigSchema | undefined>(initialConfigSchema);
-  const [oauthState, setOauthState] = useState<OAuthState | null>(null);
-  const [configValues, setConfigValues] = useState<Record<string, string | number | boolean>>({});
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = async () => {
-    try {
-      if (hasConfig) {
-        // Fetch schema if not provided
-        if (!configSchema) {
-          const schema = await window.electronAPI.getConfigSchema(extensionId);
-          if (schema) {
-            setConfigSchema(schema);
-          }
-        }
-
-        const status = await window.electronAPI.getConfigStatus(extensionId);
-        setConfigStatus(status);
-        if (status?.values) {
-          const initial: Record<string, string | number | boolean> = {};
-          for (const [key, value] of Object.entries(status.values)) {
-            if (value !== undefined && value !== null && typeof value !== "object") {
-              initial[key] = value as string | number | boolean;
-            }
-          }
-          setConfigValues(initial);
-        }
-      }
-
-      if (hasOAuth) {
-        await loadOAuthState();
-      }
-    } catch (err) {
-      console.error("Failed to load extension config:", err);
-    }
-  };
-
-  const loadOAuthState = async () => {
-    const state = await window.electronAPI.getOAuthState(extensionId);
-    setOauthState(state);
-  };
-
-  // Load initial data
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, extensionId]);
-
-  // Listen for OAuth events
-  useEffect(() => {
-    if (!isOpen || !hasOAuth) return;
-
-    const unsubSuccess = window.electronAPI.onOAuthSuccess((event) => {
-      if (event.extensionId === extensionId) {
-        loadOAuthState();
-      }
-    });
-
-    const unsubError = window.electronAPI.onOAuthError((event) => {
-      if (event.extensionId === extensionId) {
-        setError(event.error ?? "OAuth authentication failed");
-        loadOAuthState();
-      }
-    });
-
-    return () => {
-      unsubSuccess();
-      unsubError();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, extensionId, hasOAuth]);
-
-  const handleConfigChange = (key: string, value: string | number | boolean) => {
-    setConfigValues((prev) => ({ ...prev, [key]: value }));
-    setError(null);
-  };
-
-  const handleSaveConfig = async () => {
-    if (!configSchema) return;
-
-    setSaving(true);
-    setError(null);
-
-    try {
-      for (const [key, value] of Object.entries(configValues)) {
-        if (value !== undefined && value !== "") {
-          const result = await window.electronAPI.setConfigValue(extensionId, key, value);
-          if (!result.success) {
-            throw new Error(result.error ?? `Failed to save ${key}`);
-          }
-        }
-      }
-
-      // Reload status
-      const status = await window.electronAPI.getConfigStatus(extensionId);
-      setConfigStatus(status);
-
-      if (status?.isConfigured) {
-        onConfigured?.();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save configuration");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStartOAuth = async () => {
-    setError(null);
-    setOauthState((prev) => (prev ? { ...prev, status: "connecting" } : null));
-
-    try {
-      const result = await window.electronAPI.startOAuthFlow(extensionId);
-      if (!result.success) {
-        throw new Error(result.error ?? "Failed to start OAuth flow");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start authentication");
-      await loadOAuthState();
-    }
-  };
-
-  const handleDisconnectOAuth = async () => {
-    try {
-      const result = await window.electronAPI.disconnectOAuth(extensionId);
-      if (!result.success) {
-        throw new Error(result.error ?? "Failed to disconnect");
-      }
-      await loadOAuthState();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to disconnect");
-    }
-  };
+  const configuration = useExtensionConfiguration(service, {
+    extensionId,
+    hasConfig,
+    hasOAuth,
+    isOpen,
+    onConfigured,
+  });
 
   if (!isOpen) return null;
 
-  const isConfigComplete = !hasConfig || configStatus?.isConfigured;
-  const isOAuthComplete = !hasOAuth || oauthState?.isAuthenticated;
+  const isConfigComplete = !hasConfig || configuration.status?.isConfigured;
+  const isOAuthComplete = !hasOAuth || configuration.oauth?.isAuthenticated;
   const isFullyConfigured = isConfigComplete && isOAuthComplete;
 
   return (
@@ -216,35 +56,37 @@ export function ExtensionConfigModal({
 
         {/* Content */}
         <div style={styles.content}>
-          {error && (
+          {configuration.error && (
             <div style={styles.errorBanner}>
               <ErrorIcon />
-              <span>{error}</span>
+              <span>{configuration.error}</span>
             </div>
           )}
 
           {/* Config Fields */}
-          {hasConfig && configSchema && (
+          {hasConfig && configuration.schema && (
             <section style={styles.section}>
               <h3 style={styles.sectionTitle}>Configuration</h3>
               <div style={styles.fieldList}>
-                {Object.entries(configSchema).map(([key, field]) => (
+                {Object.entries(configuration.schema).map(([key, field]) => (
                   <ConfigFieldInput
                     key={key}
                     field={field}
-                    value={configValues[key]}
-                    onChange={(value) => handleConfigChange(key, value)}
-                    isMissing={configStatus?.missingFields.includes(key)}
+                    value={configuration.values[key]}
+                    onChange={(value) => configuration.changeValue(key, value)}
+                    isMissing={configuration.status?.missingFields.includes(
+                      key,
+                    )}
                   />
                 ))}
               </div>
               <button
-                onClick={handleSaveConfig}
-                disabled={saving}
+                onClick={() => void configuration.save()}
+                disabled={configuration.saving}
                 className="btn-primary"
                 style={styles.saveButton}
               >
-                {saving ? "Saving..." : "Save Configuration"}
+                {configuration.saving ? "Saving..." : "Save Configuration"}
               </button>
             </section>
           )}
@@ -254,9 +96,9 @@ export function ExtensionConfigModal({
             <section style={styles.section}>
               <h3 style={styles.sectionTitle}>Authentication</h3>
               <OAuthStatusCard
-                state={oauthState}
-                onConnect={handleStartOAuth}
-                onDisconnect={handleDisconnectOAuth}
+                state={configuration.oauth}
+                onConnect={() => void configuration.connect()}
+                onDisconnect={() => void configuration.disconnect()}
               />
             </section>
           )}
@@ -267,7 +109,9 @@ export function ExtensionConfigModal({
               {isFullyConfigured ? (
                 <>
                   <CheckCircleIcon />
-                  <span style={styles.statusText}>Extension is fully configured</span>
+                  <span style={styles.statusText}>
+                    Extension is fully configured
+                  </span>
                 </>
               ) : (
                 <>
@@ -293,20 +137,27 @@ export function ExtensionConfigModal({
 interface ConfigFieldInputProps {
   field: ConfigField;
   value: string | number | boolean | undefined;
-  onChange: (value: string | number | boolean) => void;
+  onChange: (value: string | number | boolean | undefined) => void;
   isMissing?: boolean;
 }
 
-function ConfigFieldInput({ field, value, onChange, isMissing }: ConfigFieldInputProps) {
+function ConfigFieldInput({
+  field,
+  value,
+  onChange,
+  isMissing,
+}: ConfigFieldInputProps) {
   const renderInput = () => {
     switch (field.type) {
       case "string":
         return (
           <input
             type={field.secret ? "password" : "text"}
-            value={(value as string) ?? ""}
+            value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
+            placeholder={
+              field.placeholder ?? `Enter ${field.label.toLowerCase()}`
+            }
             style={{
               ...styles.input,
               ...(isMissing ? styles.inputError : {}),
@@ -320,9 +171,17 @@ function ConfigFieldInput({ field, value, onChange, isMissing }: ConfigFieldInpu
         return (
           <input
             type="number"
-            value={(value as number) ?? ""}
-            onChange={(e) => onChange(e.target.valueAsNumber || 0)}
-            placeholder={field.placeholder ?? `Enter ${field.label.toLowerCase()}`}
+            value={typeof value === "number" ? value : ""}
+            onChange={(e) =>
+              onChange(
+                Number.isNaN(e.target.valueAsNumber)
+                  ? undefined
+                  : e.target.valueAsNumber,
+              )
+            }
+            placeholder={
+              field.placeholder ?? `Enter ${field.label.toLowerCase()}`
+            }
             style={{
               ...styles.input,
               ...(isMissing ? styles.inputError : {}),
@@ -336,17 +195,19 @@ function ConfigFieldInput({ field, value, onChange, isMissing }: ConfigFieldInpu
       case "boolean":
         return (
           <button
-            onClick={() => onChange(!value)}
+            onClick={() => onChange(value !== true)}
             style={{
               ...styles.toggle,
-              ...(value ? styles.toggleOn : styles.toggleOff),
+              ...(value === true ? styles.toggleOn : styles.toggleOff),
             }}
-            aria-pressed={!!value}
+            aria-pressed={value === true}
           >
             <span
               style={{
                 ...styles.toggleKnob,
-                ...(value ? styles.toggleKnobOn : styles.toggleKnobOff),
+                ...(value === true
+                  ? styles.toggleKnobOn
+                  : styles.toggleKnobOff),
               }}
             />
           </button>
@@ -355,7 +216,7 @@ function ConfigFieldInput({ field, value, onChange, isMissing }: ConfigFieldInpu
       case "select":
         return (
           <select
-            value={(value as string) ?? ""}
+            value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
             style={{
               ...styles.select,
@@ -383,7 +244,9 @@ function ConfigFieldInput({ field, value, onChange, isMissing }: ConfigFieldInpu
           {field.label}
           {field.required && <span style={styles.required}>*</span>}
         </label>
-        {field.description && <span style={styles.fieldDescription}>{field.description}</span>}
+        {field.description && (
+          <span style={styles.fieldDescription}>{field.description}</span>
+        )}
       </div>
       {renderInput()}
     </div>
@@ -397,7 +260,11 @@ interface OAuthStatusCardProps {
   onDisconnect: () => void;
 }
 
-function OAuthStatusCard({ state, onConnect, onDisconnect }: OAuthStatusCardProps) {
+function OAuthStatusCard({
+  state,
+  onConnect,
+  onDisconnect,
+}: OAuthStatusCardProps) {
   const getStatusDisplay = () => {
     if (!state) return { label: "Loading...", color: "var(--text-muted)" };
 
@@ -434,7 +301,11 @@ function OAuthStatusCard({ state, onConnect, onDisconnect }: OAuthStatusCardProp
 
       <div style={styles.oauthActions}>
         {state?.isAuthenticated ? (
-          <button onClick={onDisconnect} className="btn-secondary" style={styles.oauthButton}>
+          <button
+            onClick={onDisconnect}
+            className="btn-secondary"
+            style={styles.oauthButton}
+          >
             Disconnect
           </button>
         ) : (
@@ -455,7 +326,14 @@ function OAuthStatusCard({ state, onConnect, onDisconnect }: OAuthStatusCardProp
 // Icons
 function CloseIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -464,7 +342,14 @@ function CloseIcon() {
 
 function ErrorIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="15" y1="9" x2="9" y2="15" />
       <line x1="9" y1="9" x2="15" y2="15" />
@@ -474,7 +359,14 @@ function ErrorIcon() {
 
 function CheckCircleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--success)"
+      strokeWidth="2"
+    >
       <circle cx="12" cy="12" r="10" />
       <polyline points="9 12 12 15 16 10" />
     </svg>
@@ -483,7 +375,14 @@ function CheckCircleIcon() {
 
 function WarningIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--warning)"
+      strokeWidth="2"
+    >
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -535,7 +434,8 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
     background: "transparent",
     border: "none",
-    transition: "color var(--transition-fast), background var(--transition-fast)",
+    transition:
+      "color var(--transition-fast), background var(--transition-fast)",
   },
   content: {
     padding: "20px 24px 24px",

@@ -38,17 +38,18 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
+    "prebuild": "bun run clean",
+    "build": "bunx --bun --no-install tsc",
+    "dev": "bunx --bun --no-install tsc --watch",
+    "typecheck": "bunx --bun --no-install tsc --noEmit",
+    "clean": "bun run ../../scripts/clean.ts dist",
     "test": "bun test tests/**/*.test.ts"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0"
+    "react": "catalog:"
   },
   "devDependencies": {
-    "@types/react": "^19.2.5",
-    "typescript": "~5.9.3"
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
   }
 }

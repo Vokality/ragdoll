@@ -56,8 +56,6 @@ function validateConfig(config: ExtensionConfig): void {
 export function createExtension(config: ExtensionConfig): RagdollExtension {
   validateConfig(config);
 
-  let activeRuntime: ExtensionRuntimeContribution | null = null;
-
   return {
     manifest: {
       id: config.id,
@@ -80,11 +78,19 @@ export function createExtension(config: ExtensionConfig): RagdollExtension {
       ];
       const services: ExtensionServiceDefinition[] = [
         ...(runtimeFromFactory?.services ?? []),
-        ...resolveList<ExtensionServiceDefinition>(config.services, host, context),
+        ...resolveList<ExtensionServiceDefinition>(
+          config.services,
+          host,
+          context,
+        ),
       ];
       const stateChannels: ExtensionStateChannel[] = [
         ...(runtimeFromFactory?.stateChannels ?? []),
-        ...resolveList<ExtensionStateChannel>(config.stateChannels, host, context),
+        ...resolveList<ExtensionStateChannel>(
+          config.stateChannels,
+          host,
+          context,
+        ),
       ];
       const slots = [
         ...(runtimeFromFactory?.slots ?? []),
@@ -92,7 +98,10 @@ export function createExtension(config: ExtensionConfig): RagdollExtension {
       ];
 
       const hasCapability =
-        tools.length > 0 || services.length > 0 || stateChannels.length > 0 || slots.length > 0;
+        tools.length > 0 ||
+        services.length > 0 ||
+        stateChannels.length > 0 ||
+        slots.length > 0;
       if (!hasCapability) {
         throw new Error(
           `Extension '${config.id}' did not register any capabilities during activation`,
@@ -108,15 +117,10 @@ export function createExtension(config: ExtensionConfig): RagdollExtension {
         dispose: runtimeFromFactory?.dispose,
       };
 
-      activeRuntime = runtime;
       return runtime;
     },
 
     async deactivate(context) {
-      if (activeRuntime?.dispose) {
-        await activeRuntime.dispose();
-      }
-      activeRuntime = null;
       await config.onDestroy?.(context);
     },
   } satisfies RagdollExtension;

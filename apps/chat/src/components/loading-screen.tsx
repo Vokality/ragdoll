@@ -33,4 +33,3 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "14px",
   },
 };
-

@@ -5,7 +5,7 @@ Domain-minded helpers for exercising controllers, state managers, and integratio
 ## Installation
 
 ```bash
-npm install --save-dev @vokality/ragdoll
+bun add --dev @vokality/ragdoll
 ```
 
 ## Usage

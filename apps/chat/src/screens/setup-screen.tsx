@@ -1,25 +1,26 @@
-import { useState, useCallback, type CSSProperties } from "react";
+import { useState, useCallback, useRef, type CSSProperties } from "react";
 import {
   RagdollCharacter,
   CharacterController,
   getDefaultTheme,
 } from "@vokality/ragdoll";
 import { ApiKeyInput } from "../components/api-key-input";
+import type { SetupService } from "../application/setup-service";
 
 interface SetupScreenProps {
   onComplete: () => void;
+  service: SetupService;
 }
 
-export function SetupScreen({ onComplete }: SetupScreenProps) {
-  const [controller, setController] = useState<CharacterController | null>(null);
+export function SetupScreen({ onComplete, service }: SetupScreenProps) {
+  const controller = useRef<CharacterController | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const theme = getDefaultTheme();
 
   const handleControllerReady = useCallback((ctrl: CharacterController) => {
-    setController(ctrl);
-    // Set a welcoming mood
+    controller.current = ctrl;
     ctrl.setMood("smile", 0.5);
   }, []);
 
@@ -27,58 +28,39 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     setIsLoading(true);
     setError(null);
 
-    // Show thinking expression
-    if (controller) {
-      controller.setMood("thinking", 0.3);
-    }
+    controller.current?.setMood("thinking", 0.3);
 
     try {
-      // Validate the key with OpenAI
-      const validation = await window.electronAPI.validateApiKey(key);
-
-      if (!validation.valid) {
-        setError(validation.error ?? "Invalid API key");
-        if (controller) {
-          controller.setMood("sad", 0.3);
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      // Store the key
-      const result = await window.electronAPI.setApiKey(key);
+      const result = await service.configureApiKey(key);
 
       if (!result.success) {
-        setError(result.error ?? "Failed to save API key");
-        if (controller) {
-          controller.setMood("sad", 0.3);
-        }
+        setError(result.error);
+        controller.current?.setMood("sad", 0.3);
         setIsLoading(false);
         return;
       }
 
-      // Success!
-      if (controller) {
-        controller.setMood("laugh", 0.3);
-        controller.triggerAction("wink", 0.5);
-      }
-
-      // Wait a moment for the animation, then proceed
-      setTimeout(() => {
-        onComplete();
-      }, 800);
-    } catch {
-      setError("An unexpected error occurred");
-      if (controller) {
-        controller.setMood("sad", 0.3);
-      }
+      controller.current?.setMood("laugh", 0.3);
+      controller.current?.triggerAction("wink", 0.5);
+      onComplete();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "API key setup failed");
+      controller.current?.setMood("sad", 0.3);
       setIsLoading(false);
     }
   };
 
-  const handleOpenPlatform = () => {
-    // This will be handled by the main process to open external link
-    window.open("https://platform.openai.com/api-keys", "_blank");
+  const handleOpenPlatform = async () => {
+    try {
+      const result = await service.openApiKeyPage();
+      if (!result.success) setError(result.error);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not open the API key page",
+      );
+    }
   };
 
   return (
@@ -128,7 +110,14 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
 function KeyIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
     </svg>
   );
@@ -136,7 +125,14 @@ function KeyIcon() {
 
 function ExternalIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15 3 21 3 21 9" />
       <line x1="10" y1="14" x2="21" y2="3" />
@@ -171,7 +167,8 @@ const styles: Record<string, CSSProperties> = {
     transform: "translate(-50%, -50%)",
     width: "600px",
     height: "600px",
-    background: "radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)",
+    background:
+      "radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)",
     pointerEvents: "none",
     opacity: 0.5,
   },
@@ -217,7 +214,8 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid var(--border)",
     borderRadius: "var(--radius-md)",
     cursor: "pointer",
-    transition: "color var(--transition-fast), border-color var(--transition-fast)",
+    transition:
+      "color var(--transition-fast), border-color var(--transition-fast)",
     position: "relative",
     zIndex: 1,
   },

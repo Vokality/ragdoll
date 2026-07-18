@@ -5,7 +5,7 @@ An animated character framework with facial expressions, head poses, and themes.
 ## Installation
 
 ```bash
-npm install @vokality/ragdoll
+bun add @vokality/ragdoll
 # or
 bun add @vokality/ragdoll
 ```
@@ -127,7 +127,7 @@ import { getVariant, registerVariant } from "@vokality/ragdoll";
 
 const customVariant = registerVariant({
   id: "scientist",
-  dimensions: { /* overrides */ },
+  dimensions: {/* overrides */},
   colorOverrides: { hair: { light: "#eee", mid: "#ccc", dark: "#999" } },
 });
 

@@ -1,12 +1,14 @@
-import { useState, useCallback, useEffect, type CSSProperties } from "react";
+import { useCallback, type CSSProperties } from "react";
 import {
   RagdollCharacter,
   CharacterController,
   getTheme,
-  getDefaultTheme,
 } from "@vokality/ragdoll";
-import type { RagdollTheme } from "@vokality/ragdoll";
 import { ConversationBubbles } from "./conversation-bubbles";
+import type {
+  CharacterThemeId,
+  CharacterVariantId,
+} from "../../electron/electron-api";
 
 interface Message {
   role: "user" | "assistant";
@@ -16,8 +18,8 @@ interface Message {
 interface CharacterViewProps {
   messages: Message[];
   isStreaming?: boolean;
-  themeId?: string;
-  variantId?: string;
+  themeId?: CharacterThemeId;
+  variantId?: CharacterVariantId;
   onControllerReady?: (controller: CharacterController) => void;
 }
 
@@ -28,24 +30,13 @@ export function CharacterView({
   variantId = "human",
   onControllerReady,
 }: CharacterViewProps) {
-  const [controller, setController] = useState<CharacterController | null>(null);
-  const [theme, setTheme] = useState<RagdollTheme>(() => getTheme(themeId) ?? getDefaultTheme());
-
-  // Update theme when themeId changes
-  useEffect(() => {
-    const newTheme = getTheme(themeId) ?? getDefaultTheme();
-    setTheme(newTheme);
-    if (controller) {
-      controller.setTheme(themeId);
-    }
-  }, [themeId, controller]);
+  const theme = getTheme(themeId);
 
   const handleControllerReady = useCallback(
     (ctrl: CharacterController) => {
-      setController(ctrl);
       onControllerReady?.(ctrl);
     },
-    [onControllerReady]
+    [onControllerReady],
   );
 
   return (
@@ -61,10 +52,7 @@ export function CharacterView({
       </div>
 
       {/* Conversation bubbles - below the character */}
-      <ConversationBubbles
-        messages={messages}
-        isStreaming={isStreaming}
-      />
+      <ConversationBubbles messages={messages} isStreaming={isStreaming} />
     </div>
   );
 }

@@ -7,15 +7,12 @@
  * 3. Dynamically loaded at runtime
  *
  * To use this pattern for your own extension:
- * 1. Add "ragdollExtension": true (or config object) to package.json
- * 2. Export either:
- *    - A `createExtension(config?)` function
- *    - A named `extension` export
- *    - A default export
+ * 1. Add a `ragdollExtension` manifest to package.json
+ * 2. Export a `createExtension(config?)` function
  */
 
 import {
-  createExtension,
+  createExtension as defineExtension,
   type RagdollExtension,
   type ToolResult,
   type ValidationResult,
@@ -29,7 +26,6 @@ export type TemperatureUnits = "celsius" | "fahrenheit";
 
 export interface WeatherExtensionConfig {
   defaultUnits?: TemperatureUnits;
-  apiKey?: string;
 }
 
 export interface GetWeatherArgs {
@@ -57,15 +53,15 @@ const VALID_UNITS: readonly TemperatureUnits[] = ["celsius", "fahrenheit"];
 
 const MOCK_WEATHER: Record<string, Omit<WeatherData, "location" | "units">> = {
   "new york": { temperature: 22, condition: "sunny", humidity: 45 },
-  "london": { temperature: 15, condition: "cloudy", humidity: 72 },
-  "tokyo": { temperature: 28, condition: "humid", humidity: 85 },
-  "sydney": { temperature: 19, condition: "partly cloudy", humidity: 60 },
-  "paris": { temperature: 18, condition: "rainy", humidity: 78 },
+  london: { temperature: 15, condition: "cloudy", humidity: 72 },
+  tokyo: { temperature: 28, condition: "humid", humidity: 85 },
+  sydney: { temperature: 19, condition: "partly cloudy", humidity: 60 },
+  paris: { temperature: 18, condition: "rainy", humidity: 78 },
 };
 
 function getWeatherData(
   location: string,
-  units: TemperatureUnits
+  units: TemperatureUnits,
 ): WeatherData | null {
   const normalizedLocation = location.toLowerCase().trim();
   const data = MOCK_WEATHER[normalizedLocation];
@@ -126,18 +122,18 @@ function validateGetWeather(args: Record<string, unknown>): ValidationResult {
  * @example
  * ```ts
  * // Manual registration
- * import { createWeatherExtension } from "@example/ragdoll-extension-weather";
+ * import { createExtension } from "@example/ragdoll-extension-weather";
  *
- * const weatherExt = createWeatherExtension({ defaultUnits: "fahrenheit" });
- * await registry.register(weatherExt);
+ * const weatherExt = createExtension({ defaultUnits: "fahrenheit" });
+ * await registry.register(weatherExt, { host });
  * ```
  */
-export function createWeatherExtension(
-  config: WeatherExtensionConfig = {}
+export function createExtension(
+  config: WeatherExtensionConfig = {},
 ): RagdollExtension {
   const defaultUnits = config.defaultUnits ?? "celsius";
 
-  return createExtension({
+  return defineExtension({
     id: "weather",
     name: "Weather",
     version: "1.0.0",
@@ -189,32 +185,5 @@ export function createWeatherExtension(
         validate: validateGetWeather,
       },
     ],
-
-    onInitialize: (context) => {
-      console.log(
-        `[Weather Extension] Initialized with instance ID: ${context.instanceId}`
-      );
-      console.log(`[Weather Extension] Default units: ${defaultUnits}`);
-    },
-
-    onDestroy: () => {
-      console.log("[Weather Extension] Destroyed");
-    },
   });
 }
-
-// =============================================================================
-// Exports
-// =============================================================================
-
-/**
- * Named export for auto-discovery by ExtensionLoader.
- * Uses default configuration.
- */
-export const extension = createWeatherExtension();
-
-/**
- * Default export (alternative for auto-discovery).
- * The loader will call this as a function if it's callable.
- */
-export default createWeatherExtension;

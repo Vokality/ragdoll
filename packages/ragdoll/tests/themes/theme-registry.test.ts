@@ -35,9 +35,8 @@ describe("Theme Registry", () => {
       expect(theme.id).toBe("monochrome");
     });
 
-    it("should fallback to default for unknown theme", () => {
-      const theme = getTheme("nonexistent");
-      expect(theme.id).toBe("default");
+    it("should reject an unknown theme", () => {
+      expect(() => getTheme("nonexistent")).toThrow("Unknown theme");
     });
   });
 
@@ -154,4 +153,3 @@ describe("Theme Registry", () => {
     });
   });
 });
-

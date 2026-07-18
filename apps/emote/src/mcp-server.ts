@@ -7,7 +7,7 @@
  * Usage: Add to your MCP config:
  * {
  *   "emote": {
- *     "command": "node",
+ *     "command": "bun",
  *     "args": ["/path/to/vscode-extension/dist/mcp-server.js"]
  *   }
  * }
@@ -22,6 +22,8 @@ import {
 import * as net from "net";
 import * as path from "path";
 import * as os from "os";
+import { VALID_ACTIONS, VALID_MOODS, VALID_THEMES, VALID_TONES } from "./types";
+import type { ActionId, ThemeId } from "./types";
 
 // Socket-based IPC - must match the extension
 const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
@@ -33,34 +35,8 @@ const SOCKET_PATH =
 const SOCKET_TIMEOUT_MS = 3000;
 
 const LOG_PREFIX = "[Emote MCP]";
-const VALID_MOODS = [
-  "neutral",
-  "smile",
-  "frown",
-  "laugh",
-  "angry",
-  "sad",
-  "surprise",
-  "confusion",
-  "thinking",
-] as const;
-const VALID_ACTIONS = ["wink", "talk", "shake"] as const;
-const VALID_TONES = ["default", "whisper", "shout"] as const;
-const VALID_THEMES = ["default", "robot", "alien", "monochrome"] as const;
-
 type MoodId = (typeof VALID_MOODS)[number];
-type ActionId = (typeof VALID_ACTIONS)[number];
 type ToneId = (typeof VALID_TONES)[number];
-type ThemeId = (typeof VALID_THEMES)[number];
-type PomodoroDuration = 5 | 15 | 30 | 60 | 120;
-type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
-
-const VALID_TASK_STATUSES: TaskStatus[] = [
-  "todo",
-  "in_progress",
-  "blocked",
-  "done",
-];
 
 type CommandPayload =
   | { type: "show" | "hide" | "clearAction" }
@@ -73,31 +49,7 @@ type CommandPayload =
       duration?: number;
     }
   | { type: "setSpeechBubble"; text: string | null; tone?: ToneId }
-  | { type: "setTheme"; themeId: ThemeId }
-  | {
-      type: "startPomodoro";
-      sessionDuration?: PomodoroDuration;
-      breakDuration?: PomodoroDuration;
-    }
-  | { type: "pausePomodoro" }
-  | { type: "resetPomodoro" }
-  | { type: "getPomodoroState" }
-  | { type: "addTask"; text: string; status?: TaskStatus }
-  | {
-      type: "updateTaskStatus";
-      taskId: string;
-      status: TaskStatus;
-      blockedReason?: string;
-    }
-  | { type: "setActiveTask"; taskId: string }
-  | { type: "removeTask"; taskId: string }
-  | { type: "completeActiveTask" }
-  | { type: "clearCompletedTasks" }
-  | { type: "clearAllTasks" }
-  | { type: "expandTasks" }
-  | { type: "collapseTasks" }
-  | { type: "toggleTasks" }
-  | { type: "listTasks" };
+  | { type: "setTheme"; themeId: ThemeId };
 
 function log(
   level: "info" | "error" | "warn",
@@ -112,8 +64,29 @@ type SocketResponse = {
   ok: boolean;
   type?: string;
   error?: string;
-  tasks?: unknown[];
 };
+
+function parseSocketResponse(value: string): SocketResponse {
+  const parsed: unknown = JSON.parse(value);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Emote extension returned an invalid response");
+  }
+
+  const response = parsed as Record<string, unknown>;
+  if (
+    typeof response.ok !== "boolean" ||
+    (response.type !== undefined && typeof response.type !== "string") ||
+    (response.error !== undefined && typeof response.error !== "string")
+  ) {
+    throw new Error("Emote extension returned an invalid response");
+  }
+
+  return {
+    ok: response.ok,
+    ...(typeof response.type === "string" && { type: response.type }),
+    ...(typeof response.error === "string" && { error: response.error }),
+  };
+}
 
 function sendCommand(command: CommandPayload): Promise<SocketResponse> {
   return new Promise((resolve, reject) => {
@@ -149,13 +122,21 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
           resolved = true;
           clearTimeout(timeout);
           try {
-            const response = JSON.parse(message) as SocketResponse;
+            const response = parseSocketResponse(message);
             log("info", "Command dispatched", { type: command.type, response });
             cleanup();
+            if (!response.ok) {
+              reject(
+                new Error(
+                  response.error ?? "Emote extension rejected the command",
+                ),
+              );
+              return;
+            }
             resolve(response);
-          } catch {
+          } catch (error) {
             cleanup();
-            resolve({ ok: true, type: command.type });
+            reject(error);
           }
         }
       }
@@ -183,7 +164,9 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
         resolved = true;
         clearTimeout(timeout);
         cleanup();
-        resolve({ ok: true, type: command.type });
+        reject(
+          new Error("Emote extension closed the connection without a response"),
+        );
       }
     });
 
@@ -390,176 +373,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {},
       },
     },
-    {
-      name: "startPomodoro",
-      description: "Start a pomodoro timer session",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionDuration: {
-            type: "number",
-            enum: [5, 15, 30, 60, 120],
-            description: "Session duration in minutes (5,15, 30, 60, or 120)",
-          },
-          breakDuration: {
-            type: "number",
-            enum: [5, 10, 15, 30],
-            description: "Break duration in minutes (5, 10, 15, or 30)",
-          },
-        },
-      },
-    },
-    {
-      name: "pausePomodoro",
-      description: "Pause the active pomodoro timer",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "resetPomodoro",
-      description: "Reset the pomodoro timer to idle state",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "getPomodoroState",
-      description:
-        "Get the current pomodoro timer state including remaining time",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "addTask",
-      description: "Add a new task to the task list",
-      inputSchema: {
-        type: "object",
-        properties: {
-          text: {
-            type: "string",
-            description: "The task description",
-          },
-          status: {
-            type: "string",
-            enum: VALID_TASK_STATUSES,
-            description: "Initial status (default: todo)",
-          },
-        },
-        required: ["text"],
-      },
-    },
-    {
-      name: "updateTaskStatus",
-      description: "Update a task's status",
-      inputSchema: {
-        type: "object",
-        properties: {
-          taskId: {
-            type: "string",
-            description: "The task ID to update",
-          },
-          status: {
-            type: "string",
-            enum: VALID_TASK_STATUSES,
-            description: "New status",
-          },
-          blockedReason: {
-            type: "string",
-            description: "Reason for blocking (only when status is blocked)",
-          },
-        },
-        required: ["taskId", "status"],
-      },
-    },
-    {
-      name: "setActiveTask",
-      description: "Set a task as the currently active (in_progress) task",
-      inputSchema: {
-        type: "object",
-        properties: {
-          taskId: {
-            type: "string",
-            description: "The task ID to make active",
-          },
-        },
-        required: ["taskId"],
-      },
-    },
-    {
-      name: "removeTask",
-      description: "Remove a task from the list",
-      inputSchema: {
-        type: "object",
-        properties: {
-          taskId: {
-            type: "string",
-            description: "The task ID to remove",
-          },
-        },
-        required: ["taskId"],
-      },
-    },
-    {
-      name: "completeActiveTask",
-      description: "Mark the active task as done",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "clearCompletedTasks",
-      description: "Remove all completed tasks from the list",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "clearAllTasks",
-      description: "Remove all tasks from the list",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "expandTasks",
-      description: "Expand the task drawer to show all tasks",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "collapseTasks",
-      description: "Collapse the task drawer to show only active task",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "toggleTasks",
-      description: "Toggle the task drawer expanded/collapsed state",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
-    {
-      name: "listTasks",
-      description: "List all tasks with their IDs, status, and text",
-      inputSchema: {
-        type: "object",
-        properties: {},
-      },
-    },
   ],
 }));
 
@@ -634,111 +447,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "health": {
         const report = await getHealthReport();
         return successResponse(JSON.stringify(report, null, 2));
-      }
-
-      case "startPomodoro": {
-        const sessionDuration = (args as { sessionDuration?: number })
-          .sessionDuration as PomodoroDuration | undefined;
-        const breakDuration = (args as { breakDuration?: number })
-          .breakDuration as PomodoroDuration | undefined;
-        await sendCommand({
-          type: "startPomodoro",
-          sessionDuration,
-          breakDuration,
-        });
-        const sessionLabel = sessionDuration
-          ? `${sessionDuration} min`
-          : "default";
-        const breakLabel = breakDuration ? `${breakDuration} min` : "default";
-        return successResponse(
-          `Pomodoro started: ${sessionLabel} session, ${breakLabel} break`,
-        );
-      }
-
-      case "pausePomodoro":
-        await sendCommand({ type: "pausePomodoro" });
-        return successResponse("Pomodoro paused");
-
-      case "resetPomodoro":
-        await sendCommand({ type: "resetPomodoro" });
-        return successResponse("Pomodoro reset");
-
-      case "getPomodoroState": {
-        const response = await sendCommand({ type: "getPomodoroState" });
-        if (response.ok && "state" in response) {
-          const state = (response as { state: unknown }).state;
-          return successResponse(JSON.stringify(state, null, 2));
-        }
-        return successResponse(
-          '{"state":"idle","remainingTime":0,"isBreak":false}',
-        );
-      }
-
-      case "addTask": {
-        const text = (args as { text: string }).text;
-        const status = (args as { status?: TaskStatus }).status;
-        await sendCommand({ type: "addTask", text, status });
-        return successResponse(`Task added: "${text}"`);
-      }
-
-      case "updateTaskStatus": {
-        const taskId = (args as { taskId: string }).taskId;
-        const status = (args as { status: TaskStatus }).status;
-        const blockedReason = (args as { blockedReason?: string })
-          .blockedReason;
-        await sendCommand({
-          type: "updateTaskStatus",
-          taskId,
-          status,
-          blockedReason,
-        });
-        return successResponse(`Task ${taskId} status updated to ${status}`);
-      }
-
-      case "setActiveTask": {
-        const taskId = (args as { taskId: string }).taskId;
-        await sendCommand({ type: "setActiveTask", taskId });
-        return successResponse(`Task ${taskId} set as active`);
-      }
-
-      case "removeTask": {
-        const taskId = (args as { taskId: string }).taskId;
-        await sendCommand({ type: "removeTask", taskId });
-        return successResponse(`Task ${taskId} removed`);
-      }
-
-      case "completeActiveTask":
-        await sendCommand({ type: "completeActiveTask" });
-        return successResponse("Active task completed");
-
-      case "clearCompletedTasks":
-        await sendCommand({ type: "clearCompletedTasks" });
-        return successResponse("Completed tasks cleared");
-
-      case "clearAllTasks":
-        await sendCommand({ type: "clearAllTasks" });
-        return successResponse("All tasks cleared");
-
-      case "expandTasks":
-        await sendCommand({ type: "expandTasks" });
-        return successResponse("Task drawer expanded");
-
-      case "collapseTasks":
-        await sendCommand({ type: "collapseTasks" });
-        return successResponse("Task drawer collapsed");
-
-      case "toggleTasks":
-        await sendCommand({ type: "toggleTasks" });
-        return successResponse("Task drawer toggled");
-
-      case "listTasks": {
-        const response = await sendCommand({ type: "listTasks" });
-        if (response.ok && "tasks" in response) {
-          return successResponse(
-            JSON.stringify((response as { tasks: unknown[] }).tasks, null, 2),
-          );
-        }
-        return successResponse("[]");
       }
 
       default:

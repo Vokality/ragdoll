@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "outDir": "dist/electron",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
     "rootDir": "electron",
     "strict": true,
     "esModuleInterop": true,
@@ -11,4 +11,3 @@
   },
   "include": ["electron/preload.ts"]
 }
-

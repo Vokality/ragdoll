@@ -1,28 +1,26 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   RagdollCharacter,
   CharacterController,
   getTheme,
   getDefaultTheme,
+  getDefaultVariant,
 } from "@vokality/ragdoll";
 import type { RagdollTheme } from "@vokality/ragdoll";
 import { SpeechBubble } from "./components/speech-bubble";
 import { StatusOverlay } from "./components/status-overlay";
-import type { ExtensionMessage, VSCodeAPI } from "./types";
+import {
+  VALID_ACTIONS,
+  VALID_MOODS,
+  VALID_THEMES,
+  VALID_TONES,
+  VALID_VARIANTS,
+} from "../../src/types";
+import type { BubbleTone, ExtensionMessage, VSCodeAPI } from "./types";
 
-// TODO: Pomodoro and Tasks are now in @vokality/ragdoll-extensions
-// They need to be managed via the extension host, not the CharacterController
+type SpeechBubbleState = { text: string | null; tone: BubbleTone };
 
-type SpeechBubbleState = { text: string | null; tone: "default" | "whisper" | "shout" };
-
-// Get VS Code API (only available in webview context)
-let vscode: VSCodeAPI | null = null;
-try {
-  vscode = acquireVsCodeApi();
-} catch {
-  // Running outside VS Code (for development)
-  console.log("Running outside VS Code context");
-}
+const vscode: VSCodeAPI = acquireVsCodeApi();
 
 type PersistedState = {
   themeId: string;
@@ -30,20 +28,32 @@ type PersistedState = {
   bubble: SpeechBubbleState;
 };
 
-const FALLBACK_BUBBLE: SpeechBubbleState = { text: null, tone: "default" };
+const EMPTY_BUBBLE: SpeechBubbleState = { text: null, tone: "default" };
 
-function getThemeSafe(themeId?: string): RagdollTheme {
-  try {
-    if (themeId) {
-      const resolved = getTheme(themeId);
-      if (resolved) {
-        return resolved;
-      }
-    }
-  } catch {
-    // Ignore and fall back.
+function readPersistedState(): PersistedState | undefined {
+  const value = vscode.getState();
+  if (value === undefined) {
+    return undefined;
   }
-  return getDefaultTheme();
+
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid persisted Emote webview state");
+  }
+
+  const state = value as Record<string, unknown>;
+  if (
+    !isAllowed(state.themeId, VALID_THEMES) ||
+    !isAllowed(state.variantId, VALID_VARIANTS) ||
+    !isSpeechBubbleState(state.bubble)
+  ) {
+    throw new Error("Invalid persisted Emote webview state");
+  }
+
+  return {
+    themeId: state.themeId,
+    variantId: state.variantId,
+    bubble: state.bubble,
+  };
 }
 
 function isExtensionMessage(value: unknown): value is ExtensionMessage {
@@ -54,57 +64,75 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
   const payload = value as Record<string, unknown>;
   switch (payload.type) {
     case "setMood":
-      return typeof payload.mood === "string";
+      return (
+        isAllowed(payload.mood, VALID_MOODS) &&
+        isOptionalFiniteNumber(payload.duration)
+      );
     case "triggerAction":
-      return typeof payload.action === "string";
+      return (
+        isAllowed(payload.action, VALID_ACTIONS) &&
+        isOptionalFiniteNumber(payload.duration)
+      );
     case "clearAction":
       return true;
     case "setHeadPose":
-      return true;
+      return (
+        isOptionalFiniteNumber(payload.yaw) &&
+        isOptionalFiniteNumber(payload.pitch) &&
+        isOptionalFiniteNumber(payload.duration)
+      );
     case "setSpeechBubble":
-      return "text" in payload || "tone" in payload;
+      return (
+        (typeof payload.text === "string" || payload.text === null) &&
+        (payload.tone === undefined || isAllowed(payload.tone, VALID_TONES))
+      );
     case "setTheme":
-      return typeof payload.themeId === "string";
+      return isAllowed(payload.themeId, VALID_THEMES);
     case "setVariant":
-      return typeof payload.variantId === "string";
-    // Task and Pomodoro messages are forwarded but not handled in UI yet
-    case "startPomodoro":
-    case "pausePomodoro":
-    case "resetPomodoro":
-    case "addTask":
-    case "updateTaskStatus":
-    case "setActiveTask":
-    case "removeTask":
-    case "completeActiveTask":
-    case "clearCompletedTasks":
-    case "clearAllTasks":
-    case "expandTasks":
-    case "collapseTasks":
-    case "toggleTasks":
-    case "listTasks":
-    case "getPomodoroState":
-      return true;
+      return isAllowed(payload.variantId, VALID_VARIANTS);
     default:
       return false;
   }
 }
 
-export function App() {
-  const persistedState = useMemo(
-    () => (vscode?.getState() as PersistedState | undefined) ?? undefined,
-    [],
+function isAllowed<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): value is T {
+  return typeof value === "string" && allowed.includes(value as T);
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return (
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
   );
+}
+
+function isSpeechBubbleState(value: unknown): value is SpeechBubbleState {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const bubble = value as Record<string, unknown>;
+  return (
+    (typeof bubble.text === "string" || bubble.text === null) &&
+    isAllowed(bubble.tone, VALID_TONES)
+  );
+}
+
+export function App() {
+  const [persistedState] = useState(readPersistedState);
   const [controller, setController] = useState<CharacterController | null>(
     null,
   );
   const [theme, setTheme] = useState<RagdollTheme>(() =>
-    getThemeSafe(persistedState?.themeId),
+    persistedState ? getTheme(persistedState.themeId) : getDefaultTheme(),
   );
   const [variant, setVariant] = useState<string>(
-    () => persistedState?.variantId ?? "human",
+    () => persistedState?.variantId ?? getDefaultVariant().id,
   );
   const [bubbleState, setBubbleState] = useState<SpeechBubbleState>(
-    () => persistedState?.bubble ?? FALLBACK_BUBBLE,
+    () => persistedState?.bubble ?? EMPTY_BUBBLE,
   );
   const [hasReceivedMessage, setHasReceivedMessage] = useState<boolean>(
     Boolean(persistedState),
@@ -115,7 +143,7 @@ export function App() {
   const handleControllerReady = useCallback((ctrl: CharacterController) => {
     setController(ctrl);
     controllerRef.current = ctrl;
-    vscode?.postMessage({ type: "ready" });
+    vscode.postMessage({ type: "ready" });
   }, []);
 
   useEffect(() => {
@@ -153,11 +181,11 @@ export function App() {
         case "setSpeechBubble":
           setBubbleState({
             text: message.text,
-            tone: (message.tone ?? "default") as "default" | "whisper" | "shout",
+            tone: message.tone ?? "default",
           });
           break;
         case "setTheme": {
-          const newTheme = getThemeSafe(message.themeId);
+          const newTheme = getTheme(message.themeId);
           setTheme(newTheme);
           ctrl.setTheme(newTheme.id);
           break;
@@ -165,26 +193,6 @@ export function App() {
         case "setVariant":
           setVariant(message.variantId);
           break;
-        // TODO: Handle task and pomodoro messages via extension system
-        case "startPomodoro":
-        case "pausePomodoro":
-        case "resetPomodoro":
-        case "addTask":
-        case "updateTaskStatus":
-        case "setActiveTask":
-        case "removeTask":
-        case "completeActiveTask":
-        case "clearCompletedTasks":
-        case "clearAllTasks":
-        case "expandTasks":
-        case "collapseTasks":
-        case "toggleTasks":
-        case "listTasks":
-        case "getPomodoroState":
-          console.log("Task/Pomodoro message received (not implemented yet):", message.type);
-          break;
-        default:
-          console.warn("Unknown message type:", message);
       }
     };
 
@@ -199,7 +207,7 @@ export function App() {
   }, [controller, theme]);
 
   useEffect(() => {
-    vscode?.setState({
+    vscode.setState({
       themeId: theme.id,
       variantId: variant,
       bubble: bubbleState,

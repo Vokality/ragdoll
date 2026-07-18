@@ -1,54 +1,51 @@
-/**
- * Facial mood types
- */
-export type FacialMood =
-  | "neutral"
-  | "smile"
-  | "frown"
-  | "laugh"
-  | "angry"
-  | "sad"
-  | "surprise"
-  | "confusion"
-  | "thinking";
+import type { FacialAction, FacialMood } from "@vokality/ragdoll" with {
+  "resolution-mode": "import",
+};
 
-/**
- * Facial action types
- */
-export type FacialAction = "none" | "wink" | "talk" | "shake";
-
-/**
- * Speech bubble tone
- */
+export type { FacialMood };
 export type BubbleTone = "default" | "whisper" | "shout";
 
-/**
- * Pomodoro duration options (in minutes)
- */
-export type PomodoroDuration = 5 | 15 | 30 | 60 | 120;
+export const VALID_MOODS = [
+  "neutral",
+  "smile",
+  "frown",
+  "laugh",
+  "angry",
+  "sad",
+  "surprise",
+  "confusion",
+  "thinking",
+] as const satisfies readonly FacialMood[];
+export const VALID_ACTIONS = [
+  "wink",
+  "talk",
+  "shake",
+] as const satisfies readonly Exclude<FacialAction, "none">[];
+export const VALID_TONES = [
+  "default",
+  "whisper",
+  "shout",
+] as const satisfies readonly BubbleTone[];
+export const VALID_THEMES = [
+  "default",
+  "robot",
+  "alien",
+  "monochrome",
+] as const;
+export const VALID_VARIANTS = ["human", "einstein"] as const;
 
-/**
- * Task status types
- */
-export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
+export type ActionId = (typeof VALID_ACTIONS)[number];
+export type ThemeId = (typeof VALID_THEMES)[number];
+export type VariantId = (typeof VALID_VARIANTS)[number];
 
-/**
- * Messages sent from VS Code extension to webview
- */
 export type ExtensionMessage =
-  | {
-      type: "setMood";
-      mood: FacialMood;
-      duration?: number;
-    }
+  | { type: "setMood"; mood: FacialMood; duration?: number }
   | {
       type: "triggerAction";
-      action: Exclude<FacialAction, "none">;
+      action: ActionId;
       duration?: number;
     }
-  | {
-      type: "clearAction";
-    }
+  | { type: "clearAction" }
   | {
       type: "setHeadPose";
       yaw?: number;
@@ -60,103 +57,8 @@ export type ExtensionMessage =
       text: string | null;
       tone?: BubbleTone;
     }
-  | {
-      type: "setTheme";
-      themeId: string;
-    }
-  | {
-      type: "setVariant";
-      variantId: string;
-    }
-  | {
-      type: "startPomodoro";
-      sessionDuration?: PomodoroDuration;
-      breakDuration?: PomodoroDuration;
-    }
-  | {
-      type: "pausePomodoro";
-    }
-  | {
-      type: "resetPomodoro";
-    }
-  | {
-      type: "getPomodoroState";
-    }
-  | {
-      type: "addTask";
-      text: string;
-      status?: TaskStatus;
-    }
-  | {
-      type: "updateTaskStatus";
-      taskId: string;
-      status: TaskStatus;
-      blockedReason?: string;
-    }
-  | {
-      type: "setActiveTask";
-      taskId: string;
-    }
-  | {
-      type: "removeTask";
-      taskId: string;
-    }
-  | {
-      type: "completeActiveTask";
-    }
-  | {
-      type: "clearCompletedTasks";
-    }
-  | {
-      type: "clearAllTasks";
-    }
-  | {
-      type: "expandTasks";
-    }
-  | {
-      type: "collapseTasks";
-    }
-  | {
-      type: "toggleTasks";
-    }
-  | {
-      type: "listTasks";
-    };
+  | { type: "setTheme"; themeId: string }
+  | { type: "setVariant"; variantId: string };
 
-/**
- * Task data structure
- */
-export interface Task {
-  id: string;
-  text: string;
-  status: TaskStatus;
-  createdAt: number;
-  blockedReason?: string;
-}
-
-/**
- * Messages sent from webview to VS Code extension
- */
 export type WebviewMessage =
-  | {
-      type: "ready";
-    }
-  | {
-      type: "error";
-      message: string;
-    }
-  | {
-      type: "tasksUpdate";
-      tasks: Task[];
-    }
-  | {
-      type: "pomodoroStateUpdate";
-      state: {
-        state: string;
-        remainingTime: number;
-        isBreak: boolean;
-        sessionDuration: number;
-        breakDuration: number;
-        elapsedTime: number;
-      };
-    };
+  { type: "ready" } | { type: "error"; message: string };

@@ -53,8 +53,6 @@ export type {
 
   // Panel configuration types
   ListPanelConfig,
-  CustomPanelConfig,
-  CustomPanelProps,
   PanelConfig,
 
   // Slot state types
@@ -109,7 +107,12 @@ export {
 
 export { SlotButton, SlotButtonStateless } from "./slot-button.js";
 export { SlotPanel, SlotPanelBase } from "./slot-panel.js";
-export { SlotBar, ControlledSlotBar, type SlotBarProps, type ControlledSlotBarProps } from "./slot-bar.js";
+export {
+  SlotBar,
+  ControlledSlotBar,
+  type SlotBarProps,
+  type ControlledSlotBarProps,
+} from "./slot-bar.js";
 
 // =============================================================================
 // Icons

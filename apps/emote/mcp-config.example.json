@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "emote": {
-      "command": "node",
+      "command": "bun",
       "args": ["/absolute/path/to/.emote/mcp-server.js"],
       "env": {
         "NODE_ENV": "production"

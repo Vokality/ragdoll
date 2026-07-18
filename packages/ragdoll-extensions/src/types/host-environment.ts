@@ -45,7 +45,6 @@ export interface HostStorageCapability {
   write<T = unknown>(extensionId: string, key: string, value: T): Promise<void>;
   delete(extensionId: string, key: string): Promise<void>;
   list(extensionId: string): Promise<string[]>;
-  getDataPath?(extensionId: string): Promise<string> | string;
 }
 
 /**
@@ -69,7 +68,10 @@ export interface HostScheduleOptions {
  * Cooperative scheduler for longer running work.
  */
 export interface HostSchedulerCapability {
-  schedule(task: () => Promise<void> | void, options?: HostScheduleOptions): Promise<void>;
+  schedule(
+    task: () => Promise<void> | void,
+    options?: HostScheduleOptions,
+  ): Promise<void>;
 }
 
 /**
@@ -77,7 +79,10 @@ export interface HostSchedulerCapability {
  */
 export interface HostIpcBridge {
   publish(channelId: string, payload: unknown): Promise<void> | void;
-  subscribe(channelId: string, listener: (payload: unknown) => void): () => void;
+  subscribe(
+    channelId: string,
+    listener: (payload: unknown) => void,
+  ): () => void;
 }
 
 /**
@@ -150,8 +155,4 @@ export interface ExtensionHostEnvironment {
    * Host handles config storage and UI for collecting values
    */
   readonly config?: HostConfigCapability;
-
-  getDataPath?(extensionId: string): Promise<string> | string;
-  readLegacyData?<T = unknown>(key: string): Promise<T | undefined>;
-  schedulePersistence?(extensionId: string, reason?: string): Promise<void> | void;
 }

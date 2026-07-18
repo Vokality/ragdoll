@@ -25,9 +25,10 @@ describe("Variant Registry", () => {
       expect(variant.id).toBe("einstein");
     });
 
-    it("should fallback to default for unknown variant", () => {
-      const variant = getVariant("nonexistent");
-      expect(variant.id).toBe("human");
+    it("should reject an unknown variant", () => {
+      expect(() => getVariant("nonexistent")).toThrow(
+        "Unknown character variant",
+      );
     });
   });
 
@@ -123,4 +124,3 @@ describe("Variant Registry", () => {
     });
   });
 });
-

@@ -35,7 +35,7 @@ export function ConversationBubbles({
 
     if (currentLength > prevLength) {
       // New message(s) added - trigger slide up animation for all messages
-      setSlideUpTrigger(prev => prev + 1);
+      setSlideUpTrigger((prev) => prev + 1);
       prevMessagesRef.current = messages;
     } else if (currentLength < prevLength) {
       // Messages were removed (e.g., conversation cleared)
@@ -64,7 +64,6 @@ export function ConversationBubbles({
       backgroundColor: userBackground,
     };
   };
-
 
   return (
     <>
@@ -110,11 +109,12 @@ export function ConversationBubbles({
           const isLastMessage = index === messages.length - 1;
 
           // Animation - all messages animate when slideUpTrigger changes
-          const animation = slideUpTrigger > 0
-            ? (isLastMessage
+          const animation =
+            slideUpTrigger > 0
+              ? isLastMessage
                 ? "bubbleSlideInLast 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
-                : "bubbleSlideInOlder 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards")
-            : "none";
+                : "bubbleSlideInOlder 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
+              : "none";
 
           return (
             <div
@@ -130,9 +130,11 @@ export function ConversationBubbles({
             >
               <div style={{ ...styles.content, color: colors.textColor }}>
                 {message.content}
-                {isStreaming && isLastMessage && message.role === "assistant" && (
-                  <span style={styles.cursor}>▌</span>
-                )}
+                {isStreaming &&
+                  isLastMessage &&
+                  message.role === "assistant" && (
+                    <span style={styles.cursor}>▌</span>
+                  )}
               </div>
             </div>
           );

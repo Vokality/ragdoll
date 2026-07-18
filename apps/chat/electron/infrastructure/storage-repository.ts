@@ -1,6 +1,14 @@
-import * as fs from "fs";
-import * as path from "path";
+import {
+  chmod,
+  mkdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+import { CHARACTER_THEME_IDS, CHARACTER_VARIANT_IDS } from "../electron-api.js";
 
 export const conversationMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -9,68 +17,81 @@ export const conversationMessageSchema = z.object({
 
 export const storageSchema = z
   .object({
-    apiKey: z.string().optional(),
     apiKeyEncrypted: z.string().optional(),
     settings: z
       .object({
-        theme: z.string().optional(),
-        variant: z.string().optional(),
+        theme: z.enum(CHARACTER_THEME_IDS).optional(),
+        variant: z.enum(CHARACTER_VARIANT_IDS).optional(),
         disabledExtensions: z.array(z.string()).optional(),
       })
+      .strict()
       .optional(),
     conversation: z.array(conversationMessageSchema).optional(),
   })
-  .passthrough();
+  .strict();
 
 export type StorageData = z.infer<typeof storageSchema>;
 
 export interface StorageRepository {
   readonly filePath: string;
-  read(): StorageData;
-  write(data: StorageData): void;
-  update(mutator: (draft: StorageData) => void): StorageData;
+  read(): Promise<StorageData>;
+  write(data: StorageData): Promise<void>;
+  update(mutator: (draft: StorageData) => void): Promise<StorageData>;
 }
 
-export function createStorageRepository(userDataPath: string): StorageRepository {
-  const storageFile = path.join(userDataPath, "chat-storage.json");
+function isMissingFile(error: unknown): boolean {
+  return error instanceof Error && Reflect.get(error, "code") === "ENOENT";
+}
 
-  const read = (): StorageData => {
-    try {
-      if (fs.existsSync(storageFile)) {
-        const data = fs.readFileSync(storageFile, "utf-8");
-        const parsed = JSON.parse(data);
-        const result = storageSchema.safeParse(parsed);
-        if (result.success) {
-          return result.data;
-        }
-        console.warn("Invalid chat storage detected, falling back to defaults", result.error.flatten());
-      }
-    } catch (error) {
-      console.error("Failed to load storage:", error);
-    }
-    return {};
-  };
+export function createStorageRepository(
+  userDataPath: string,
+): StorageRepository {
+  const storageFile = join(userDataPath, "chat-storage.json");
+  let updateQueue = Promise.resolve();
 
-  const write = (data: StorageData): void => {
+  const read = async (): Promise<StorageData> => {
     try {
-      const validated = storageSchema.parse(data);
-      fs.writeFileSync(storageFile, JSON.stringify(validated, null, 2));
+      return storageSchema.parse(
+        JSON.parse(await readFile(storageFile, "utf8")),
+      );
     } catch (error) {
-      console.error("Failed to save storage:", error);
+      if (isMissingFile(error)) return {};
+      throw error;
     }
   };
 
-  const update = (mutator: (draft: StorageData) => void): StorageData => {
-    const draft = read();
-    mutator(draft);
-    write(draft);
-    return draft;
+  const write = async (data: StorageData): Promise<void> => {
+    const validated = storageSchema.parse(data);
+    const temporaryFile = `${storageFile}.tmp`;
+    await mkdir(dirname(storageFile), { recursive: true });
+    await writeFile(temporaryFile, JSON.stringify(validated, null, 2), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    try {
+      await rename(temporaryFile, storageFile);
+      await chmod(storageFile, 0o600);
+    } catch (error) {
+      await unlink(temporaryFile).catch(() => undefined);
+      throw error;
+    }
   };
 
-  return {
-    filePath: storageFile,
-    read,
-    write,
-    update,
+  const update = (
+    mutator: (draft: StorageData) => void,
+  ): Promise<StorageData> => {
+    const operation = updateQueue.then(async () => {
+      const draft = await read();
+      mutator(draft);
+      await write(draft);
+      return draft;
+    });
+    updateQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
   };
+
+  return { filePath: storageFile, read, write, update };
 }

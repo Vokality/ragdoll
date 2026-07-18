@@ -12,13 +12,13 @@
  * Configure OAuth requirements in package.json.
  */
 
-import { createExtension } from "@vokality/ragdoll-extensions/core";
+import { createExtension as defineExtension } from "@vokality/ragdoll-extensions";
 import type {
   ExtensionTool,
   ValidationResult,
   RagdollExtension,
   HostOAuthCapability,
-} from "@vokality/ragdoll-extensions/core";
+} from "@vokality/ragdoll-extensions";
 import type {
   SpotifyPlaybackState,
   SpotifySearchResults,
@@ -72,7 +72,10 @@ function validatePause(args: Record<string, unknown>): ValidationResult {
 }
 
 function validateSkip(args: Record<string, unknown>): ValidationResult {
-  if (!args.direction || !["next", "previous"].includes(args.direction as string)) {
+  if (
+    !args.direction ||
+    !["next", "previous"].includes(args.direction as string)
+  ) {
     return { valid: false, error: "direction must be 'next' or 'previous'" };
   }
   if (args.deviceId !== undefined && typeof args.deviceId !== "string") {
@@ -92,11 +95,17 @@ function validateSearch(args: Record<string, unknown>): ValidationResult {
     const validTypes = ["track", "album", "artist", "playlist"];
     for (const t of args.types) {
       if (!validTypes.includes(t as string)) {
-        return { valid: false, error: `Invalid type: ${t}. Valid types: ${validTypes.join(", ")}` };
+        return {
+          valid: false,
+          error: `Invalid type: ${t}. Valid types: ${validTypes.join(", ")}`,
+        };
       }
     }
   }
-  if (args.limit !== undefined && (typeof args.limit !== "number" || args.limit < 1 || args.limit > 50)) {
+  if (
+    args.limit !== undefined &&
+    (typeof args.limit !== "number" || args.limit < 1 || args.limit > 50)
+  ) {
     return { valid: false, error: "limit must be a number between 1 and 50" };
   }
   return { valid: true };
@@ -113,17 +122,20 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         type: "function",
         function: {
           name: "playSpotify",
-          description: "Start or resume Spotify playback. Optionally specify a track, album, artist, or playlist URI to play.",
+          description:
+            "Start or resume Spotify playback. Optionally specify a track, album, artist, or playlist URI to play.",
           parameters: {
             type: "object",
             properties: {
               uri: {
                 type: "string",
-                description: "Spotify URI to play (e.g., 'spotify:track:xxx', 'spotify:album:xxx'). If omitted, resumes current playback.",
+                description:
+                  "Spotify URI to play (e.g., 'spotify:track:xxx', 'spotify:album:xxx'). If omitted, resumes current playback.",
               },
               deviceId: {
                 type: "string",
-                description: "Device ID to play on. If omitted, uses the active device.",
+                description:
+                  "Device ID to play on. If omitted, uses the active device.",
               },
             },
           },
@@ -161,7 +173,8 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
             properties: {
               deviceId: {
                 type: "string",
-                description: "Device ID to pause. If omitted, pauses the active device.",
+                description:
+                  "Device ID to pause. If omitted, pauses the active device.",
               },
             },
           },
@@ -231,13 +244,15 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         type: "function",
         function: {
           name: "searchSpotify",
-          description: "Search Spotify for tracks, albums, artists, or playlists.",
+          description:
+            "Search Spotify for tracks, albums, artists, or playlists.",
           parameters: {
             type: "object",
             properties: {
               query: {
                 type: "string",
-                description: "Search query (e.g., artist name, song title, album name).",
+                description:
+                  "Search query (e.g., artist name, song title, album name).",
               },
               types: {
                 type: "array",
@@ -259,7 +274,11 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
       handler: async (args) => {
         const { query, types, limit } = args as unknown as SearchSpotifyArgs;
         try {
-          const results = await api.search(query, types ?? ["track"], limit ?? 5);
+          const results = await api.search(
+            query,
+            types ?? ["track"],
+            limit ?? 5,
+          );
           return { success: true, data: results };
         } catch (error) {
           return {
@@ -275,7 +294,8 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         type: "function",
         function: {
           name: "getSpotifyPlayback",
-          description: "Get the current Spotify playback state including the currently playing track, progress, and device info.",
+          description:
+            "Get the current Spotify playback state including the currently playing track, progress, and device info.",
           parameters: {
             type: "object",
             properties: {},
@@ -289,7 +309,10 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : "Failed to get playback state",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to get playback state",
           };
         }
       },
@@ -309,18 +332,20 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
  * The host handles OAuth flow and token management based on
  * the oauth configuration in package.json.
  */
-export function createSpotifyExtension(): RagdollExtension {
-  return createExtension({
+export function createExtension(
+  _config?: Record<string, unknown>,
+): RagdollExtension {
+  return defineExtension({
     id: "spotify",
     name: "Spotify",
-    version: "1.0.0",
+    version: "0.1.0",
     requiredCapabilities: ["oauth"],
 
     createRuntime: async (host) => {
       if (!host.oauth) {
         throw new Error(
           "Spotify extension requires OAuth capability. " +
-          "Ensure the host is configured to provide OAuth for this extension."
+            "Ensure the host is configured to provide OAuth for this extension.",
         );
       }
 
@@ -333,9 +358,6 @@ export function createSpotifyExtension(): RagdollExtension {
   });
 }
 
-// Default export for extension loader
-export default createSpotifyExtension;
-
 // =============================================================================
 // Spotify API Client
 // =============================================================================
@@ -346,7 +368,11 @@ interface SpotifyApiClient {
   skipToNext(deviceId?: string): Promise<void>;
   skipToPrevious(deviceId?: string): Promise<void>;
   getPlaybackState(): Promise<SpotifyPlaybackState>;
-  search(query: string, types: string[], limit: number): Promise<SpotifySearchResults>;
+  search(
+    query: string,
+    types: string[],
+    limit: number,
+  ): Promise<SpotifySearchResults>;
 }
 
 function createSpotifyApiClient(oauth: HostOAuthCapability): SpotifyApiClient {
@@ -360,7 +386,10 @@ function createSpotifyApiClient(oauth: HostOAuthCapability): SpotifyApiClient {
     timestamp: Date.now(),
   };
 
-  async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async function apiRequest<T>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> {
     const accessToken = await oauth.getAccessToken();
     if (!accessToken) {
       throw new Error("Not authenticated with Spotify");
@@ -489,25 +518,28 @@ function createSpotifyApiClient(oauth: HostOAuthCapability): SpotifyApiClient {
         limit: limit.toString(),
       });
 
-      const data = await apiRequest<ApiSearchResponse>(`/search?${params.toString()}`);
+      const data = await apiRequest<ApiSearchResponse>(
+        `/search?${params.toString()}`,
+      );
 
       return {
         tracks: data.tracks?.items.map(mapTrack) ?? [],
         albums: data.albums?.items.map(mapAlbum) ?? [],
         artists: data.artists?.items.map(mapArtist) ?? [],
-        playlists: data.playlists?.items.map((p) => ({
-          id: p.id,
-          name: p.name,
-          uri: p.uri,
-          description: p.description,
-          images: p.images.map((img) => ({
-            url: img.url,
-            height: img.height,
-            width: img.width,
-          })),
-          owner: { id: p.owner.id, displayName: p.owner.display_name },
-          tracksTotal: p.tracks.total,
-        })) ?? [],
+        playlists:
+          data.playlists?.items.map((p) => ({
+            id: p.id,
+            name: p.name,
+            uri: p.uri,
+            description: p.description,
+            images: p.images.map((img) => ({
+              url: img.url,
+              height: img.height,
+              width: img.width,
+            })),
+            owner: { id: p.owner.id, displayName: p.owner.display_name },
+            tracksTotal: p.tracks.total,
+          })) ?? [],
       };
     },
   };

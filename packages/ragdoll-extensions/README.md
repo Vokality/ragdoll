@@ -1,18 +1,15 @@
 # @vokality/ragdoll-extensions
 
-Extension framework for Ragdoll - register tools, handlers, and plugins that integrate with AI agents.
+React-free extension contracts, lifecycle management, capability registration, and serializable slot state for Ragdoll hosts.
 
-## Overview
+## Package boundaries
 
-This package provides a flexible extension system that allows you to:
+- `@vokality/ragdoll-extensions` — extension contracts, registry, host capabilities, config schemas, and React-free slot state.
+- `@vokality/ragdoll-extensions/loader` — package discovery and loading through host-supplied filesystem and import adapters.
+- `@vokality/ragdoll-extensions/slots` — explicit React-free slot entrypoint.
+- `@vokality/ragdoll-extensions/ui` — optional React components and hooks.
 
-- Define tools in OpenAI function-calling format
-- Register extensions with handlers that execute those tools
-- Aggregate tools from multiple extensions
-- Execute tools by name with automatic validation
-- React to extension/tool changes via events
-
-The system is designed to be embeddable anywhere - Electron apps, VS Code extensions, web applications, or Node.js servers.
+Built-in extensions are independent packages. Import them directly from `@vokality/ragdoll-extension-character`, `@vokality/ragdoll-extension-tasks`, `@vokality/ragdoll-extension-pomodoro`, or `@vokality/ragdoll-extension-spotify`.
 
 ## Installation
 
@@ -20,430 +17,117 @@ The system is designed to be embeddable anywhere - Electron apps, VS Code extens
 bun add @vokality/ragdoll-extensions
 ```
 
-## Quick Start
+Add React only if the host uses the `/ui` entrypoint:
 
-```typescript
+```bash
+bun add react
+```
+
+## Create and register an extension
+
+```ts
 import {
+  createExtension,
   createRegistry,
-  createCharacterExtension,
+  type ExtensionHostEnvironment,
 } from "@vokality/ragdoll-extensions";
 
-// 1. Create a registry
-const registry = createRegistry();
-
-// 2. Create and register an extension
-const characterExtension = createCharacterExtension({
-  handler: {
-    setMood: async ({ mood, duration }) => {
-      console.log(`Setting mood to ${mood}`);
-      return { success: true };
+const weather = createExtension({
+  id: "weather",
+  name: "Weather",
+  version: "1.0.0",
+  tools: [
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "getWeather",
+          description: "Get weather for a city",
+          parameters: {
+            type: "object",
+            properties: { location: { type: "string" } },
+            required: ["location"],
+          },
+        },
+      },
+      validate: (args) =>
+        typeof args.location === "string"
+          ? { valid: true }
+          : { valid: false, error: "location is required" },
+      handler: async ({ location }) => ({
+        success: true,
+        data: { location, condition: "sunny" },
+      }),
     },
-    triggerAction: async ({ action }) => {
-      console.log(`Triggering action: ${action}`);
-      return { success: true };
-    },
-    setHeadPose: async ({ yawDegrees, pitchDegrees }) => {
-      console.log(`Head pose: yaw=${yawDegrees}, pitch=${pitchDegrees}`);
-      return { success: true };
-    },
-    setSpeechBubble: async ({ text, tone }) => {
-      console.log(`Speech bubble: "${text}" (${tone})`);
-      return { success: true };
-    },
-  },
+  ],
 });
 
-await registry.register(characterExtension);
+const host: ExtensionHostEnvironment = { capabilities: new Set() };
+const registry = createRegistry();
+await registry.register(weather, { host });
 
-// 3. Get all tools (OpenAI format)
 const tools = registry.getAllTools();
-// Pass `tools` to OpenAI's chat completion API
-
-// 4. Execute a tool when the AI calls it
-const result = await registry.executeTool("setMood", { mood: "smile" });
+const result = await registry.executeTool("getWeather", { location: "Paris" });
 ```
 
-## Built-in Extensions
+Registration is transactional: invalid, duplicate, conflicting, or partially activated contributions are rejected and cleaned up. Unregistration removes capability indexes before invoking extension cleanup.
 
-### Character Extension
+## Host capabilities
 
-Controls facial expressions and animations.
+Extensions access runtime services only through `ExtensionHostEnvironment`. Declare required capabilities in the runtime manifest and package manifest. The registry rejects activation when the host does not provide them.
 
-```typescript
-import { createCharacterExtension } from "@vokality/ragdoll-extensions";
+Supported host boundaries include storage, logging, timers, scheduling, IPC, notifications, OAuth, and config. Extension packages should not import an app or host implementation.
 
-const extension = createCharacterExtension({
-  handler: {
-    setMood: async ({ mood, duration }) => ({ success: true }),
-    triggerAction: async ({ action, duration }) => ({ success: true }),
-    setHeadPose: async ({ yawDegrees, pitchDegrees, duration }) => ({ success: true }),
-    setSpeechBubble: async ({ text, tone }) => ({ success: true }),
-  },
-});
-```
+## Load extension packages
 
-**Tools:**
-- `setMood` - Set facial expression (neutral, smile, frown, laugh, angry, sad, surprise, confusion, thinking)
-- `triggerAction` - Trigger animation (wink, talk, shake)
-- `setHeadPose` - Rotate head (yaw: -35 to 35, pitch: -20 to 20)
-- `setSpeechBubble` - Show/clear speech bubble
+The loader does not own a filesystem or assume a runtime. A Bun service, Electron main process, or another host supplies the adapter:
 
-### Pomodoro Extension
+```ts
+import { createLoader } from "@vokality/ragdoll-extensions/loader";
 
-Timer for focused work sessions.
-
-```typescript
-import { createPomodoroExtension } from "@vokality/ragdoll-extensions";
-
-const extension = createPomodoroExtension({
-  handler: {
-    startPomodoro: async ({ sessionDuration, breakDuration }) => ({ success: true }),
-    pausePomodoro: async () => ({ success: true }),
-    resetPomodoro: async () => ({ success: true }),
-    getPomodoroState: async () => ({ success: true, data: { state: "idle" } }),
-  },
-});
-```
-
-**Tools:**
-- `startPomodoro` - Start timer (session: 5/15/30/60/120 min, break: 5/10/15/30 min)
-- `pausePomodoro` - Pause active timer
-- `resetPomodoro` - Stop and reset timer
-- `getPomodoroState` - Get current timer state
-
-### Tasks Extension
-
-Task management tools.
-
-```typescript
-import { createTaskExtension } from "@vokality/ragdoll-extensions";
-
-const extension = createTaskExtension({
-  handler: {
-    addTask: async ({ text, status }) => ({ success: true, data: { id: "1" } }),
-    updateTaskStatus: async ({ taskId, status }) => ({ success: true }),
-    setActiveTask: async ({ taskId }) => ({ success: true }),
-    removeTask: async ({ taskId }) => ({ success: true }),
-    completeActiveTask: async () => ({ success: true }),
-    clearCompletedTasks: async () => ({ success: true }),
-    clearAllTasks: async () => ({ success: true }),
-    listTasks: async () => ({ success: true, data: [] }),
-  },
-});
-```
-
-**Tools:**
-- `addTask` - Add a new task
-- `updateTaskStatus` - Update task status (todo, in_progress, blocked, done)
-- `setActiveTask` - Set active task
-- `removeTask` - Remove a task
-- `completeActiveTask` - Mark active task as done
-- `clearCompletedTasks` - Remove completed tasks
-- `clearAllTasks` - Remove all tasks
-- `listTasks` - Get all tasks
-
-## Renderer UI Slots
-
-The package also includes React helpers for rendering extension-contributed UI slots. These slots power the task checklist, pomodoro timer, Spotify panel, and any future extensions without touching your app code.
-
-```tsx
-import { createElectronHostBridge, useExtensionSlots } from "@vokality/ragdoll-extensions";
-import { SlotBar } from "@vokality/ragdoll-extensions/ui";
-
-function ExtensionBar() {
-  const host = useMemo(
-    () => createElectronHostBridge({
-      api: window.electronAPI,
-      reload: () => window.location.reload(),
-    }),
-    []
-  );
-
-  const slots = useExtensionSlots(host);
-  return <SlotBar slots={slots} />;
-}
-```
-
-Extensions manage their own slot state (tasks, pomodoro, Spotify, etc.). Your renderer just provides the host API and renders whatever slots are available, making it easy to add or remove extensions in isolation.
-
-## Creating Custom Extensions
-
-Use the `createExtension` factory to create custom extensions:
-
-```typescript
-import { createExtension } from "@vokality/ragdoll-extensions";
-
-const weatherExtension = createExtension({
-  id: "weather",
-  name: "Weather",
-  version: "1.0.0",
-  tools: [
-    {
-      definition: {
-        type: "function",
-        function: {
-          name: "getWeather",
-          description: "Get the current weather for a location",
-          parameters: {
-            type: "object",
-            properties: {
-              location: {
-                type: "string",
-                description: "City name or coordinates",
-              },
-              units: {
-                type: "string",
-                enum: ["celsius", "fahrenheit"],
-                description: "Temperature units",
-              },
-            },
-            required: ["location"],
-          },
-        },
-      },
-      handler: async ({ location, units }, context) => {
-        // Your implementation here
-        return {
-          success: true,
-          data: { temp: 72, condition: "sunny" },
-        };
-      },
-      validate: (args) => {
-        if (!args.location) {
-          return { valid: false, error: "location is required" };
-        }
-        return { valid: true };
-      },
-    },
-  ],
-  onInitialize: (context) => {
-    console.log(`Weather extension initialized: ${context.instanceId}`);
-  },
-  onDestroy: () => {
-    console.log("Weather extension destroyed");
-  },
-});
-
-await registry.register(weatherExtension);
-```
-
-## Event Handling
-
-React to changes in the registry:
-
-```typescript
-// When tools change (extension registered/unregistered)
-const unsubscribe = registry.onToolsChanged((event) => {
-  console.log(`Tools changed due to: ${event.extensionId}`);
-  const tools = registry.getAllTools();
-  // Update your OpenAI client with new tools
-});
-
-// When a specific extension is registered
-registry.onExtensionRegistered((event) => {
-  console.log(`Extension registered: ${event.extensionId}`);
-});
-
-// When a specific extension is unregistered
-registry.onExtensionUnregistered((event) => {
-  console.log(`Extension unregistered: ${event.extensionId}`);
-});
-
-// Clean up
-unsubscribe();
-```
-
-## API Reference
-
-### `createRegistry(): ExtensionRegistry`
-
-Create a new extension registry.
-
-### `ExtensionRegistry`
-
-| Method | Description |
-|--------|-------------|
-| `register(extension, options?)` | Register an extension |
-| `unregister(extensionId)` | Unregister an extension |
-| `has(extensionId)` | Check if extension exists |
-| `getExtension(extensionId)` | Get extension by ID |
-| `getExtensionIds()` | Get all extension IDs |
-| `getAllTools()` | Get all tool definitions |
-| `getToolsByExtension(extensionId)` | Get tools for an extension |
-| `hasTool(toolName)` | Check if tool exists |
-| `validateTool(toolName, args)` | Validate tool arguments |
-| `executeTool(toolName, args, metadata?)` | Execute a tool |
-| `onToolsChanged(callback)` | Subscribe to tool changes |
-| `onExtensionRegistered(callback)` | Subscribe to registrations |
-| `onExtensionUnregistered(callback)` | Subscribe to unregistrations |
-| `destroy()` | Clean up all extensions |
-| `getStats()` | Get registry statistics |
-
-### `createExtension(config): RagdollExtension`
-
-Create an extension from a configuration object.
-
-### Types
-
-```typescript
-interface ToolDefinition {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: ToolParameterSchema;
-  };
-}
-
-interface ToolResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}
-
-interface ValidationResult {
-  valid: boolean;
-  error?: string;
-}
-
-interface ExtensionTool<TArgs = Record<string, unknown>> {
-  definition: ToolDefinition;
-  handler: (args: TArgs, context: ToolExecutionContext) => Promise<ToolResult> | ToolResult;
-  validate?: (args: TArgs) => ValidationResult;
-}
-
-interface RagdollExtension {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string;
-  readonly tools: ExtensionTool[];
-  initialize?(context: ExtensionContext): Promise<void> | void;
-  destroy?(): Promise<void> | void;
-}
-```
-
-## Loading Extensions from npm Packages
-
-Extensions can be distributed as npm packages and auto-discovered by the loader.
-
-### Creating an Extension Package
-
-Create a package with `ragdollExtension` in package.json:
-
-```json
-{
-  "name": "@example/weather-extension",
-  "version": "1.0.0",
-  "main": "./dist/index.js",
-  "ragdollExtension": true
-}
-```
-
-Export the extension:
-
-```typescript
-// src/index.ts
-import { createExtension } from "@vokality/ragdoll-extensions";
-
-export const extension = createExtension({
-  id: "weather",
-  name: "Weather",
-  version: "1.0.0",
-  tools: [
-    {
-      definition: {
-        type: "function",
-        function: {
-          name: "getWeather",
-          description: "Get weather for a location",
-          parameters: {
-            type: "object",
-            properties: {
-              location: { type: "string", description: "City name" },
-            },
-            required: ["location"],
-          },
-        },
-      },
-      handler: async ({ location }) => {
-        // Your implementation
-        return { success: true, data: { temp: 72 } };
-      },
-    },
-  ],
-});
-
-// Alternative: export a factory function
-export function createExtension(config) {
-  return extension;
-}
-```
-
-### Using the Loader
-
-```typescript
-import { createRegistry, createLoader } from "@vokality/ragdoll-extensions";
-import path from "path";
-
-const registry = createRegistry();
 const loader = createLoader(registry, {
-  searchPaths: [
-    path.join(process.cwd(), "node_modules"),
-  ],
+  packageRoots: [{ path: extensionsDirectory, layout: "installed" }],
+  fileSystem: hostFileSystem,
+  hostEnvironment: host,
 });
 
-// Discover and load all extensions
-const results = await loader.discoverAndLoad();
-console.log(`Loaded ${results.filter(r => r.success).length} extensions`);
-
-// Or load a specific package
-const result = await loader.loadPackage("@example/weather-extension");
-if (result.success) {
-  console.log(`Loaded extension: ${result.extensionId}`);
-}
-
-// Unload a package
-await loader.unloadPackage("@example/weather-extension");
-
-// Check what's loaded
-const loaded = loader.getLoadedPackages();
+const discovered = await loader.discoverPackages();
+const result = await loader.loadPackage(discovered[0], {
+  defaultUnits: "celsius",
+});
 ```
 
-### Advanced Package Configuration
+An extension package declares `ragdollExtension` metadata in `package.json`. The loader verifies required host capabilities and checks that declared runtime capability types match the contribution before considering the package loaded.
 
-Use an object for more control:
+## Slot state across IPC
 
-```json
-{
-  "name": "@example/my-extension",
-  "ragdollExtension": {
-    "id": "custom-id",
-    "config": {
-      "apiKey": "default-key"
-    }
-  }
-}
+Use the React-free state helpers inside extensions and serialize before crossing a process boundary:
+
+```ts
+import {
+  createSlotState,
+  serializeSlotState,
+} from "@vokality/ragdoll-extensions/slots";
+
+const state = createSlotState({
+  badge: 1,
+  visible: true,
+  panel: { type: "list", title: "Tasks", items: [] },
+});
+
+const payload = serializeSlotState(state.getState());
 ```
 
-The `config` is passed to your `createExtension()` function if exported.
+Serialization removes callbacks while preserving `canClick` and `canToggle`. The host routes action IDs back to the owning slot; executable functions never cross IPC.
 
-### Export Formats
+## Events and cleanup
 
-The loader supports multiple export formats:
+```ts
+const unsubscribe = registry.on("capability:registered", (event) => {
+  console.log(event.extensionId, event.capabilityType, event.capabilityId);
+});
 
-```typescript
-// Option 1: Named export
-export const extension = createExtension({ ... });
-
-// Option 2: Default export
-export default createExtension({ ... });
-
-// Option 3: Factory function (receives config from package.json)
-export function createExtension(config) {
-  return { id: "my-ext", name: "My Extension", ... };
-}
+await registry.unregister("weather");
+unsubscribe();
+await registry.destroy();
 ```
-
-## License
-
-MIT

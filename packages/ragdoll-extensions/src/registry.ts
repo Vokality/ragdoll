@@ -23,7 +23,7 @@ import type {
   ExtensionHostCapability,
   ExtensionHostEnvironment,
 } from "./types/host-environment.js";
-import type { ExtensionUISlot } from "./ui/types.js";
+import type { ExtensionSlot } from "./slots.js";
 
 interface ToolEntry {
   extensionId: string;
@@ -42,7 +42,7 @@ interface StateChannelEntry {
 
 interface SlotEntry {
   extensionId: string;
-  slot: ExtensionUISlot;
+  slot: ExtensionSlot;
 }
 
 interface RegisteredExtension {
@@ -60,9 +60,13 @@ interface RegisteredExtension {
 }
 
 class RegistryEventBus {
-  private listeners: Map<RegistryEventType, Set<RegistryEventCallback>> = new Map();
+  private listeners: Map<RegistryEventType, Set<RegistryEventCallback>> =
+    new Map();
 
-  on(eventType: RegistryEventType, callback: RegistryEventCallback): () => void {
+  on(
+    eventType: RegistryEventType,
+    callback: RegistryEventCallback,
+  ): () => void {
     if (!this.listeners.has(eventType)) {
       this.listeners.set(eventType, new Set());
     }
@@ -82,7 +86,10 @@ class RegistryEventBus {
       try {
         await callback(event);
       } catch (error) {
-        console.error(`Error in registry event listener for '${event.type}':`, error);
+        console.error(
+          `Error in registry event listener for '${event.type}':`,
+          error,
+        );
       }
     });
 
@@ -124,15 +131,97 @@ function ensureHostCapabilities(
   }
 }
 
-function assertHasCapabilities(extensionId: string, contribution: ExtensionRuntimeContribution): void {
+function assertHasCapabilities(
+  extensionId: string,
+  contribution: ExtensionRuntimeContribution,
+): void {
   const hasCapability = Boolean(
     (contribution.tools && contribution.tools.length > 0) ||
-      (contribution.services && contribution.services.length > 0) ||
-      (contribution.stateChannels && contribution.stateChannels.length > 0) ||
-      (contribution.slots && contribution.slots.length > 0),
+    (contribution.services && contribution.services.length > 0) ||
+    (contribution.stateChannels && contribution.stateChannels.length > 0) ||
+    (contribution.slots && contribution.slots.length > 0),
   );
   if (!hasCapability) {
-    throw new Error(`Extension '${extensionId}' did not register any tools, services, state channels, or slots.`);
+    throw new Error(
+      `Extension '${extensionId}' did not register any tools, services, state channels, or slots.`,
+    );
+  }
+}
+
+function assertUniqueCapabilityIds(
+  extensionId: string,
+  capabilityType: string,
+  ids: string[],
+): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!id) {
+      throw new Error(
+        `Extension '${extensionId}' registered a ${capabilityType} with an empty ID.`,
+      );
+    }
+    if (seen.has(id)) {
+      throw new Error(
+        `Extension '${extensionId}' registered duplicate ${capabilityType} capability '${id}'.`,
+      );
+    }
+    seen.add(id);
+  }
+}
+
+function assertValidContribution(
+  extensionId: string,
+  contribution: ExtensionRuntimeContribution | null | undefined,
+): asserts contribution is ExtensionRuntimeContribution {
+  if (!contribution || typeof contribution !== "object") {
+    throw new Error(
+      `Extension '${extensionId}' did not return a runtime contribution.`,
+    );
+  }
+
+  const capabilities = summarizeCapabilities(contribution);
+  assertUniqueCapabilityIds(extensionId, "tool", capabilities.tools);
+  assertUniqueCapabilityIds(extensionId, "service", capabilities.services);
+  assertUniqueCapabilityIds(
+    extensionId,
+    "state channel",
+    capabilities.stateChannels,
+  );
+  assertUniqueCapabilityIds(extensionId, "slot", capabilities.slots);
+  assertHasCapabilities(extensionId, contribution);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function deactivateExtension(
+  extension: RagdollExtension,
+  context: ExtensionContext,
+  contribution?: ExtensionRuntimeContribution,
+): Promise<void> {
+  const errors: unknown[] = [];
+
+  try {
+    await contribution?.dispose?.();
+  } catch (error) {
+    errors.push(error);
+  }
+
+  try {
+    await extension.deactivate?.(context);
+  } catch (error) {
+    errors.push(error);
+  }
+
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(
+      errors,
+      `Extension '${extension.manifest.id}' cleanup failed.`,
+    );
   }
 }
 
@@ -143,9 +232,11 @@ function summarizeCapabilities(contribution: ExtensionRuntimeContribution): {
   slots: string[];
 } {
   return {
-    tools: contribution.tools?.map((tool) => tool.definition.function.name) ?? [],
+    tools:
+      contribution.tools?.map((tool) => tool.definition.function.name) ?? [],
     services: contribution.services?.map((service) => service.name) ?? [],
-    stateChannels: contribution.stateChannels?.map((channel) => channel.id) ?? [],
+    stateChannels:
+      contribution.stateChannels?.map((channel) => channel.id) ?? [],
     slots: contribution.slots?.map((slot) => slot.id) ?? [],
   };
 }
@@ -167,26 +258,30 @@ export class ExtensionRegistry {
   private readonly eventBus = new RegistryEventBus();
   private instanceCounter = 0;
 
-  async register(extension: RagdollExtension, options: RegisterOptions): Promise<void> {
+  async register(
+    extension: RagdollExtension,
+    options: RegisterOptions,
+  ): Promise<void> {
     const host = options.host;
     if (!host) {
-      throw new Error("Extension host environment is required when registering an extension.");
+      throw new Error(
+        "Extension host environment is required when registering an extension.",
+      );
     }
 
     const manifest = extension.manifest;
-    if (!manifest?.id) {
-      throw new Error("Extensions must define a manifest with an 'id'.");
+    if (!manifest?.id || !manifest.name || !manifest.version) {
+      throw new Error(
+        "Extensions must define a manifest with non-empty 'id', 'name', and 'version' fields.",
+      );
     }
     const extensionId = manifest.id;
 
-    if (this.extensions.has(extensionId)) {
-      if (options.replace) {
-        await this.unregister(extensionId);
-      } else {
-        throw new Error(
-          `Extension '${extensionId}' is already registered. Use { replace: true } to override the existing instance.`,
-        );
-      }
+    const existing = this.extensions.get(extensionId);
+    if (existing && !options.replace) {
+      throw new Error(
+        `Extension '${extensionId}' is already registered. Use { replace: true } to override the existing instance.`,
+      );
     }
 
     ensureHostCapabilities(extensionId, manifest.requiredCapabilities, host);
@@ -197,31 +292,55 @@ export class ExtensionRegistry {
       config: options.config,
     };
 
-    const contribution = await extension.activate(host, context);
-    assertHasCapabilities(extensionId, contribution);
-    this.ensureNoConflicts(extensionId, contribution);
+    let contribution: ExtensionRuntimeContribution | undefined;
+    try {
+      contribution = await extension.activate(host, context);
+      assertValidContribution(extensionId, contribution);
+      this.ensureNoConflicts(extensionId, contribution);
 
-    const capabilities = this.indexContribution(extensionId, contribution);
+      if (existing) {
+        await this.unregister(extensionId);
+      }
 
-    this.extensions.set(extensionId, {
-      extension,
-      host,
-      context,
-      contribution,
-      registeredAt: Date.now(),
-      capabilities,
-    });
+      const capabilities = summarizeCapabilities(contribution);
+      this.addContributionIndices(extensionId, contribution);
+      this.extensions.set(extensionId, {
+        extension,
+        host,
+        context,
+        contribution,
+        registeredAt: Date.now(),
+        capabilities,
+      });
 
-    await this.eventBus.emit({
-      type: "extension:registered",
-      extensionId,
-      timestamp: Date.now(),
-    });
-    await this.eventBus.emit({
-      type: "tools:changed",
-      extensionId,
-      timestamp: Date.now(),
-    });
+      await this.emitCapabilityEvents(
+        "capability:registered",
+        extensionId,
+        capabilities,
+      );
+      await this.eventBus.emit({
+        type: "extension:registered",
+        extensionId,
+        timestamp: Date.now(),
+      });
+      await this.eventBus.emit({
+        type: "tools:changed",
+        extensionId,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      if (this.extensions.get(extensionId)?.context !== context) {
+        try {
+          await deactivateExtension(extension, context, contribution);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            `Extension '${extensionId}' registration and cleanup failed.`,
+          );
+        }
+      }
+      throw error;
+    }
   }
 
   async unregister(extensionId: string): Promise<boolean> {
@@ -230,17 +349,13 @@ export class ExtensionRegistry {
       return false;
     }
 
-    this.removeContributionIndices(extensionId, registered.contribution);
-
-    if (registered.contribution.dispose) {
-      await registered.contribution.dispose();
-    }
-
-    if (registered.extension.deactivate) {
-      await registered.extension.deactivate(registered.context);
-    }
-
     this.extensions.delete(extensionId);
+    this.removeContributionIndices(extensionId, registered.contribution);
+    await this.emitCapabilityEvents(
+      "capability:removed",
+      extensionId,
+      registered.capabilities,
+    );
 
     await this.eventBus.emit({
       type: "extension:unregistered",
@@ -253,6 +368,12 @@ export class ExtensionRegistry {
       timestamp: Date.now(),
     });
 
+    await deactivateExtension(
+      registered.extension,
+      registered.context,
+      registered.contribution,
+    );
+
     return true;
   }
 
@@ -260,11 +381,15 @@ export class ExtensionRegistry {
     return this.extensions.has(extensionId);
   }
 
-  getExtension(extensionId: string): RegisteredExtension["extension"] | undefined {
+  getExtension(
+    extensionId: string,
+  ): RegisteredExtension["extension"] | undefined {
     return this.extensions.get(extensionId)?.extension;
   }
 
-  getContributionMetadata(extensionId: string): ExtensionContributionMetadata | undefined {
+  getContributionMetadata(
+    extensionId: string,
+  ): ExtensionContributionMetadata | undefined {
     const registered = this.extensions.get(extensionId);
     if (!registered) {
       return undefined;
@@ -300,36 +425,53 @@ export class ExtensionRegistry {
     );
   }
 
-  getServices(): Array<{ extensionId: string; definition: ExtensionServiceDefinition }> {
+  getServices(): Array<{
+    extensionId: string;
+    definition: ExtensionServiceDefinition;
+  }> {
     return Array.from(this.serviceIndex.values()).map((entry) => ({
       extensionId: entry.extensionId,
       definition: entry.definition,
     }));
   }
 
-  getStateChannels(): Array<{ extensionId: string; channel: ExtensionStateChannel }> {
+  getStateChannels(): Array<{
+    extensionId: string;
+    channel: ExtensionStateChannel;
+  }> {
     return Array.from(this.stateChannelIndex.values()).map((entry) => ({
       extensionId: entry.extensionId,
       channel: entry.channel,
     }));
   }
 
-  getStateChannel(channelId: string): { extensionId: string; channel: ExtensionStateChannel } | undefined {
+  getStateChannel(
+    channelId: string,
+  ): { extensionId: string; channel: ExtensionStateChannel } | undefined {
     const entry = this.stateChannelIndex.get(getChannelKey(channelId));
-    return entry ? { extensionId: entry.extensionId, channel: entry.channel } : undefined;
+    return entry
+      ? { extensionId: entry.extensionId, channel: entry.channel }
+      : undefined;
   }
 
   hasTool(toolName: string): boolean {
     return this.toolIndex.has(toolName);
   }
 
-  validateTool(toolName: string, args: Record<string, unknown>): ValidationResult {
+  validateTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): ValidationResult {
     const entry = this.toolIndex.get(toolName);
     if (!entry) {
       return { valid: false, error: `Unknown tool: '${toolName}'` };
     }
     if (entry.tool.validate) {
-      return entry.tool.validate(args);
+      try {
+        return entry.tool.validate(args);
+      } catch (error) {
+        return { valid: false, error: getErrorMessage(error) };
+      }
     }
     return { valid: true };
   }
@@ -344,26 +486,23 @@ export class ExtensionRegistry {
       return { success: false, error: `Unknown tool: '${toolName}'` };
     }
 
-    if (entry.tool.validate) {
-      const validation = entry.tool.validate(args);
-      if (!validation.valid) {
-        return { success: false, error: validation.error };
-      }
-    }
-
-    const context: ToolExecutionContext = {
-      extensionId: entry.extensionId,
-      metadata,
-    };
-
     try {
+      if (entry.tool.validate) {
+        const validation = entry.tool.validate(args);
+        if (!validation.valid) {
+          return { success: false, error: validation.error };
+        }
+      }
+
+      const context: ToolExecutionContext = {
+        extensionId: entry.extensionId,
+        metadata,
+      };
       return await entry.tool.handler(args, context);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error during tool execution";
       return {
         success: false,
-        error: message,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -377,7 +516,9 @@ export class ExtensionRegistry {
     const key = getServiceKey(extensionId, serviceName);
     const entry = this.serviceIndex.get(key);
     if (!entry) {
-      throw new Error(`Service '${serviceName}' is not registered for extension '${extensionId}'.`);
+      throw new Error(
+        `Service '${serviceName}' is not registered for extension '${extensionId}'.`,
+      );
     }
 
     const registered = this.extensions.get(extensionId);
@@ -404,7 +545,10 @@ export class ExtensionRegistry {
     return this.eventBus.on("extension:unregistered", callback);
   }
 
-  on(eventType: RegistryEventType, callback: RegistryEventCallback): () => void {
+  on(
+    eventType: RegistryEventType,
+    callback: RegistryEventCallback,
+  ): () => void {
     return this.eventBus.on(eventType, callback);
   }
 
@@ -414,10 +558,25 @@ export class ExtensionRegistry {
 
   async destroy(): Promise<void> {
     const ids = Array.from(this.extensions.keys());
+    const errors: unknown[] = [];
     for (const id of ids) {
-      await this.unregister(id);
+      try {
+        await this.unregister(id);
+      } catch (error) {
+        errors.push(error);
+      }
     }
     this.eventBus.clear();
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        "Multiple extensions failed during registry cleanup.",
+      );
+    }
   }
 
   getStats(): {
@@ -432,7 +591,10 @@ export class ExtensionRegistry {
     };
   }
 
-  private ensureNoConflicts(extensionId: string, contribution: ExtensionRuntimeContribution): void {
+  private ensureNoConflicts(
+    extensionId: string,
+    contribution: ExtensionRuntimeContribution,
+  ): void {
     if (contribution.tools) {
       for (const tool of contribution.tools) {
         const name = tool.definition.function.name;
@@ -448,9 +610,10 @@ export class ExtensionRegistry {
     if (contribution.services) {
       for (const service of contribution.services) {
         const key = getServiceKey(extensionId, service.name);
-        if (this.serviceIndex.has(key)) {
+        const existing = this.serviceIndex.get(key);
+        if (existing && existing.extensionId !== extensionId) {
           throw new Error(
-            `Service '${service.name}' is already registered for extension '${extensionId}'.`,
+            `Service '${service.name}' from extension '${extensionId}' conflicts with extension '${existing.extensionId}'.`,
           );
         }
       }
@@ -467,26 +630,27 @@ export class ExtensionRegistry {
         }
       }
     }
+
+    if (contribution.slots) {
+      for (const slot of contribution.slots) {
+        const existing = this.slotIndex.get(slot.id);
+        if (existing && existing.extensionId !== extensionId) {
+          throw new Error(
+            `Slot '${slot.id}' from extension '${extensionId}' conflicts with extension '${existing.extensionId}'.`,
+          );
+        }
+      }
+    }
   }
 
-  private indexContribution(
+  private addContributionIndices(
     extensionId: string,
     contribution: ExtensionRuntimeContribution,
-  ): RegisteredExtension["capabilities"] {
-    const capabilities = summarizeCapabilities(contribution);
-    const timestamp = Date.now();
-
+  ): void {
     if (contribution.tools) {
       for (const tool of contribution.tools) {
         const name = tool.definition.function.name;
         this.toolIndex.set(name, { extensionId, tool });
-        void this.eventBus.emit({
-          type: "capability:registered",
-          extensionId,
-          capabilityId: name,
-          capabilityType: "tool",
-          timestamp,
-        });
       }
     }
 
@@ -494,13 +658,6 @@ export class ExtensionRegistry {
       for (const service of contribution.services) {
         const key = getServiceKey(extensionId, service.name);
         this.serviceIndex.set(key, { extensionId, definition: service });
-        void this.eventBus.emit({
-          type: "capability:registered",
-          extensionId,
-          capabilityId: service.name,
-          capabilityType: "service",
-          timestamp,
-        });
       }
     }
 
@@ -508,46 +665,24 @@ export class ExtensionRegistry {
       for (const channel of contribution.stateChannels) {
         const key = getChannelKey(channel.id);
         this.stateChannelIndex.set(key, { extensionId, channel });
-        void this.eventBus.emit({
-          type: "capability:registered",
-          extensionId,
-          capabilityId: channel.id,
-          capabilityType: "stateChannel",
-          timestamp,
-        });
       }
     }
 
     if (contribution.slots) {
       for (const slot of contribution.slots) {
         this.slotIndex.set(slot.id, { extensionId, slot });
-        void this.eventBus.emit({
-          type: "capability:registered",
-          extensionId,
-          capabilityId: slot.id,
-          capabilityType: "slot",
-          timestamp,
-        });
       }
     }
-
-    return capabilities;
   }
 
-  private removeContributionIndices(extensionId: string, contribution: ExtensionRuntimeContribution): void {
-    const timestamp = Date.now();
-
+  private removeContributionIndices(
+    extensionId: string,
+    contribution: ExtensionRuntimeContribution,
+  ): void {
     if (contribution.tools) {
       for (const tool of contribution.tools) {
         const name = tool.definition.function.name;
         this.toolIndex.delete(name);
-        void this.eventBus.emit({
-          type: "capability:removed",
-          extensionId,
-          capabilityId: name,
-          capabilityType: "tool",
-          timestamp,
-        });
       }
     }
 
@@ -555,13 +690,6 @@ export class ExtensionRegistry {
       for (const service of contribution.services) {
         const key = getServiceKey(extensionId, service.name);
         this.serviceIndex.delete(key);
-        void this.eventBus.emit({
-          type: "capability:removed",
-          extensionId,
-          capabilityId: service.name,
-          capabilityType: "service",
-          timestamp,
-        });
       }
     }
 
@@ -569,27 +697,43 @@ export class ExtensionRegistry {
       for (const channel of contribution.stateChannels) {
         const key = getChannelKey(channel.id);
         this.stateChannelIndex.delete(key);
-        void this.eventBus.emit({
-          type: "capability:removed",
-          extensionId,
-          capabilityId: channel.id,
-          capabilityType: "stateChannel",
-          timestamp,
-        });
       }
     }
 
     if (contribution.slots) {
       for (const slot of contribution.slots) {
         this.slotIndex.delete(slot.id);
-        void this.eventBus.emit({
-          type: "capability:removed",
-          extensionId,
-          capabilityId: slot.id,
-          capabilityType: "slot",
-          timestamp,
-        });
       }
+    }
+  }
+
+  private async emitCapabilityEvents(
+    type: "capability:registered" | "capability:removed",
+    extensionId: string,
+    capabilities: RegisteredExtension["capabilities"],
+  ): Promise<void> {
+    const timestamp = Date.now();
+    const entries = [
+      ...capabilities.tools.map((capabilityId) => ({
+        capabilityId,
+        capabilityType: "tool" as const,
+      })),
+      ...capabilities.services.map((capabilityId) => ({
+        capabilityId,
+        capabilityType: "service" as const,
+      })),
+      ...capabilities.stateChannels.map((capabilityId) => ({
+        capabilityId,
+        capabilityType: "stateChannel" as const,
+      })),
+      ...capabilities.slots.map((capabilityId) => ({
+        capabilityId,
+        capabilityType: "slot" as const,
+      })),
+    ];
+
+    for (const entry of entries) {
+      await this.eventBus.emit({ type, extensionId, timestamp, ...entry });
     }
   }
 

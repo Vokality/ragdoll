@@ -15,7 +15,7 @@ import type {
   NotificationCallback,
   NotificationRequest,
 } from "./types/host-environment.js";
-import type { ExtensionUISlot } from "./ui/types.js";
+import type { ExtensionSlot } from "./slots.js";
 
 // =============================================================================
 // Tool Definition Types (OpenAI-compatible)
@@ -152,7 +152,8 @@ export interface ExtensionManifest {
 /**
  * Supported capability types tracked by the registry.
  */
-export type ExtensionCapabilityType = "tool" | "service" | "stateChannel" | "slot";
+export type ExtensionCapabilityType =
+  "tool" | "service" | "stateChannel" | "slot";
 
 /**
  * Context exposed to service handlers.
@@ -174,7 +175,10 @@ export type ExtensionServiceHandler<TPayload = unknown, TResult = unknown> = (
 /**
  * Service definition exposed by an extension.
  */
-export interface ExtensionServiceDefinition<TPayload = unknown, TResult = unknown> {
+export interface ExtensionServiceDefinition<
+  TPayload = unknown,
+  TResult = unknown,
+> {
   name: string;
   description?: string;
   inputSchema?: ToolParameterSchema;
@@ -198,7 +202,7 @@ export interface ExtensionRuntimeContribution {
   tools?: ExtensionTool[];
   services?: ExtensionServiceDefinition[];
   stateChannels?: ExtensionStateChannel[];
-  slots?: ExtensionUISlot[];
+  slots?: ExtensionSlot[];
   metadata?: Record<string, unknown>;
   dispose?: () => Promise<void> | void;
 }
@@ -274,7 +278,9 @@ export type RegistryEvent = RegistryBasicEvent | RegistryCapabilityEvent;
 /**
  * Callback for registry event subscriptions
  */
-export type RegistryEventCallback = (event: RegistryEvent) => Promise<void> | void;
+export type RegistryEventCallback = (
+  event: RegistryEvent,
+) => Promise<void> | void;
 
 // =============================================================================
 // Factory Types
@@ -286,18 +292,37 @@ export interface ExtensionConfig {
   version: string;
   description?: string;
   requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
-  tools?: ExtensionTool[] | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionTool[]);
+  tools?:
+    | ExtensionTool[]
+    | ((
+        host: ExtensionHostEnvironment,
+        context: ExtensionContext,
+      ) => ExtensionTool[]);
   services?:
     | ExtensionServiceDefinition[]
-    | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionServiceDefinition[]);
+    | ((
+        host: ExtensionHostEnvironment,
+        context: ExtensionContext,
+      ) => ExtensionServiceDefinition[]);
   stateChannels?:
     | ExtensionStateChannel[]
-    | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionStateChannel[]);
-  slots?: ExtensionUISlot[] | ((host: ExtensionHostEnvironment, context: ExtensionContext) => ExtensionUISlot[]);
+    | ((
+        host: ExtensionHostEnvironment,
+        context: ExtensionContext,
+      ) => ExtensionStateChannel[]);
+  slots?:
+    | ExtensionSlot[]
+    | ((
+        host: ExtensionHostEnvironment,
+        context: ExtensionContext,
+      ) => ExtensionSlot[]);
   createRuntime?: (
     host: ExtensionHostEnvironment,
     context: ExtensionContext,
-  ) => Promise<ExtensionRuntimeContribution | void> | ExtensionRuntimeContribution | void;
+  ) =>
+    | Promise<ExtensionRuntimeContribution | void>
+    | ExtensionRuntimeContribution
+    | void;
   onInitialize?: (
     context: ExtensionContext,
     host: ExtensionHostEnvironment,
@@ -306,7 +331,7 @@ export interface ExtensionConfig {
 }
 
 // =============================================================================
-// Legacy Notification Type Re-exports (compatibility)
+// Host Capability Type Re-exports
 // =============================================================================
 
 export type {
