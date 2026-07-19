@@ -1,45 +1,44 @@
-/**
- * Generic OAuth Manager - Handles OAuth PKCE flows for any provider.
- *
- * This manager runs in the Electron main process and provides:
- * - OAuth PKCE authorization flow (no client secrets needed)
- * - Token storage and refresh
- * - Generic interface for any OAuth provider
- *
- * Extensions declare their OAuth requirements in package.json, and
- * this manager handles the flow automatically.
- */
-
-import crypto from "crypto";
-import type {
-  OAuthConfig,
-  OAuthTokens,
-  OAuthState,
-  HostOAuthCapability,
+import {
+  z,
+  type HostOAuthCapability,
+  type OAuthConfig,
+  type OAuthState,
+  type OAuthTokens,
 } from "@vokality/ragdoll-extensions";
+import type {
+  OAuthCallbackResult,
+  OAuthRedirectService,
+  OAuthRedirectSession,
+} from "./oauth-loopback-service.js";
 
-// =============================================================================
-// Types
-// =============================================================================
+const TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+const SCHEDULED_REFRESH_LEAD_MS = 5 * 60 * 1000;
+
+const oauthTokenResponseSchema = z
+  .object({
+    access_token: z.string().min(1),
+    refresh_token: z.string().min(1).optional(),
+    expires_in: z.number().positive().optional(),
+    scope: z.string().optional(),
+    token_type: z.string().optional(),
+  })
+  .passthrough();
 
 export interface OAuthManagerConfig {
-  /** OAuth configuration from extension package.json */
   oauthConfig: OAuthConfig;
-  /** Extension ID (for storage keys) */
   extensionId: string;
-  /** Client ID getter - called dynamically to get current clientId */
   getClientId: () => string;
-  /** Redirect URI for OAuth callback */
-  redirectUri: string;
-  /** Load tokens from storage */
+  redirects: OAuthRedirectService;
   loadTokens: () => Promise<OAuthTokens | null>;
-  /** Save tokens to storage */
   saveTokens: (tokens: OAuthTokens) => Promise<void>;
-  /** Clear tokens from storage */
   clearTokens: () => Promise<void>;
-  /** Open URL in system browser */
   openExternal: (url: string) => Promise<void>;
-  /** Logger */
+  onConnected?: () => void;
+  onError?: (error: string) => void;
+  fetch?: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>;
   logger?: {
     debug: (...args: unknown[]) => void;
     info: (...args: unknown[]) => void;
@@ -48,104 +47,79 @@ export interface OAuthManagerConfig {
   };
 }
 
+interface PendingAuthorization {
+  session: OAuthRedirectSession;
+  state: string;
+  verifier: string;
+}
+
 type OAuthStateListener = (state: OAuthState) => void;
 
-// =============================================================================
-// PKCE Helpers
-// =============================================================================
-
 function generateRandomString(length: number): string {
-  const possible =
+  const alphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const values = crypto.randomBytes(length);
-  return Array.from(values)
-    .map((x) => possible[x % possible.length])
-    .join("");
+  const values = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(values, (value) => alphabet[value % alphabet.length]).join(
+    "",
+  );
 }
 
-function sha256(plain: string): Buffer {
-  return crypto.createHash("sha256").update(plain).digest();
-}
-
-function base64UrlEncode(buffer: Buffer): string {
-  return buffer
-    .toString("base64")
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  const binary = String.fromCharCode(...new Uint8Array(digest));
+  return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-function generateCodeChallenge(verifier: string): string {
-  const hashed = sha256(verifier);
-  return base64UrlEncode(hashed);
-}
-
-// =============================================================================
-// OAuth Manager
-// =============================================================================
-
 export class OAuthManager implements HostOAuthCapability {
-  private config: OAuthManagerConfig;
   private tokens: OAuthTokens | null = null;
-  private state: OAuthState;
-  private listeners: Set<OAuthStateListener> = new Set();
+  private state: OAuthState = {
+    status: "disconnected",
+    isAuthenticated: false,
+  };
+  private readonly listeners = new Set<OAuthStateListener>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
-  private codeVerifier: string | null = null;
+  private refreshPromise: Promise<void> | null = null;
+  private authorizationCompletion: Promise<void> | null = null;
+  private pendingAuthorization: PendingAuthorization | null = null;
   private initialized = false;
 
-  constructor(config: OAuthManagerConfig) {
-    this.config = config;
-    this.state = {
-      status: "disconnected",
-      isAuthenticated: false,
-    };
-  }
+  constructor(private readonly config: OAuthManagerConfig) {}
 
-  /**
-   * Initialize the manager - load existing tokens from storage
-   */
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    this.initialized = true;
 
     try {
-      const tokens = await this.config.loadTokens();
-      if (tokens) {
-        this.tokens = tokens;
+      this.tokens = await this.config.loadTokens();
+      if (!this.tokens) return;
 
-        // Check if tokens are still valid
-        if (tokens.expiresAt && Date.now() < tokens.expiresAt) {
-          this.setState({
-            status: "connected",
-            isAuthenticated: true,
-            expiresAt: tokens.expiresAt,
-          });
-          this.scheduleTokenRefresh();
-        } else if (tokens.refreshToken) {
-          // Tokens expired, try to refresh
-          await this.refreshAccessToken();
-        } else {
-          // No refresh token, need to re-auth
-          this.setState({
-            status: "expired",
-            isAuthenticated: false,
-          });
-        }
+      if (!this.isExpired(this.tokens)) {
+        this.setState({
+          status: "connected",
+          isAuthenticated: true,
+          expiresAt: this.tokens.expiresAt,
+          error: undefined,
+        });
+        this.scheduleTokenRefresh();
+        return;
       }
+
+      if (this.tokens.refreshToken) {
+        await this.refreshAccessToken();
+        return;
+      }
+
+      this.setState({ status: "expired", isAuthenticated: false });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.setState({
-        status: "error",
-        isAuthenticated: false,
-        error: message,
-      });
+      this.fail(error);
     }
-
-    this.initialized = true;
   }
-
-  // ===========================================================================
-  // HostOAuthCapability Implementation
-  // ===========================================================================
 
   getState(): OAuthState {
     return { ...this.state };
@@ -157,83 +131,90 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   async startFlow(): Promise<string> {
-    // Generate PKCE code verifier and challenge
-    this.codeVerifier = generateRandomString(64);
-
-    const oauthConfig = this.config.oauthConfig;
-    const usePkce = oauthConfig.pkce !== false; // Default to true
-
     const clientId = this.config.getClientId();
-    if (!clientId) {
-      throw new Error("Client ID is not configured");
-    }
+    if (!clientId) throw new Error("OAuth client ID is not configured");
 
-    const params: Record<string, string> = {
+    this.cancelPendingAuthorization();
+    const session = await this.config.redirects.createSession(
+      this.config.extensionId,
+      this.config.oauthConfig.callbackPort,
+    );
+    const transaction: PendingAuthorization = {
+      session,
+      state: generateRandomString(64),
+      verifier: generateRandomString(64),
+    };
+    this.pendingAuthorization = transaction;
+    const completion = this.completeAuthorization(transaction).finally(() => {
+      if (this.authorizationCompletion === completion) {
+        this.authorizationCompletion = null;
+      }
+    });
+    this.authorizationCompletion = completion;
+    void completion.catch((error) => {
+      this.log("error", "OAuth authorization completion failed", error);
+    });
+
+    let challenge: string;
+    try {
+      challenge = await generateCodeChallenge(transaction.verifier);
+    } catch (error) {
+      if (this.pendingAuthorization === transaction) {
+        this.pendingAuthorization = null;
+        transaction.session.close();
+        this.fail(error);
+      }
+      throw error;
+    }
+    const params = new URLSearchParams({
+      ...(this.config.oauthConfig.additionalAuthParams ?? {}),
       client_id: clientId,
       response_type: "code",
-      redirect_uri: this.config.redirectUri,
-      scope: oauthConfig.scopes.join(" "),
-      state: this.config.extensionId, // Use extension ID as state for routing
-      ...(oauthConfig.additionalAuthParams ?? {}),
-    };
+      redirect_uri: session.redirectUri,
+      scope: this.config.oauthConfig.scopes.join(" "),
+      state: transaction.state,
+      code_challenge_method: "S256",
+      code_challenge: challenge,
+    });
+    const authorizationUrl = `${this.config.oauthConfig.authorizationUrl}?${params.toString()}`;
 
-    if (usePkce) {
-      const codeChallenge = generateCodeChallenge(this.codeVerifier);
-      params.code_challenge_method = "S256";
-      params.code_challenge = codeChallenge;
+    this.setState({
+      status: "connecting",
+      isAuthenticated: false,
+      error: undefined,
+    });
+    try {
+      await this.config.openExternal(authorizationUrl);
+      return authorizationUrl;
+    } catch (error) {
+      if (this.pendingAuthorization === transaction) {
+        this.pendingAuthorization = null;
+        transaction.session.close();
+        this.fail(error);
+      }
+      throw error;
     }
-
-    const authUrl = `${oauthConfig.authorizationUrl}?${new URLSearchParams(params).toString()}`;
-
-    this.setState({ status: "connecting", isAuthenticated: false });
-
-    // Open in system browser
-    await this.config.openExternal(authUrl);
-
-    return authUrl;
   }
 
   async getAccessToken(): Promise<string | null> {
-    if (!this.tokens?.accessToken) {
-      return null;
-    }
-
-    // Check if token is expired or about to expire (within 60 seconds)
-    if (
-      this.tokens.expiresAt &&
-      Date.now() >= this.tokens.expiresAt - 60 * 1000
-    ) {
-      // Try to refresh
-      if (this.tokens.refreshToken) {
-        try {
-          await this.refreshAccessToken();
-        } catch (error) {
-          this.log("error", "Failed to refresh token:", error);
-          return null;
-        }
-      } else {
+    if (!this.tokens?.accessToken) return null;
+    if (this.isExpired(this.tokens, TOKEN_EXPIRY_SKEW_MS)) {
+      if (!this.tokens.refreshToken) {
+        this.setState({ status: "expired", isAuthenticated: false });
         return null;
       }
+      await this.refreshAccessToken();
     }
-
     return this.tokens.accessToken;
   }
 
-  async getTokens(): Promise<OAuthTokens | null> {
-    return this.tokens ? { ...this.tokens } : null;
-  }
-
   async disconnect(): Promise<void> {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
-
+    this.clearRefreshTimer();
+    this.cancelPendingAuthorization();
+    await this.authorizationCompletion?.catch(() => undefined);
+    await this.refreshPromise?.catch(() => undefined);
     this.tokens = null;
-    this.codeVerifier = null;
-
     await this.config.clearTokens();
-
     this.setState({
       status: "disconnected",
       isAuthenticated: false,
@@ -246,220 +227,221 @@ export class OAuthManager implements HostOAuthCapability {
     return this.state.isAuthenticated && this.tokens !== null;
   }
 
-  // ===========================================================================
-  // OAuth Flow Handling
-  // ===========================================================================
+  destroy(): void {
+    this.clearRefreshTimer();
+    this.cancelPendingAuthorization();
+    this.listeners.clear();
+  }
 
-  /**
-   * Handle OAuth callback - exchange code for tokens.
-   * Called by the ExtensionManager when a callback is received.
-   */
-  async handleCallback(code: string): Promise<void> {
-    if (!this.codeVerifier) {
-      throw new Error("No code verifier available. Call startFlow first.");
-    }
-
-    const oauthConfig = this.config.oauthConfig;
-    const usePkce = oauthConfig.pkce !== false;
-
+  private async completeAuthorization(
+    transaction: PendingAuthorization,
+  ): Promise<void> {
     try {
-      const body: Record<string, string> = {
-        client_id: this.config.getClientId(),
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: this.config.redirectUri,
-        ...(oauthConfig.additionalTokenParams ?? {}),
-      };
-
-      if (usePkce) {
-        body.code_verifier = this.codeVerifier;
-      }
-
-      const response = await fetch(oauthConfig.tokenUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(body),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Token exchange failed: ${error}`);
-      }
-
-      const data = await response.json();
-
-      this.tokens = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresAt: data.expires_in
-          ? Date.now() + data.expires_in * 1000
-          : undefined,
-        scope: data.scope,
-        tokenType: data.token_type,
-      };
-
-      // Clear the code verifier after successful exchange
-      this.codeVerifier = null;
-
-      // Save tokens
-      await this.config.saveTokens(this.tokens);
-
-      this.setState({
-        status: "connected",
-        isAuthenticated: true,
-        expiresAt: this.tokens.expiresAt,
-        error: undefined,
-      });
-
-      this.scheduleTokenRefresh();
-
-      this.log("info", `OAuth connected for ${this.config.extensionId}`);
+      const callback = await transaction.session.result;
+      if (this.pendingAuthorization !== transaction) return;
+      this.validateCallback(callback, transaction.state);
+      const tokens = await this.exchangeAuthorizationCode(
+        callback.code!,
+        transaction.verifier,
+        transaction.session.redirectUri,
+      );
+      if (this.pendingAuthorization !== transaction) return;
+      this.tokens = tokens;
+      await this.config.saveTokens(tokens);
+      if (this.pendingAuthorization !== transaction) return;
+      this.markConnected();
+      this.log("info", "OAuth connected");
+      this.pendingAuthorization = null;
+      this.config.onConnected?.();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      this.setState({
-        status: "error",
-        isAuthenticated: false,
-        error: message,
-      });
-      throw error;
+      if (this.pendingAuthorization !== transaction) return;
+      this.pendingAuthorization = null;
+      this.fail(error);
     }
   }
 
-  /**
-   * Refresh the access token using the refresh token.
-   */
-  async refreshAccessToken(): Promise<void> {
-    if (!this.tokens?.refreshToken) {
-      throw new Error("No refresh token available");
+  private validateCallback(
+    callback: OAuthCallbackResult,
+    expectedState: string,
+  ): void {
+    if (callback.state !== expectedState) {
+      throw new Error("OAuth callback state did not match the active flow");
     }
+    if (callback.error) {
+      throw new Error(`OAuth authorization failed: ${callback.error}`);
+    }
+    if (!callback.code) {
+      throw new Error("OAuth callback is missing an authorization code");
+    }
+  }
 
-    const oauthConfig = this.config.oauthConfig;
+  private async exchangeAuthorizationCode(
+    code: string,
+    verifier: string,
+    redirectUri: string,
+  ): Promise<OAuthTokens> {
+    const response = await this.requestToken({
+      ...(this.config.oauthConfig.additionalTokenParams ?? {}),
+      client_id: this.getClientId(),
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier,
+    });
+    return this.toTokens(response);
+  }
+
+  private refreshAccessToken(): Promise<void> {
+    if (this.refreshPromise) return this.refreshPromise;
+    const operation = this.performTokenRefresh().finally(() => {
+      if (this.refreshPromise === operation) this.refreshPromise = null;
+    });
+    this.refreshPromise = operation;
+    return operation;
+  }
+
+  private async performTokenRefresh(): Promise<void> {
+    const currentTokens = this.tokens;
+    const refreshToken = currentTokens?.refreshToken;
+    if (!refreshToken) throw new Error("No OAuth refresh token is available");
 
     try {
-      const body: Record<string, string> = {
-        client_id: this.config.getClientId(),
+      const response = await this.requestToken({
+        ...(this.config.oauthConfig.additionalTokenParams ?? {}),
+        client_id: this.getClientId(),
         grant_type: "refresh_token",
-        refresh_token: this.tokens.refreshToken,
-      };
-
-      const response = await fetch(oauthConfig.tokenUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(body),
+        refresh_token: refreshToken,
       });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Token refresh failed: ${error}`);
-      }
-
-      const data = await response.json();
-
-      this.tokens = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token ?? this.tokens.refreshToken,
-        expiresAt: data.expires_in
-          ? Date.now() + data.expires_in * 1000
-          : undefined,
-        scope: data.scope ?? this.tokens.scope,
-        tokenType: data.token_type ?? this.tokens.tokenType,
-      };
-
-      // Save updated tokens
+      this.tokens = this.toTokens(response, currentTokens);
       await this.config.saveTokens(this.tokens);
-
-      this.setState({
-        status: "connected",
-        isAuthenticated: true,
-        expiresAt: this.tokens.expiresAt,
-        error: undefined,
-      });
-
-      this.scheduleTokenRefresh();
-
-      this.log("debug", `Token refreshed for ${this.config.extensionId}`);
+      this.markConnected();
+      this.log("debug", "OAuth access token refreshed");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      this.setState({
-        status: "error",
-        isAuthenticated: false,
-        error: message,
-      });
+      this.fail(error);
       throw error;
     }
   }
 
-  // ===========================================================================
-  // Private Helpers
-  // ===========================================================================
+  private async requestToken(
+    parameters: Record<string, string>,
+  ): Promise<z.infer<typeof oauthTokenResponseSchema>> {
+    const response = await (this.config.fetch ?? fetch)(
+      this.config.oauthConfig.tokenUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(parameters),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `OAuth token request failed with status ${response.status}: ${await readOAuthError(response)}`,
+      );
+    }
+    return oauthTokenResponseSchema.parse(await response.json());
+  }
+
+  private toTokens(
+    response: z.infer<typeof oauthTokenResponseSchema>,
+    previous?: OAuthTokens,
+  ): OAuthTokens {
+    return {
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token ?? previous?.refreshToken,
+      expiresAt: response.expires_in
+        ? Date.now() + response.expires_in * 1000
+        : undefined,
+      scope: response.scope ?? previous?.scope,
+      tokenType: response.token_type ?? previous?.tokenType,
+    };
+  }
+
+  private getClientId(): string {
+    const clientId = this.config.getClientId();
+    if (!clientId) throw new Error("OAuth client ID is not configured");
+    return clientId;
+  }
+
+  private isExpired(tokens: OAuthTokens, skewMs = 0): boolean {
+    return Boolean(tokens.expiresAt && Date.now() >= tokens.expiresAt - skewMs);
+  }
+
+  private markConnected(): void {
+    this.setState({
+      status: "connected",
+      isAuthenticated: true,
+      expiresAt: this.tokens?.expiresAt,
+      error: undefined,
+    });
+    this.scheduleTokenRefresh();
+  }
+
+  private fail(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.setState({ status: "error", isAuthenticated: false, error: message });
+    this.config.onError?.(message);
+  }
 
   private setState(partial: Partial<OAuthState>): void {
     this.state = { ...this.state, ...partial };
-    this.emitState();
-  }
-
-  private emitState(): void {
     const state = this.getState();
     for (const listener of this.listeners) {
       try {
         listener(state);
       } catch (error) {
-        this.log("error", "Error in OAuth state listener:", error);
+        this.log("error", "OAuth state listener failed", error);
       }
     }
   }
 
   private scheduleTokenRefresh(): void {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
+    this.clearRefreshTimer();
+    if (!this.tokens?.expiresAt || !this.tokens.refreshToken) return;
 
-    if (!this.tokens?.expiresAt || !this.tokens.refreshToken) {
-      return;
-    }
+    const delay = Math.max(
+      0,
+      this.tokens.expiresAt - Date.now() - SCHEDULED_REFRESH_LEAD_MS,
+    );
+    this.refreshTimer = setTimeout(() => {
+      void this.refreshAccessToken().catch((error) => {
+        this.log("error", "Scheduled OAuth token refresh failed", error);
+      });
+    }, delay);
+  }
 
-    // Refresh 5 minutes before expiry
-    const refreshIn = this.tokens.expiresAt - Date.now() - 5 * 60 * 1000;
+  private clearRefreshTimer(): void {
+    if (!this.refreshTimer) return;
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+  }
 
-    if (refreshIn > 0) {
-      this.refreshTimer = setTimeout(() => {
-        this.refreshAccessToken().catch((error) => {
-          this.log("error", "Auto-refresh failed:", error);
-        });
-      }, refreshIn);
-    }
+  private cancelPendingAuthorization(): void {
+    const pending = this.pendingAuthorization;
+    this.pendingAuthorization = null;
+    pending?.session.close();
   }
 
   private log(
     level: "debug" | "info" | "warn" | "error",
     ...args: unknown[]
   ): void {
-    const logger = this.config.logger;
-    if (logger) {
-      logger[level](`[OAuth:${this.config.extensionId}]`, ...args);
-    }
-  }
-
-  /**
-   * Clean up resources
-   */
-  destroy(): void {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
-    this.listeners.clear();
+    this.config.logger?.[level](`[OAuth:${this.config.extensionId}]`, ...args);
   }
 }
 
-// =============================================================================
-// Factory Function
-// =============================================================================
+async function readOAuthError(response: Response): Promise<string> {
+  const body = await response.text();
+  if (!body) return response.statusText || "unknown error";
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string;
+      error_description?: string;
+    };
+    return parsed.error_description ?? parsed.error ?? "unknown error";
+  } catch {
+    return "provider returned a non-JSON error";
+  }
+}
 
 export function createOAuthManager(config: OAuthManagerConfig): OAuthManager {
   return new OAuthManager(config);

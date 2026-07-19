@@ -7,6 +7,7 @@ import { ExtensionStorage } from "./infrastructure/extension-storage.js";
 import { createStorageRepository } from "./infrastructure/storage-repository.js";
 import type { StorageRepository } from "./infrastructure/storage-repository.js";
 import { InstalledExtensionRepository } from "./infrastructure/installed-extension-repository.js";
+import { ExtensionHostDataRepository } from "./infrastructure/extension-host-data-repository.js";
 import { registerIpc } from "./ipc/register-ipc.js";
 import { ApiKeyService } from "./services/api-key-service.js";
 import { ChatApplicationService } from "./services/chat-application-service.js";
@@ -18,7 +19,7 @@ import { ExtensionMessageBus } from "./services/extension-message-bus.js";
 import { ExtensionOperationsService } from "./services/extension-operations-service.js";
 import { ExternalNavigationService } from "./services/external-navigation-service.js";
 import { GitHubReleaseService } from "./services/github-release-service.js";
-import { OAuthCallbackService } from "./services/oauth-callback-service.js";
+import { OAuthLoopbackService } from "./services/oauth-loopback-service.js";
 import { OpenAIAgentRunner } from "./services/openai-service.js";
 import { RendererEventService } from "./services/renderer-event-service.js";
 import { WindowService } from "./services/window-service.js";
@@ -31,7 +32,7 @@ export class LumenApplication {
   private readonly storage: StorageRepository;
   private readonly extensions;
   private readonly windows;
-  private readonly oauthCallbacks;
+  private readonly oauthRedirects;
   private readonly apiKeys;
   private readonly chat;
   private readonly conversationEvents;
@@ -45,6 +46,7 @@ export class LumenApplication {
   ) {
     this.storage = storage;
     this.conversationEvents = new ConversationEventService(storage);
+    this.oauthRedirects = new OAuthLoopbackService();
     const messageBus = new ExtensionMessageBus((name, args) =>
       this.rendererEvents.functionCall(name, args),
     );
@@ -55,8 +57,9 @@ export class LumenApplication {
       storage: new ExtensionStorage(config.userExtensionsPath),
       messageBus,
       conversationEvents: this.conversationEvents,
+      hostData: new ExtensionHostDataRepository(storage, safeStorage),
+      oauthRedirects: this.oauthRedirects,
       disabledExtensions,
-      oauthRedirectBase: config.oauthRedirectBase,
       openExternal: async (url) => {
         const result = await this.navigation.open(url);
         if (!result.success) throw new Error(result.error);
@@ -67,15 +70,16 @@ export class LumenApplication {
       onNotification: Notification.isSupported()
         ? (request) => new Notification(request).show()
         : undefined,
+      onOAuthSucceeded: (extensionId) => {
+        this.rendererEvents.oauthSucceeded({ extensionId });
+        this.rendererEvents.focus();
+      },
+      onOAuthFailed: (extensionId, error) =>
+        this.rendererEvents.oauthFailed({ extensionId, error }),
     });
     this.windows = new WindowService(
       config,
       this.navigation,
-      this.rendererEvents,
-    );
-    this.oauthCallbacks = new OAuthCallbackService(
-      config.protocolScheme,
-      this.extensions,
       this.rendererEvents,
     );
     this.apiKeys = new ApiKeyService(this.storage, safeStorage);
@@ -115,15 +119,12 @@ export class LumenApplication {
     this.windows.focus();
   }
 
-  handleOAuthUrl(url: string): Promise<void> {
-    return this.oauthCallbacks.handle(url);
-  }
-
   async destroy(): Promise<void> {
     this.disposeIpc?.();
     this.disposeIpc = null;
     this.unsubscribeConversationEvents();
     await this.extensions.destroy();
+    this.oauthRedirects.destroy();
   }
 
   private async initialize(): Promise<void> {

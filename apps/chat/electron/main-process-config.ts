@@ -1,8 +1,6 @@
 import type { App } from "electron";
 import { join } from "node:path";
 
-export const LUMEN_PROTOCOL_SCHEME = "lumen";
-
 const SYSTEM_PROMPT = `
 You are Lumen, a friendly AI companion from Vokality. You can express emotions through your animated avatar and help users with various tasks.
 
@@ -27,8 +25,6 @@ You are Lumen, a friendly AI companion from Vokality. You can express emotions t
 
 export interface MainProcessConfig {
   isDevelopment: boolean;
-  protocolScheme: string;
-  oauthRedirectBase: string;
   userDataPath: string;
   userExtensionsPath: string;
   extensionsRegistryPath: string;
@@ -57,8 +53,6 @@ export function createMainProcessConfig(
   const userDataPath = app.getPath("userData");
   return {
     isDevelopment: !app.isPackaged,
-    protocolScheme: LUMEN_PROTOCOL_SCHEME,
-    oauthRedirectBase: `${LUMEN_PROTOCOL_SCHEME}://oauth`,
     userDataPath,
     userExtensionsPath: join(userDataPath, "extensions"),
     extensionsRegistryPath: join(userDataPath, "extensions-registry.json"),

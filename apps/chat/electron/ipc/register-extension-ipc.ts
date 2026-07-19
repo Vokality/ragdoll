@@ -7,6 +7,7 @@ import type { IpcRegistrar } from "./registrar.js";
 const idSchema = z.string().min(1);
 const idsSchema = z.array(idSchema);
 const configValueSchema = z.union([z.string(), z.number(), z.boolean()]);
+const configValuesSchema = z.record(z.string(), configValueSchema);
 const slotActionSchema = z.enum([
   "panel-action",
   "section-action",
@@ -78,13 +79,12 @@ export function registerExtensionIpc(
     manager.getConfigSchema(idSchema.parse(extensionId)),
   );
   ipc.handle(
-    "extensions:config-set-value",
-    (_event, extensionId: unknown, key: unknown, value: unknown) =>
+    "extensions:config-set-values",
+    (_event, extensionId: unknown, values: unknown) =>
       operation(() =>
-        manager.setConfigValue(
+        manager.setConfigValues(
           idSchema.parse(extensionId),
-          idSchema.parse(key),
-          configValueSchema.parse(value),
+          configValuesSchema.parse(values),
         ),
       ),
   );

@@ -68,14 +68,24 @@ try {
 import { RagdollCharacter } from "@vokality/ragdoll";
 import { MockClock } from "@vokality/ragdoll/testing";
 import { createRegistry } from "@vokality/ragdoll-extensions";
-import { createLoader } from "@vokality/ragdoll-extensions/loader";
+import {
+  createExtensionPackageDescriptor,
+  createLoader,
+  parseExtensionPackageJson,
+  wrapExtensionWithPackageManifest,
+} from "@vokality/ragdoll-extensions/loader";
 import { createSlotState } from "@vokality/ragdoll-extensions/slots";
 import { SlotBar } from "@vokality/ragdoll-extensions/ui";
 import { createExtension as createCharacter } from "@vokality/ragdoll-extension-character";
+import characterManifest from "@vokality/ragdoll-extension-character/manifest" with { type: "json" };
 import { createExtension as createTasks } from "@vokality/ragdoll-extension-tasks";
+import tasksManifest from "@vokality/ragdoll-extension-tasks/manifest" with { type: "json" };
 import { createExtension as createPomodoro } from "@vokality/ragdoll-extension-pomodoro";
+import pomodoroManifest from "@vokality/ragdoll-extension-pomodoro/manifest" with { type: "json" };
 import { createExtension as createSpotify } from "@vokality/ragdoll-extension-spotify";
+import spotifyManifest from "@vokality/ragdoll-extension-spotify/manifest" with { type: "json" };
 import { createExtension as createWeather } from "@example/ragdoll-extension-weather";
+import weatherManifest from "@example/ragdoll-extension-weather/manifest" with { type: "json" };
 
 const exportsToCheck = [
   RagdollCharacter,
@@ -90,15 +100,50 @@ if (exportsToCheck.some((value) => value === undefined)) {
 }
 
 const factories = [
-  createCharacter,
-  createTasks,
-  createPomodoro,
-  createSpotify,
-  createWeather,
-];
-const extensions = factories.map((factory) => factory());
-if (extensions.some((extension) => typeof extension.activate !== "function")) {
-  throw new Error("An extension package did not create a valid extension.");
+  [createCharacter, characterManifest],
+  [createTasks, tasksManifest],
+  [createPomodoro, pomodoroManifest],
+  [createSpotify, spotifyManifest],
+  [createWeather, weatherManifest],
+] as const;
+for (const [factory, packageJson] of factories) {
+  const descriptor = createExtensionPackageDescriptor(
+    parseExtensionPackageJson(JSON.stringify(packageJson)),
+  );
+  if (!descriptor) {
+    throw new Error("A packed extension did not expose its package manifest.");
+  }
+
+  const runtime = factory();
+  if (
+    runtime.manifest.id !== descriptor.extensionId ||
+    runtime.manifest.name !== descriptor.name ||
+    runtime.manifest.version !== descriptor.version
+  ) {
+    throw new Error(
+      "A packed extension runtime does not match its canonical package manifest.",
+    );
+  }
+
+  const extension = wrapExtensionWithPackageManifest(runtime, {
+    id: descriptor.extensionId,
+    name: descriptor.name,
+    version: descriptor.version,
+    description: descriptor.description,
+    requiredCapabilities: descriptor.requiredCapabilities,
+  });
+  if (typeof extension.activate !== "function") {
+    throw new Error("An extension package did not create a valid extension.");
+  }
+  if (
+    extension.manifest.requiredCapabilities?.some(
+      (capability) => !descriptor.requiredCapabilities.includes(capability),
+    )
+  ) {
+    throw new Error(
+      "An extension runtime requires a capability missing from its package manifest.",
+    );
+  }
 }
 
 const registry = createRegistry();

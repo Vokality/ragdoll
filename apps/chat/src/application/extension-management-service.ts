@@ -17,6 +17,11 @@ export interface ExtensionOverview {
   installed: InstalledExtension[];
 }
 
+export interface ExtensionConfiguration {
+  schema: ConfigSchema | null;
+  status: ExtensionConfigStatus;
+}
+
 export type ExtensionManagementGateway = Pick<
   ElectronAPI,
   | "checkExtensionUpdates"
@@ -30,7 +35,7 @@ export type ExtensionManagementGateway = Pick<
   | "installExtensionFromGitHub"
   | "onOAuthError"
   | "onOAuthSuccess"
-  | "setConfigValue"
+  | "setConfigValues"
   | "setDisabledExtensions"
   | "startOAuthFlow"
   | "uninstallExtension"
@@ -70,10 +75,9 @@ export class ExtensionManagementService {
     if (!result.success) throw new Error(result.error);
   }
 
-  async loadConfiguration(extensionId: string): Promise<{
-    schema: ConfigSchema | null;
-    status: ExtensionConfigStatus;
-  }> {
+  async loadConfiguration(
+    extensionId: string,
+  ): Promise<ExtensionConfiguration> {
     const [schema, status] = await Promise.all([
       this.api.getConfigSchema(extensionId),
       this.api.getConfigStatus(extensionId),
@@ -96,12 +100,21 @@ export class ExtensionManagementService {
     return this.api.onOAuthError(callback);
   }
 
-  setConfigValue(
+  async saveConfiguration(
     extensionId: string,
-    key: string,
-    value: string | number | boolean,
-  ): Promise<OperationResult> {
-    return this.api.setConfigValue(extensionId, key, value);
+    values: Record<string, string | number | boolean>,
+  ): Promise<{
+    configuration: ExtensionConfiguration;
+    oauth: OAuthState | null;
+  }> {
+    const result = await this.api.setConfigValues(extensionId, values);
+    if (!result.success) throw new Error(result.error);
+
+    const [configuration, oauth] = await Promise.all([
+      this.loadConfiguration(extensionId),
+      this.getOAuthState(extensionId),
+    ]);
+    return { configuration, oauth };
   }
 
   startOAuth(extensionId: string): Promise<OperationResult> {

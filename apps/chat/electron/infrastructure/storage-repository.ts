@@ -14,6 +14,19 @@ import {
   pendingAgentTurnSchema,
 } from "../domain/conversation.js";
 
+const configValuesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean()]),
+);
+
+const extensionHostDataSchema = z
+  .object({
+    configValues: configValuesSchema.optional(),
+    configSecretsEncrypted: z.string().optional(),
+    oauthTokensEncrypted: z.string().optional(),
+  })
+  .strict();
+
 export const storageSchema = z
   .object({
     apiKeyEncrypted: z.string().optional(),
@@ -27,6 +40,7 @@ export const storageSchema = z
       .optional(),
     conversation: z.array(conversationEntrySchema).optional(),
     pendingAgentTurns: z.array(pendingAgentTurnSchema).optional(),
+    extensionHost: z.record(z.string(), extensionHostDataSchema).optional(),
   })
   .strict();
 

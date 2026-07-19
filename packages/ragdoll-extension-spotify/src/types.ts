@@ -26,6 +26,7 @@ export interface SpotifyAlbum {
 }
 
 export interface SpotifyTrack {
+  type: "track";
   id: string;
   name: string;
   uri: string;
@@ -35,37 +36,45 @@ export interface SpotifyTrack {
   artworkUrl: string | null;
 }
 
+export interface SpotifyShow {
+  id: string;
+  name: string;
+  uri: string;
+}
+
+export interface SpotifyEpisode {
+  type: "episode";
+  id: string;
+  name: string;
+  uri: string;
+  durationMs: number;
+  show: SpotifyShow;
+  artworkUrl: string | null;
+}
+
+export type SpotifyPlaybackItem = SpotifyTrack | SpotifyEpisode;
+
 // =============================================================================
 // Playback State Types
 // =============================================================================
 
 export interface SpotifyDevice {
-  id: string;
+  id: string | null;
   name: string;
   type: string;
   isActive: boolean;
-  volumePercent: number;
+  volumePercent: number | null;
 }
 
 export interface SpotifyPlaybackState {
   isPlaying: boolean;
-  track: SpotifyTrack | null;
+  item: SpotifyPlaybackItem | null;
   progressMs: number;
   device: SpotifyDevice | null;
   shuffleState: boolean;
   repeatState: "off" | "track" | "context";
   timestamp: number;
 }
-
-export const EMPTY_PLAYBACK_STATE: SpotifyPlaybackState = {
-  isPlaying: false,
-  track: null,
-  progressMs: 0,
-  device: null,
-  shuffleState: false,
-  repeatState: "off",
-  timestamp: Date.now(),
-};
 
 // =============================================================================
 // Search Types
@@ -83,7 +92,7 @@ export interface SpotifyPlaylist {
     id: string;
     displayName: string | null;
   };
-  tracksTotal: number;
+  itemsTotal: number | null;
 }
 
 export interface SpotifySearchResults {

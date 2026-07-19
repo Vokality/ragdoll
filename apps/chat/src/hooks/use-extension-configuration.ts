@@ -44,6 +44,8 @@ export function useExtensionConfiguration(
       setStatus(configuration.status);
       const loadedValues: Record<string, ConfigValue> = {};
       for (const [key, value] of Object.entries(configuration.status.values)) {
+        const field = configuration.schema?.[key];
+        if (field && "secret" in field && field.secret) continue;
         if (
           typeof value === "string" ||
           typeof value === "number" ||
@@ -88,15 +90,14 @@ export function useExtensionConfiguration(
     setSaving(true);
     setError(null);
     try {
-      await Promise.all(
-        Object.entries(values).map(async ([key, value]) => {
-          if (value === "" || value === undefined) return;
-          const result = await service.setConfigValue(extensionId, key, value);
-          if (!result.success) throw new Error(result.error);
-        }),
-      );
-      const configuration = await service.loadConfiguration(extensionId);
+      const nextValues: Record<string, string | number | boolean> = {};
+      for (const [key, value] of Object.entries(values)) {
+        if (value !== "" && value !== undefined) nextValues[key] = value;
+      }
+      const { configuration, oauth: nextOAuth } =
+        await service.saveConfiguration(extensionId, nextValues);
       setStatus(configuration.status);
+      setOauth(nextOAuth);
       if (configuration.status.isConfigured) onConfigured?.();
     } catch (saveError) {
       setError(getErrorMessage(saveError));

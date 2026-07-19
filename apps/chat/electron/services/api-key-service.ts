@@ -4,12 +4,9 @@ import type {
   OperationResult,
 } from "../electron-api.js";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
+import type { EncryptionService } from "../infrastructure/encryption-service.js";
 
-export interface EncryptionService {
-  isEncryptionAvailable(): boolean;
-  encryptString(value: string): Buffer;
-  decryptString(value: Buffer): string;
-}
+export type { EncryptionService } from "../infrastructure/encryption-service.js";
 
 export class ApiKeyService {
   constructor(

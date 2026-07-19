@@ -3,6 +3,11 @@ import type {
   ConversationEventInput,
   ExtensionHostEnvironment,
 } from "@vokality/ragdoll-extensions";
+import {
+  createExtensionPackageDescriptor,
+  parseExtensionPackageJson,
+} from "@vokality/ragdoll-extensions/loader";
+import packageJson from "../package.json" with { type: "json" };
 import { createExtension } from "./index.js";
 
 afterEach(() => {
@@ -10,6 +15,17 @@ afterEach(() => {
 });
 
 describe("Pomodoro conversation events", () => {
+  it("publishes a self-contained manifest with notifications optional", () => {
+    const descriptor = createExtensionPackageDescriptor(
+      parseExtensionPackageJson(JSON.stringify(packageJson)),
+    );
+
+    expect(descriptor?.requiredCapabilities).toEqual(["conversationEvents"]);
+    expect(createExtension().manifest.requiredCapabilities).toEqual([
+      "conversationEvents",
+    ]);
+  });
+
   it("publishes focus and break completion as start-turn events", async () => {
     jest.useFakeTimers({ now: 1_000 });
     const published: ConversationEventInput[] = [];

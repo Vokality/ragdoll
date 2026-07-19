@@ -146,10 +146,9 @@ export interface ElectronAPI {
   onOAuthError(callback: (event: OAuthEvent) => void): () => void;
   getConfigStatus(extensionId: string): Promise<ExtensionConfigStatus | null>;
   getConfigSchema(extensionId: string): Promise<ConfigSchema | null>;
-  setConfigValue(
+  setConfigValues(
     extensionId: string,
-    key: string,
-    value: string | number | boolean,
+    values: Record<string, string | number | boolean>,
   ): Promise<OperationResult>;
 
   installExtensionFromGitHub(repoUrl: string): Promise<InstallResult>;

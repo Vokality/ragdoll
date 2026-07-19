@@ -133,12 +133,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("extensions:config-get-status", extensionId),
   getConfigSchema: (extensionId: string) =>
     ipcRenderer.invoke("extensions:config-get-schema", extensionId),
-  setConfigValue: (
+  setConfigValues: (
     extensionId: string,
-    key: string,
-    value: string | number | boolean,
-  ) =>
-    ipcRenderer.invoke("extensions:config-set-value", extensionId, key, value),
+    values: Record<string, string | number | boolean>,
+  ) => ipcRenderer.invoke("extensions:config-set-values", extensionId, values),
 
   // Extension Installation
   installExtensionFromGitHub: (repoUrl: string) =>

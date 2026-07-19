@@ -11,7 +11,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./manifest": "./package.json"
   },
   "files": [
     "dist",
@@ -21,6 +22,7 @@
     "prebuild": "bun run clean",
     "build": "bunx --bun --no-install tsc -p tsconfig.json",
     "dev": "bunx --bun --no-install tsc -w -p tsconfig.json",
+    "test": "bun test tests",
     "typecheck": "bunx --bun --no-install tsc --noEmit -p tsconfig.json",
     "clean": "bun run ../../scripts/clean.ts dist"
   },
@@ -46,7 +48,7 @@
       "clientId": {
         "type": "string",
         "label": "Spotify Client ID",
-        "description": "Get this from developer.spotify.com/dashboard",
+        "description": "Create a Spotify Web API app and register http://127.0.0.1:43821/oauth/callback/spotify as its redirect URI",
         "required": true,
         "placeholder": "your-spotify-client-id"
       }
@@ -56,13 +58,11 @@
       "authorizationUrl": "https://accounts.spotify.com/authorize",
       "tokenUrl": "https://accounts.spotify.com/api/token",
       "scopes": [
-        "streaming",
-        "user-read-email",
-        "user-read-private",
         "user-read-playback-state",
-        "user-modify-playback-state",
-        "user-read-currently-playing"
+        "user-modify-playback-state"
       ],
+      "clientIdConfigKey": "clientId",
+      "callbackPort": 43821,
       "pkce": true
     }
   }

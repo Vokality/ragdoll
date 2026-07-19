@@ -11,7 +11,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./manifest": "./package.json"
   },
   "files": [
     "dist",
@@ -41,7 +42,6 @@
       "slots"
     ],
     "requiredCapabilities": [
-      "notifications",
       "conversationEvents"
     ],
     "entry": "./dist/index.js",

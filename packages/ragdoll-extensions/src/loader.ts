@@ -86,7 +86,26 @@ const ExtensionPackageManifestSchema = z
     configSchema: ConfigSchemaSchema.optional(),
     oauth: OAuthConfigSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((manifest, context) => {
+    if (!manifest.oauth) return;
+    if (!manifest.requiredCapabilities.includes("oauth")) {
+      context.addIssue({
+        code: "custom",
+        path: ["requiredCapabilities"],
+        message: "OAuth metadata requires the oauth host capability",
+      });
+    }
+    const clientIdField =
+      manifest.configSchema?.[manifest.oauth.clientIdConfigKey];
+    if (!clientIdField || clientIdField.type !== "string") {
+      context.addIssue({
+        code: "custom",
+        path: ["oauth", "clientIdConfigKey"],
+        message: "OAuth clientIdConfigKey must reference a string config field",
+      });
+    }
+  });
 
 export type ExtensionPackageManifest = z.infer<
   typeof ExtensionPackageManifestSchema
@@ -118,17 +137,66 @@ export function parseExtensionPackageJson(
 /**
  * Parsed extension package info (includes config/oauth requirements)
  */
-export interface ExtensionPackageInfo {
+export interface ExtensionPackageDescriptor {
   packageName: string;
-  packagePath: string;
   extensionId: string;
   name: string;
   description?: string;
   version: string;
   canDisable: boolean;
+  capabilities: ExtensionPackageManifest["capabilities"];
   configSchema?: ExtensionPackageManifest["configSchema"];
   oauth?: ExtensionPackageManifest["oauth"];
   requiredCapabilities: ExtensionHostCapability[];
+}
+
+export interface ExtensionPackageInfo extends ExtensionPackageDescriptor {
+  packagePath: string;
+}
+
+export function createExtensionPackageDescriptor(
+  packageJson: ExtensionPackageJson,
+): ExtensionPackageDescriptor | null {
+  const manifest = packageJson.ragdollExtension;
+  if (!manifest) return null;
+
+  return {
+    packageName: packageJson.name,
+    extensionId: manifest.id,
+    name: manifest.name,
+    description: manifest.description,
+    version: packageJson.version,
+    canDisable: manifest.canDisable,
+    capabilities: manifest.capabilities,
+    configSchema: manifest.configSchema,
+    oauth: manifest.oauth,
+    requiredCapabilities: manifest.requiredCapabilities,
+  };
+}
+
+export function wrapExtensionWithPackageManifest(
+  extension: RagdollExtension,
+  packageMetadata: Pick<
+    ExtensionManifest,
+    "id" | "name" | "version" | "description" | "requiredCapabilities"
+  >,
+): RagdollExtension {
+  const requiredCapabilities = [
+    ...new Set([
+      ...(extension.manifest.requiredCapabilities ?? []),
+      ...(packageMetadata.requiredCapabilities ?? []),
+    ]),
+  ];
+
+  return {
+    manifest: {
+      ...extension.manifest,
+      ...packageMetadata,
+      requiredCapabilities,
+    },
+    activate: extension.activate.bind(extension),
+    deactivate: extension.deactivate?.bind(extension),
+  };
 }
 
 /**
@@ -140,7 +208,7 @@ export interface LoadResult {
   success: boolean;
   error?: string;
   /** Package info including config/oauth requirements */
-  packageInfo?: ExtensionPackageInfo;
+  packageInfo?: ExtensionPackageDescriptor;
 }
 
 /**
@@ -462,7 +530,7 @@ export class ExtensionLoader {
       // Package metadata augments the runtime manifest without exposing host details
       // to the extension implementation.
       const extensionId = packageManifest.id;
-      const finalExtension = this.createManifestWrapper(extension, {
+      const finalExtension = wrapExtensionWithPackageManifest(extension, {
         id: extensionId,
         name: packageManifest.name,
         version: packageJson.version,
@@ -626,21 +694,13 @@ export class ExtensionLoader {
     packagePath: string,
     packageJson: ExtensionPackageJson,
   ): ExtensionPackageInfo | null {
-    const ragdollExt = packageJson.ragdollExtension;
-    if (!ragdollExt) return null;
-
-    return {
-      packageName,
-      packagePath,
-      extensionId: ragdollExt.id,
-      name: ragdollExt.name,
-      description: ragdollExt.description,
-      version: packageJson.version,
-      canDisable: ragdollExt.canDisable,
-      configSchema: ragdollExt.configSchema,
-      oauth: ragdollExt.oauth,
-      requiredCapabilities: ragdollExt.requiredCapabilities,
-    };
+    if (packageJson.name !== packageName) {
+      throw new Error(
+        `Package '${packageName}' contains manifest for '${packageJson.name}'`,
+      );
+    }
+    const descriptor = createExtensionPackageDescriptor(packageJson);
+    return descriptor ? { ...descriptor, packagePath } : null;
   }
 
   /**
@@ -712,33 +772,6 @@ export class ExtensionLoader {
     }
 
     return null;
-  }
-
-  /**
-   * Create a wrapper extension that overrides the ID.
-   */
-  private createManifestWrapper(
-    extension: RagdollExtension,
-    packageMetadata: Pick<
-      ExtensionManifest,
-      "id" | "name" | "version" | "description" | "requiredCapabilities"
-    >,
-  ): RagdollExtension {
-    const requiredCapabilities = [
-      ...new Set([
-        ...(extension.manifest.requiredCapabilities ?? []),
-        ...(packageMetadata.requiredCapabilities ?? []),
-      ]),
-    ];
-    return {
-      manifest: {
-        ...extension.manifest,
-        ...packageMetadata,
-        requiredCapabilities,
-      },
-      activate: extension.activate.bind(extension),
-      deactivate: extension.deactivate?.bind(extension),
-    };
   }
 
   private assertDeclaredCapabilities(

@@ -22,7 +22,6 @@ import {
   type ConfigValues,
   type ConversationEventInput,
   type OAuthConfig,
-  type OAuthTokens,
   type RegistryCapabilityEvent,
   type RagdollExtension,
   type SerializedSlotState,
@@ -32,14 +31,17 @@ import {
   createLoader,
   type ExtensionLoader,
   type ExtensionLoaderConfig,
-  type ExtensionPackageInfo,
+  type ExtensionPackageDescriptor,
   type LoadResult,
+  wrapExtensionWithPackageManifest,
 } from "@vokality/ragdoll-extensions/loader";
 import { OAuthManager, createOAuthManager } from "./oauth-manager.js";
 import { ConfigManager, createConfigManager } from "./config-manager.js";
 import type { ExtensionStorage } from "../infrastructure/extension-storage.js";
 import type { ExtensionMessageBus } from "./extension-message-bus.js";
 import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
+import type { ExtensionHostDataStore } from "../infrastructure/extension-host-data-repository.js";
+import type { OAuthRedirectService } from "./oauth-loopback-service.js";
 
 // =============================================================================
 // Types
@@ -67,8 +69,10 @@ export interface ExtensionManagerConfig {
   disabledExtensions?: string[];
   /** Function to open URLs in system browser (for OAuth) */
   openExternal: (url: string) => Promise<void>;
-  /** Base redirect URI for OAuth (e.g., "lumen://oauth") */
-  oauthRedirectBase: string;
+  oauthRedirects: OAuthRedirectService;
+  hostData: ExtensionHostDataStore;
+  onOAuthSucceeded?: (extensionId: string) => void;
+  onOAuthFailed?: (extensionId: string, error: string) => void;
   builtInExtensions: readonly BuiltInExtensionDefinition[];
   fileSystem: ExtensionLoaderConfig["fileSystem"];
   storage: ExtensionStorage;
@@ -77,9 +81,7 @@ export interface ExtensionManagerConfig {
 }
 
 export interface BuiltInExtensionDefinition {
-  packageName: string;
-  canDisable: boolean;
-  capabilities: readonly ("tools" | "services" | "stateChannels" | "slots")[];
+  descriptor: ExtensionPackageDescriptor;
   createExtension: () => RagdollExtension;
 }
 
@@ -98,7 +100,7 @@ export class ExtensionManager {
   // Per-extension state management
   private oauthManagers = new Map<string, OAuthManager>();
   private configManagers = new Map<string, ConfigManager>();
-  private packageInfoCache = new Map<string, ExtensionPackageInfo>();
+  private packageInfoCache = new Map<string, ExtensionPackageDescriptor>();
   private loadedExtensions: ExtensionInfo[] = [];
   private disabledExtensions: Set<string>;
 
@@ -223,37 +225,33 @@ export class ExtensionManager {
       return this.oauthManagers.get(extensionId)!;
     }
 
-    // Get config manager if extension has config schema
-    const configManager = configSchema
-      ? this.getOrCreateConfigManager(extensionId, configSchema)
-      : undefined;
+    const clientIdField = configSchema?.[oauthConfig.clientIdConfigKey];
+    if (!clientIdField || clientIdField.type !== "string") {
+      throw new Error(
+        `OAuth extension '${extensionId}' must declare string config field '${oauthConfig.clientIdConfigKey}'`,
+      );
+    }
+    const configManager = this.getOrCreateConfigManager(
+      extensionId,
+      configSchema,
+    );
 
     const manager = createOAuthManager({
       oauthConfig,
       extensionId,
-      // Use getter so clientId is fetched dynamically when needed
       getClientId: () => {
-        const clientId = configManager?.getValues().clientId;
+        const clientId =
+          configManager.getValues()[oauthConfig.clientIdConfigKey];
         return typeof clientId === "string" ? clientId : "";
       },
-      redirectUri: `${this.config.oauthRedirectBase}/${extensionId}`,
-      loadTokens: async (): Promise<OAuthTokens | null> => {
-        const storage = this.createStorageCapability(extensionId);
-        const tokens = await storage.read<OAuthTokens>(
-          extensionId,
-          "oauth_tokens",
-        );
-        return tokens ?? null;
-      },
-      saveTokens: async (tokens) => {
-        const storage = this.createStorageCapability(extensionId);
-        await storage.write(extensionId, "oauth_tokens", tokens);
-      },
-      clearTokens: async () => {
-        const storage = this.createStorageCapability(extensionId);
-        await storage.delete(extensionId, "oauth_tokens");
-      },
+      redirects: this.config.oauthRedirects,
+      loadTokens: () => this.config.hostData.loadOAuthTokens(extensionId),
+      saveTokens: (tokens) =>
+        this.config.hostData.saveOAuthTokens(extensionId, tokens),
+      clearTokens: () => this.config.hostData.clearOAuthTokens(extensionId),
       openExternal: this.config.openExternal,
+      onConnected: () => this.config.onOAuthSucceeded?.(extensionId),
+      onError: (error) => this.config.onOAuthFailed?.(extensionId, error),
       logger: {
         debug: (...args) => console.debug(`[OAuth:${extensionId}]`, ...args),
         info: (...args) => console.info(`[OAuth:${extensionId}]`, ...args),
@@ -264,18 +262,6 @@ export class ExtensionManager {
 
     this.oauthManagers.set(extensionId, manager);
     return manager;
-  }
-
-  /**
-   * Handle OAuth callback from system.
-   * Called when the app receives an OAuth redirect URL.
-   */
-  async handleOAuthCallback(extensionId: string, code: string): Promise<void> {
-    const manager = this.oauthManagers.get(extensionId);
-    if (!manager) {
-      throw new Error(`No OAuth manager for extension: ${extensionId}`);
-    }
-    await manager.handleCallback(code);
   }
 
   /**
@@ -319,18 +305,13 @@ export class ExtensionManager {
       return this.configManagers.get(extensionId)!;
     }
 
-    const storage = this.createStorageCapability(extensionId);
-
     const manager = createConfigManager({
       extensionId,
       schema,
-      loadValues: async (): Promise<ConfigValues | null> => {
-        const values = await storage.read<ConfigValues>(extensionId, "config");
-        return values ?? null;
-      },
-      saveValues: async (values) => {
-        await storage.write(extensionId, "config", values);
-      },
+      loadValues: (): Promise<ConfigValues | null> =>
+        this.config.hostData.loadConfig(extensionId, schema),
+      saveValues: (values) =>
+        this.config.hostData.saveConfig(extensionId, schema, values),
       logger: {
         debug: (...args) => console.debug(`[Config:${extensionId}]`, ...args),
         info: (...args) => console.info(`[Config:${extensionId}]`, ...args),
@@ -357,19 +338,43 @@ export class ExtensionManager {
     return this.configManagers.get(extensionId)?.getSchema() ?? null;
   }
 
-  /**
-   * Set config value for an extension.
-   */
-  async setConfigValue(
+  async setConfigValues(
     extensionId: string,
-    key: string,
-    value: string | number | boolean,
-  ) {
+    values: ConfigValues,
+  ): Promise<void> {
     const manager = this.configManagers.get(extensionId);
     if (!manager) {
       throw new Error(`No config manager for extension: ${extensionId}`);
     }
-    await manager.setValue(key, value);
+    const descriptor = this.packageInfoCache.get(extensionId);
+    if (!descriptor) throw new Error(`Unknown extension: ${extensionId}`);
+    const previousValues = manager.getValues();
+    await manager.setValues(values);
+
+    const clientIdKey = descriptor.oauth?.clientIdConfigKey;
+    if (
+      clientIdKey &&
+      clientIdKey in values &&
+      previousValues[clientIdKey] !== values[clientIdKey]
+    ) {
+      await this.oauthManagers.get(extensionId)?.disconnect();
+    }
+
+    const loaded = this.loadedExtensions.some(({ id }) => id === extensionId);
+    if (!manager.isConfigured() && loaded) {
+      await this.unloadPackage(descriptor.packageName);
+    } else if (
+      manager.isConfigured() &&
+      !loaded &&
+      !this.isExtensionDisabled(extensionId)
+    ) {
+      const result = await this.loadPackage(descriptor.packageName);
+      if (!result.success) {
+        throw new Error(
+          result.error ?? `Failed to activate extension '${extensionId}'`,
+        );
+      }
+    }
   }
 
   // ===========================================================================
@@ -379,47 +384,60 @@ export class ExtensionManager {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // First, discover packages and cache their info (for OAuth/Config requirements)
+    for (const definition of this.config.builtInExtensions) {
+      this.cachePackageDescriptor(definition.descriptor);
+    }
+
     const packages = await this.loader.discoverPackages();
     for (const packageName of packages) {
       const info = await this.loader.getPackageInfo(packageName);
-      if (info) {
-        this.packageInfoCache.set(info.extensionId, info);
-      }
+      if (info) this.cachePackageDescriptor(info);
     }
 
-    // Initialize config managers for extensions that need it
-    for (const [extensionId, info] of this.packageInfoCache) {
-      if (info.configSchema) {
-        const manager = this.getOrCreateConfigManager(
-          extensionId,
-          info.configSchema,
-        );
-        await manager.initialize();
-      }
+    for (const descriptor of this.packageInfoCache.values()) {
+      await this.initializePackageInfo(descriptor);
     }
 
-    // Initialize OAuth managers and load tokens
-    for (const [extensionId, info] of this.packageInfoCache) {
-      if (info.oauth) {
-        const manager = this.getOrCreateOAuthManager(
-          extensionId,
-          info.oauth,
-          info.configSchema,
-        );
-        await manager.initialize();
+    for (const definition of this.config.builtInExtensions) {
+      const descriptor = definition.descriptor;
+      if (
+        this.isExtensionDisabled(descriptor.extensionId) ||
+        !this.isConfigured(descriptor)
+      ) {
+        continue;
       }
+      const result = await this.loadBuiltInExtension(definition);
+      if (!result.success) throw new Error(result.error);
     }
 
-    await this.loadBuiltInExtensions();
     await this.discoverAndLoadPackages();
     this.initialized = true;
   }
 
-  private async loadBuiltInExtensions(): Promise<void> {
-    for (const definition of this.config.builtInExtensions) {
-      const extension = definition.createExtension();
-      if (this.isExtensionDisabled(extension.manifest.id)) continue;
+  private async loadBuiltInExtension(
+    definition: BuiltInExtensionDefinition,
+  ): Promise<LoadResult> {
+    const descriptor = definition.descriptor;
+    if (this.loadedExtensions.some(({ id }) => id === descriptor.extensionId)) {
+      return {
+        packageName: descriptor.packageName,
+        extensionId: descriptor.extensionId,
+        success: true,
+        packageInfo: descriptor,
+      };
+    }
+
+    try {
+      const runtimeExtension = definition.createExtension();
+      this.validateBuiltInIdentity(descriptor, runtimeExtension.manifest);
+      const extension = wrapExtensionWithPackageManifest(runtimeExtension, {
+        id: descriptor.extensionId,
+        name: descriptor.name,
+        version: descriptor.version,
+        description:
+          descriptor.description ?? runtimeExtension.manifest.description,
+        requiredCapabilities: descriptor.requiredCapabilities,
+      });
 
       await this.registry.register(extension, {
         host: this.createHostEnvironment(extension.manifest),
@@ -432,7 +450,7 @@ export class ExtensionManager {
           `Built-in extension '${extension.manifest.id}' was not registered`,
         );
       }
-      const expected = [...definition.capabilities].sort();
+      const expected = [...descriptor.capabilities].sort();
       const received = [
         ...(actual.tools.length > 0 ? (["tools"] as const) : []),
         ...(actual.services.length > 0 ? (["services"] as const) : []),
@@ -451,15 +469,24 @@ export class ExtensionManager {
         );
       }
 
-      this.loadedExtensions.push({
-        packageName: definition.packageName,
-        id: extension.manifest.id,
-        name: extension.manifest.name,
-        description: extension.manifest.description ?? "",
-        canDisable: definition.canDisable,
-        hasConfigSchema: false,
-        hasOAuth: false,
-      });
+      this.recordLoadedExtension(descriptor.packageName, descriptor);
+      return {
+        packageName: descriptor.packageName,
+        extensionId: descriptor.extensionId,
+        success: true,
+        packageInfo: descriptor,
+      };
+    } catch (error) {
+      if (this.registry.has(descriptor.extensionId)) {
+        await this.registry.unregister(descriptor.extensionId);
+      }
+      return {
+        packageName: descriptor.packageName,
+        extensionId: descriptor.extensionId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        packageInfo: descriptor,
+      };
     }
   }
 
@@ -479,21 +506,18 @@ export class ExtensionManager {
       if (!info) {
         throw new Error(`Package metadata is unavailable for '${packageName}'`);
       }
+      this.cachePackageDescriptor(info);
       await this.initializePackageInfo(info);
 
       if (this.isExtensionDisabled(info.extensionId)) {
         continue;
       }
 
-      // Check if extension is configured (has required config)
-      if (info.configSchema) {
-        const configManager = this.configManagers.get(info.extensionId);
-        if (!configManager?.isConfigured()) {
-          console.info(
-            `[ExtensionManager] Skipping ${info.extensionId}: not configured`,
-          );
-          continue;
-        }
+      if (!this.isConfigured(info)) {
+        console.info(
+          `[ExtensionManager] Skipping ${info.extensionId}: not configured`,
+        );
+        continue;
       }
 
       const result = await this.loadPackage(packageName);
@@ -629,32 +653,43 @@ export class ExtensionManager {
       ({ id }) => !next.has(id) && this.disabledExtensions.has(id),
     );
 
-    const disabled: ExtensionInfo[] = [];
-    const enabled: ExtensionInfo[] = [];
+    const unloaded: ExtensionInfo[] = [];
+    const loaded: ExtensionInfo[] = [];
     try {
       for (const extension of toDisable) {
-        if (!(await this.unloadPackage(extension.packageName))) {
+        const isLoaded = this.loadedExtensions.some(
+          ({ id }) => id === extension.id,
+        );
+        if (isLoaded && !(await this.unloadPackage(extension.packageName))) {
           throw new Error(`Failed to disable extension '${extension.id}'`);
         }
-        disabled.push(extension);
+        if (isLoaded) unloaded.push(extension);
       }
       for (const extension of toEnable) {
+        const descriptor = this.packageInfoCache.get(extension.id);
+        if (!descriptor) {
+          throw new Error(
+            `Package metadata is unavailable for '${extension.id}'`,
+          );
+        }
+        if (!this.isConfigured(descriptor)) continue;
+
         const result = await this.loadPackage(extension.packageName);
         if (!result.success) {
           throw new Error(
             result.error ?? `Failed to enable extension '${extension.id}'`,
           );
         }
-        enabled.push(extension);
+        loaded.push(extension);
       }
     } catch (error) {
       const rollbackErrors: string[] = [];
-      for (const extension of enabled.reverse()) {
+      for (const extension of loaded.reverse()) {
         if (!(await this.unloadPackage(extension.packageName))) {
           rollbackErrors.push(`could not unload '${extension.id}'`);
         }
       }
-      for (const extension of disabled.reverse()) {
+      for (const extension of unloaded.reverse()) {
         const result = await this.loadPackage(extension.packageName);
         if (!result.success) {
           rollbackErrors.push(
@@ -715,11 +750,33 @@ export class ExtensionManager {
       const loaded = await this.loader.getPackageInfo(packageName);
       if (loaded) {
         info = loaded;
-        this.packageInfoCache.set(info.extensionId, info);
+        this.cachePackageDescriptor(info);
       }
     }
 
     if (info) await this.initializePackageInfo(info);
+    if (!info) {
+      return {
+        packageName,
+        extensionId: "",
+        success: false,
+        error: `Package metadata is unavailable for '${packageName}'`,
+      };
+    }
+    if (!this.isConfigured(info)) {
+      return {
+        packageName,
+        extensionId: info.extensionId,
+        success: false,
+        error: `Extension '${info.extensionId}' requires configuration`,
+        packageInfo: info,
+      };
+    }
+
+    const builtIn = this.config.builtInExtensions.find(
+      ({ descriptor }) => descriptor.packageName === packageName,
+    );
+    if (builtIn) return this.loadBuiltInExtension(builtIn);
 
     const result = await this.loader.loadPackage(packageName, config);
 
@@ -738,14 +795,13 @@ export class ExtensionManager {
       return false;
     }
 
-    const success = await this.loader.unloadPackage(packageName);
+    const builtIn = this.config.builtInExtensions.some(
+      ({ descriptor }) => descriptor.packageName === packageName,
+    );
+    const success = builtIn
+      ? await this.registry.unregister(extension.id)
+      : await this.loader.unloadPackage(packageName);
     if (success) {
-      // Clean up managers
-      this.oauthManagers.get(extension.id)?.destroy();
-      this.oauthManagers.delete(extension.id);
-      this.configManagers.get(extension.id)?.destroy();
-      this.configManagers.delete(extension.id);
-      // Remove from loaded extensions
       this.loadedExtensions = this.loadedExtensions.filter(
         (ext) => ext.packageName !== packageName,
       );
@@ -875,7 +931,7 @@ export class ExtensionManager {
 
   private getCachedPackageInfo(
     packageName: string,
-  ): ExtensionPackageInfo | undefined {
+  ): ExtensionPackageDescriptor | undefined {
     for (const info of this.packageInfoCache.values()) {
       if (info.packageName === packageName) return info;
     }
@@ -884,7 +940,7 @@ export class ExtensionManager {
 
   private recordLoadedExtension(
     packageName: string,
-    info: ExtensionPackageInfo,
+    info: ExtensionPackageDescriptor,
   ): void {
     const extension: ExtensionInfo = {
       packageName,
@@ -906,9 +962,9 @@ export class ExtensionManager {
   }
 
   private async initializePackageInfo(
-    info: ExtensionPackageInfo,
+    info: ExtensionPackageDescriptor,
   ): Promise<void> {
-    this.packageInfoCache.set(info.extensionId, info);
+    this.cachePackageDescriptor(info);
     if (info.configSchema) {
       await this.getOrCreateConfigManager(
         info.extensionId,
@@ -921,6 +977,47 @@ export class ExtensionManager {
         info.oauth,
         info.configSchema,
       ).initialize();
+    }
+  }
+
+  private cachePackageDescriptor(descriptor: ExtensionPackageDescriptor): void {
+    const existingId = this.packageInfoCache.get(descriptor.extensionId);
+    if (existingId && existingId.packageName !== descriptor.packageName) {
+      throw new Error(
+        `Extension id '${descriptor.extensionId}' is declared by both '${existingId.packageName}' and '${descriptor.packageName}'`,
+      );
+    }
+    const existingPackage = this.getCachedPackageInfo(descriptor.packageName);
+    if (
+      existingPackage &&
+      existingPackage.extensionId !== descriptor.extensionId
+    ) {
+      throw new Error(
+        `Package '${descriptor.packageName}' declares multiple extension ids`,
+      );
+    }
+    this.packageInfoCache.set(descriptor.extensionId, descriptor);
+  }
+
+  private isConfigured(descriptor: ExtensionPackageDescriptor): boolean {
+    return (
+      !descriptor.configSchema ||
+      this.configManagers.get(descriptor.extensionId)?.isConfigured() === true
+    );
+  }
+
+  private validateBuiltInIdentity(
+    descriptor: ExtensionPackageDescriptor,
+    manifest: ExtensionManifest,
+  ): void {
+    if (
+      descriptor.extensionId !== manifest.id ||
+      descriptor.name !== manifest.name ||
+      descriptor.version !== manifest.version
+    ) {
+      throw new Error(
+        `Built-in package '${descriptor.packageName}' runtime identity does not match its package manifest`,
+      );
     }
   }
 }

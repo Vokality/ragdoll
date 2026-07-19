@@ -59,6 +59,35 @@ describe("ExtensionLoader", () => {
     ).toThrow("capabilities must not contain duplicates");
   });
 
+  it("rejects OAuth metadata that cannot provision its host capability", () => {
+    expect(() =>
+      parseExtensionPackageJson(
+        JSON.stringify({
+          name: "oauth-package",
+          version: "1.0.0",
+          ragdollExtension: {
+            ...packageManifest("oauth", ["tools"]),
+            configSchema: {
+              clientId: {
+                type: "string",
+                label: "Client ID",
+                required: true,
+              },
+            },
+            oauth: {
+              provider: "example",
+              authorizationUrl: "https://accounts.example.com/authorize",
+              tokenUrl: "https://accounts.example.com/token",
+              scopes: ["playback"],
+              clientIdConfigKey: "clientId",
+              pkce: true,
+            },
+          },
+        }),
+      ),
+    ).toThrow("OAuth metadata requires the oauth host capability");
+  });
+
   it("discovers installed extensions through an explicit root layout", async () => {
     const packageJson = JSON.stringify({
       name: "@example/weather",
