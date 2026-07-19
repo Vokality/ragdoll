@@ -1,4 +1,8 @@
-# Ragdoll
+<p align="center">
+  <img src="apps/chat/assets/icons/ragdoll.png" alt="Ragdoll" width="180" />
+</p>
+
+<h1 align="center">Ragdoll</h1>
 
 Ragdoll is a Bun monorepo for an animated React character, a host-agnostic extension framework, first-party extension packages, an Electron chat app, and the Emote VS Code extension.
 

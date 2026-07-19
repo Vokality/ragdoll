@@ -22,6 +22,7 @@ if (!app.requestSingleInstanceLock()) {
     .whenReady()
     .then(async () => {
       const config = createMainProcessConfig(app, moduleDirectory);
+      app.dock?.setIcon(config.appIconPath);
       application = await LumenApplication.create(config);
       await application.createWindow();
 

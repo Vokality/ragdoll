@@ -28,6 +28,7 @@ export interface MainProcessConfig {
   userDataPath: string;
   userExtensionsPath: string;
   extensionsRegistryPath: string;
+  appIconPath: string;
   preloadPath: string;
   rendererHtmlPath: string;
   developmentServerUrl: string;
@@ -56,6 +57,7 @@ export function createMainProcessConfig(
     userDataPath,
     userExtensionsPath: join(userDataPath, "extensions"),
     extensionsRegistryPath: join(userDataPath, "extensions-registry.json"),
+    appIconPath: join(app.getAppPath(), "assets/icons/ragdoll.png"),
     preloadPath: join(moduleDirectory, "preload.cjs"),
     rendererHtmlPath: join(moduleDirectory, "../renderer/index.html"),
     developmentServerUrl: "http://localhost:5173",

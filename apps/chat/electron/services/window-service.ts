@@ -17,6 +17,7 @@ export class WindowService {
 
     const window = new BrowserWindow({
       ...this.config.window,
+      icon: this.config.appIconPath,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
       webPreferences: {
