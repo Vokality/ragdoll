@@ -1,8 +1,13 @@
-import type { ToolParameterSchema } from "@vokality/ragdoll-extensions";
+import type {
+  ToolDefinition,
+  ToolParameterSchema,
+  ToolResult,
+} from "@vokality/ragdoll-extensions";
 import OpenAI from "openai";
 import type {
   ChatCompletionMessageParam,
   ChatCompletionTool,
+  ChatCompletionToolChoiceOption,
 } from "openai/resources/chat/completions";
 import { z } from "zod";
 import {
@@ -11,7 +16,6 @@ import {
   type EventTurnOutcome,
   type ExtensionConversationEvent,
 } from "../domain/conversation.js";
-import type { ExtensionManager } from "./extension-manager.js";
 
 export interface ChatCompletionConfig {
   model: string;
@@ -33,16 +37,43 @@ export interface AgentRunner {
   ): Promise<EventTurnOutcome>;
 }
 
-interface PendingToolCall {
+export interface AgentToolService {
+  getTools(): readonly ToolDefinition[];
+  getToolsForExtension(extensionId: string): readonly ToolDefinition[];
+  executeTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+}
+
+export interface PendingToolCall {
   id: string;
   name: string;
   arguments: string;
 }
 
-interface CompletionRound {
+export interface CompletionRound {
   content: string;
   finishReason: string | null;
   toolCalls: PendingToolCall[];
+}
+
+export interface AgentCompletionRequest {
+  messages: ChatCompletionMessageParam[];
+  tools: ChatCompletionTool[];
+  toolChoice: ChatCompletionToolChoiceOption;
+  onStreamingText?: (text: string) => void;
+}
+
+export interface AgentCompletionSession {
+  complete(request: AgentCompletionRequest): Promise<CompletionRound>;
+}
+
+export interface AgentCompletionSessionFactory {
+  create(apiKey: string, config: ChatCompletionConfig): AgentCompletionSession;
+}
+
+interface ExecutedToolCall {
+  call: PendingToolCall;
+  content: string;
+  result: ToolResult;
 }
 
 const EVENT_RESPOND_TOOL = "lumen_event_respond";
@@ -89,7 +120,7 @@ const EVENT_DECISION_TOOLS: ChatCompletionTool[] = [
 ];
 
 function toOpenAITools(
-  extensionManager: ExtensionManager,
+  extensionManager: AgentToolService,
 ): ChatCompletionTool[] {
   return extensionManager.getTools().map((tool) => ({
     type: "function",
@@ -154,12 +185,16 @@ function toModelMessages(
 }
 
 async function executeToolCall(
-  extensionManager: ExtensionManager,
+  extensionManager: AgentToolService,
   call: PendingToolCall,
-): Promise<string> {
+): Promise<ExecutedToolCall> {
   const args = parseArguments(call.arguments);
   const result = await extensionManager.executeTool(call.name, args);
-  return JSON.stringify({ args, result });
+  return {
+    call,
+    content: JSON.stringify({ args, result }),
+    result,
+  };
 }
 
 function isEventDecisionTool(call: PendingToolCall): boolean {
@@ -178,117 +213,23 @@ function parseEventDecision(call: PendingToolCall): EventTurnOutcome {
   return { disposition: "silent" };
 }
 
-export class OpenAIAgentRunner implements AgentRunner {
+class OpenAICompletionSession implements AgentCompletionSession {
+  private readonly client: OpenAI;
+
   constructor(
-    private readonly extensions: ExtensionManager,
+    apiKey: string,
     private readonly config: ChatCompletionConfig,
-  ) {}
-
-  async runUserTurn(
-    apiKey: string,
-    conversation: readonly ConversationEntry[],
-    onStreamingText: (text: string) => void,
-  ): Promise<string> {
-    const openai = new OpenAI({ apiKey });
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: this.config.systemPrompt },
-      ...toModelMessages(conversation),
-    ];
-    const tools = toOpenAITools(this.extensions);
-    let response = "";
-
-    for (let round = 0; round <= this.config.maxToolRounds; round += 1) {
-      const completion = await this.runRound(
-        openai,
-        messages,
-        tools,
-        "auto",
-        onStreamingText,
-      );
-      response += completion.content;
-
-      if (completion.toolCalls.length === 0) {
-        this.assertFinishedWithoutTools(completion);
-        return response;
-      }
-
-      this.assertToolRoundCanContinue(round, completion);
-      await this.appendToolResults(messages, completion);
-    }
-
-    throw new Error("User turn ended without a final response");
+  ) {
+    this.client = new OpenAI({ apiKey });
   }
 
-  async runEventTurn(
-    apiKey: string,
-    conversation: readonly ConversationEntry[],
-    trigger: ExtensionConversationEvent,
-  ): Promise<EventTurnOutcome> {
-    const openai = new OpenAI({ apiKey });
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: this.config.systemPrompt },
-      ...toModelMessages(conversation),
-      {
-        role: "developer",
-        content:
-          `Event ${trigger.id} started this turn. Evaluate whether the user ` +
-          `benefits from an immediate message. Call ${EVENT_RESPOND_TOOL} to ` +
-          `respond or ${EVENT_SILENT_TOOL} to finish silently. You may use ` +
-          "extension tools first when needed.",
-      },
-    ];
-    const tools = [...toOpenAITools(this.extensions), ...EVENT_DECISION_TOOLS];
-
-    for (let round = 0; round <= this.config.maxToolRounds; round += 1) {
-      const completion = await this.runRound(
-        openai,
-        messages,
-        tools,
-        "required",
-      );
-      const decisions = completion.toolCalls.filter(isEventDecisionTool);
-      if (decisions.length > 1) {
-        throw new Error("Event turn returned more than one decision");
-      }
-
-      const extensionCalls = completion.toolCalls.filter(
-        (call) => !isEventDecisionTool(call),
-      );
-      if (decisions[0]) {
-        if (completion.finishReason !== "tool_calls") {
-          throw new Error(
-            `Unexpected finish reason for event decision: ${completion.finishReason}`,
-          );
-        }
-        await Promise.all(
-          extensionCalls.map((call) => executeToolCall(this.extensions, call)),
-        );
-        return parseEventDecision(decisions[0]);
-      }
-
-      this.assertToolRoundCanContinue(round, completion);
-      if (extensionCalls.length > 0) {
-        await this.appendToolResults(messages, {
-          ...completion,
-          toolCalls: extensionCalls,
-        });
-      }
-    }
-
-    throw new Error("Event turn ended without a decision");
-  }
-
-  private async runRound(
-    openai: OpenAI,
-    messages: ChatCompletionMessageParam[],
-    tools: ChatCompletionTool[],
-    toolChoice: "auto" | "required",
-    onStreamingText?: (text: string) => void,
-  ): Promise<CompletionRound> {
-    const stream = await openai.chat.completions.create({
+  async complete(request: AgentCompletionRequest): Promise<CompletionRound> {
+    const stream = await this.client.chat.completions.create({
       model: this.config.model,
-      messages,
-      ...(tools.length > 0 ? { tools, tool_choice: toolChoice } : {}),
+      messages: request.messages,
+      ...(request.tools.length > 0
+        ? { tools: request.tools, tool_choice: request.toolChoice }
+        : {}),
       stream: true,
       max_completion_tokens: this.config.maxCompletionTokens,
     });
@@ -300,7 +241,7 @@ export class OpenAIAgentRunner implements AgentRunner {
       const choice = chunk.choices[0];
       const text = choice?.delta.content ?? "";
       content += text;
-      if (text) onStreamingText?.(text);
+      if (text) request.onStreamingText?.(text);
 
       for (const delta of choice?.delta.tool_calls ?? []) {
         const existing = toolCalls.get(delta.index);
@@ -321,6 +262,172 @@ export class OpenAIAgentRunner implements AgentRunner {
         .sort(([left], [right]) => left - right)
         .map(([, call]) => call),
     };
+  }
+}
+
+const openAICompletionSessions: AgentCompletionSessionFactory = {
+  create: (apiKey, config) => new OpenAICompletionSession(apiKey, config),
+};
+
+export class OpenAIAgentRunner implements AgentRunner {
+  constructor(
+    private readonly extensions: AgentToolService,
+    private readonly config: ChatCompletionConfig,
+    private readonly completionSessions: AgentCompletionSessionFactory = openAICompletionSessions,
+  ) {}
+
+  async runUserTurn(
+    apiKey: string,
+    conversation: readonly ConversationEntry[],
+    onStreamingText: (text: string) => void,
+  ): Promise<string> {
+    const completionSession = this.completionSessions.create(
+      apiKey,
+      this.config,
+    );
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "system", content: this.config.systemPrompt },
+      ...toModelMessages(conversation),
+    ];
+    const tools = toOpenAITools(this.extensions);
+    let response = "";
+    let retryToolName: string | null = null;
+
+    for (let round = 0; round <= this.config.maxToolRounds; round += 1) {
+      const completion = await completionSession.complete({
+        messages,
+        tools,
+        toolChoice: retryToolName
+          ? {
+              type: "function",
+              function: { name: retryToolName },
+            }
+          : "auto",
+        onStreamingText,
+      });
+      response += completion.content;
+
+      if (completion.toolCalls.length === 0) {
+        this.assertFinishedWithoutTools(completion);
+        return response;
+      }
+
+      this.assertToolRoundCanContinue(round, completion);
+      const executed = await this.appendToolResults(messages, completion);
+      retryToolName =
+        executed.find(({ result }) => !result.success && result.retryable)?.call
+          .name ?? null;
+    }
+
+    throw new Error("User turn ended without a final response");
+  }
+
+  async runEventTurn(
+    apiKey: string,
+    conversation: readonly ConversationEntry[],
+    trigger: ExtensionConversationEvent,
+  ): Promise<EventTurnOutcome> {
+    const completionSession = this.completionSessions.create(
+      apiKey,
+      this.config,
+    );
+    const requiredToolName = trigger.requiredToolName ?? null;
+    const messages: ChatCompletionMessageParam[] = [
+      { role: "system", content: this.config.systemPrompt },
+      ...toModelMessages(conversation),
+      {
+        role: "developer",
+        content:
+          `Event ${trigger.id} started this turn. Evaluate whether the user ` +
+          `benefits from an immediate message. Call ${EVENT_RESPOND_TOOL} to ` +
+          `respond or ${EVENT_SILENT_TOOL} to finish silently. You may use ` +
+          "extension tools first when needed. If an extension tool reports a " +
+          "retryable failure, correct its arguments and retry it before " +
+          "choosing a decision." +
+          (requiredToolName
+            ? ` This event requires ${requiredToolName} to succeed before you choose a decision.`
+            : ""),
+      },
+    ];
+    const tools = [...toOpenAITools(this.extensions), ...EVENT_DECISION_TOOLS];
+    if (
+      requiredToolName &&
+      !this.extensions
+        .getToolsForExtension(trigger.extensionId)
+        .some((tool) => tool.function.name === requiredToolName)
+    ) {
+      throw new Error(
+        `Extension '${trigger.extensionId}' cannot require unowned tool '${requiredToolName}'`,
+      );
+    }
+    let requiredToolCompleted = requiredToolName === null;
+    let retryToolName = requiredToolName;
+
+    for (let round = 0; round <= this.config.maxToolRounds; round += 1) {
+      const completion = await completionSession.complete({
+        messages,
+        tools:
+          requiredToolName && requiredToolCompleted
+            ? EVENT_DECISION_TOOLS
+            : tools,
+        toolChoice: retryToolName
+          ? {
+              type: "function",
+              function: { name: retryToolName },
+            }
+          : "required",
+      });
+      const decisions = completion.toolCalls.filter(isEventDecisionTool);
+      if (decisions.length > 1) {
+        throw new Error("Event turn returned more than one decision");
+      }
+
+      const extensionCalls = completion.toolCalls.filter(
+        (call) => !isEventDecisionTool(call),
+      );
+      if (decisions[0] && extensionCalls.length === 0) {
+        if (!requiredToolCompleted) {
+          throw new Error(
+            `Event turn attempted a decision before required tool '${requiredToolName}' succeeded`,
+          );
+        }
+        if (completion.finishReason !== "tool_calls") {
+          throw new Error(
+            `Unexpected finish reason for event decision: ${completion.finishReason}`,
+          );
+        }
+        return parseEventDecision(decisions[0]);
+      }
+
+      this.assertToolRoundCanContinue(round, completion);
+      if (extensionCalls.length > 0) {
+        const executed = await this.appendToolResults(messages, {
+          ...completion,
+          toolCalls: extensionCalls,
+        });
+        if (!requiredToolCompleted && requiredToolName) {
+          const requiredExecution = executed.find(
+            ({ call }) => call.name === requiredToolName,
+          );
+          if (!requiredExecution) {
+            retryToolName = requiredToolName;
+          } else if (requiredExecution.result.success) {
+            requiredToolCompleted = true;
+            retryToolName = null;
+          } else if (requiredExecution.result.retryable) {
+            retryToolName = requiredToolName;
+          } else {
+            return { disposition: "silent" };
+          }
+        } else {
+          retryToolName =
+            executed.find(({ result }) => !result.success && result.retryable)
+              ?.call.name ?? null;
+        }
+      }
+    }
+
+    throw new Error("Event turn ended without a decision");
   }
 
   private assertFinishedWithoutTools(completion: CompletionRound): void {
@@ -356,7 +463,7 @@ export class OpenAIAgentRunner implements AgentRunner {
   private async appendToolResults(
     messages: ChatCompletionMessageParam[],
     completion: CompletionRound,
-  ): Promise<void> {
+  ): Promise<ExecutedToolCall[]> {
     messages.push({
       role: "assistant",
       content: completion.content || null,
@@ -366,19 +473,17 @@ export class OpenAIAgentRunner implements AgentRunner {
         function: { name: call.name, arguments: call.arguments },
       })),
     });
-    const results = await Promise.all(
-      completion.toolCalls.map((call) =>
-        executeToolCall(this.extensions, call),
-      ),
-    );
+    const results: ExecutedToolCall[] = [];
+    for (const call of completion.toolCalls) {
+      results.push(await executeToolCall(this.extensions, call));
+    }
     messages.push(
-      ...completion.toolCalls.map(
-        (call, index): ChatCompletionMessageParam => ({
-          role: "tool",
-          tool_call_id: call.id,
-          content: results[index]!,
-        }),
-      ),
+      ...results.map(({ call, content }): ChatCompletionMessageParam => ({
+        role: "tool",
+        tool_call_id: call.id,
+        content,
+      })),
     );
+    return results;
   }
 }

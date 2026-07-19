@@ -20,6 +20,7 @@
         "@vokality/ragdoll-extension-pomodoro": "workspace:*",
         "@vokality/ragdoll-extension-spotify": "workspace:*",
         "@vokality/ragdoll-extension-tasks": "workspace:*",
+        "@vokality/ragdoll-extension-tic-tac-toe": "workspace:*",
         "@vokality/ragdoll-extensions": "workspace:*",
         "openai": "^6.48.0",
         "react": "catalog:",
@@ -116,6 +117,16 @@
     },
     "packages/ragdoll-extension-tasks": {
       "name": "@vokality/ragdoll-extension-tasks",
+      "version": "0.1.0",
+      "dependencies": {
+        "@vokality/ragdoll-extensions": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "catalog:",
+      },
+    },
+    "packages/ragdoll-extension-tic-tac-toe": {
+      "name": "@vokality/ragdoll-extension-tic-tac-toe",
       "version": "0.1.0",
       "dependencies": {
         "@vokality/ragdoll-extensions": "workspace:*",
@@ -521,6 +532,8 @@
     "@vokality/ragdoll-extension-spotify": ["@vokality/ragdoll-extension-spotify@workspace:packages/ragdoll-extension-spotify"],
 
     "@vokality/ragdoll-extension-tasks": ["@vokality/ragdoll-extension-tasks@workspace:packages/ragdoll-extension-tasks"],
+
+    "@vokality/ragdoll-extension-tic-tac-toe": ["@vokality/ragdoll-extension-tic-tac-toe@workspace:packages/ragdoll-extension-tic-tac-toe"],
 
     "@vokality/ragdoll-extensions": ["@vokality/ragdoll-extensions@workspace:packages/ragdoll-extensions"],
 

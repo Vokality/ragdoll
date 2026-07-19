@@ -123,6 +123,8 @@ export type {
   PanelAction,
   ListPanelSection,
   ListPanelConfig,
+  GridPanelCell,
+  GridPanelConfig,
   PanelConfig,
   SlotState,
   SlotStateCallback,
@@ -134,6 +136,9 @@ export type {
   SerializedListPanelItem,
   SerializedListPanelSection,
   SerializedListPanelConfig,
+  SerializedGridPanelCell,
+  SerializedGridPanelConfig,
+  SerializedPanelConfig,
   SerializedSlotState,
 } from "./slots.js";
 export {
@@ -141,6 +146,7 @@ export {
   createDerivedSlotState,
   createHiddenSlotState,
   createListSlotState,
+  createGridSlotState,
   serializeSlotState,
 } from "./slots.js";
 

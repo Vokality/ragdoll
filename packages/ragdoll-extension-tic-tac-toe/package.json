@@ -1,0 +1,51 @@
+{
+  "name": "@vokality/ragdoll-extension-tic-tac-toe",
+  "version": "0.1.0",
+  "description": "Tic-tac-toe extension for playing with the Ragdoll agent",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prebuild": "bun run clean",
+    "build": "bunx --bun --no-install tsc -p tsconfig.json",
+    "test": "bun test ./src",
+    "dev": "bunx --bun --no-install tsc -w -p tsconfig.json",
+    "typecheck": "bunx --bun --no-install tsc --noEmit -p tsconfig.json",
+    "clean": "bun run ../../scripts/clean.ts dist"
+  },
+  "dependencies": {
+    "@vokality/ragdoll-extensions": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  },
+  "ragdollExtension": {
+    "id": "tic-tac-toe",
+    "name": "Tic-Tac-Toe",
+    "description": "Play tic-tac-toe with the agent on a shared board",
+    "capabilities": [
+      "tools",
+      "slots"
+    ],
+    "requiredCapabilities": [
+      "conversationEvents",
+      "logger"
+    ],
+    "optionalCapabilities": [],
+    "entry": "./dist/index.js",
+    "canDisable": true
+  }
+}

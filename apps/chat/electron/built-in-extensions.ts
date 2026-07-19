@@ -6,6 +6,8 @@ import { createExtension as createSpotifyExtension } from "@vokality/ragdoll-ext
 import spotifyPackageJson from "@vokality/ragdoll-extension-spotify/manifest" with { type: "json" };
 import { createExtension as createTasksExtension } from "@vokality/ragdoll-extension-tasks";
 import tasksPackageJson from "@vokality/ragdoll-extension-tasks/manifest" with { type: "json" };
+import { createExtension as createTicTacToeExtension } from "@vokality/ragdoll-extension-tic-tac-toe";
+import ticTacToePackageJson from "@vokality/ragdoll-extension-tic-tac-toe/manifest" with { type: "json" };
 import {
   createExtensionPackageDescriptor,
   parseExtensionPackageJson,
@@ -29,4 +31,5 @@ export const BUILT_IN_EXTENSIONS = [
   defineBuiltInExtension(tasksPackageJson, createTasksExtension),
   defineBuiltInExtension(pomodoroPackageJson, createPomodoroExtension),
   defineBuiltInExtension(spotifyPackageJson, createSpotifyExtension),
+  defineBuiltInExtension(ticTacToePackageJson, createTicTacToeExtension),
 ] as const satisfies readonly BuiltInExtensionDefinition[];

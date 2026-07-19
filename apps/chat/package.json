@@ -44,6 +44,7 @@
     "@vokality/ragdoll-extension-pomodoro": "workspace:*",
     "@vokality/ragdoll-extension-spotify": "workspace:*",
     "@vokality/ragdoll-extension-tasks": "workspace:*",
+    "@vokality/ragdoll-extension-tic-tac-toe": "workspace:*",
     "@vokality/ragdoll-extensions": "workspace:*",
     "openai": "^6.48.0",
     "react": "catalog:",

@@ -490,7 +490,11 @@ export class ExtensionRegistry {
       if (entry.tool.validate) {
         const validation = entry.tool.validate(args);
         if (!validation.valid) {
-          return { success: false, error: validation.error };
+          return {
+            success: false,
+            error: validation.error,
+            retryable: validation.retryable,
+          };
         }
       }
 

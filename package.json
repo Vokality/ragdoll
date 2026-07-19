@@ -50,7 +50,7 @@
     "typecheck:chat": "bun run --filter lumen typecheck",
     "verify:packages": "bun run build:libraries && bun run build:examples && bun run scripts/verify-packages.ts",
     "format": "bunx --bun --no-install prettier --write .",
-    "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist apps/chat/dist apps/emote/dist examples/extension-weather/dist"
+    "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist packages/ragdoll-extension-tic-tac-toe/dist apps/chat/dist apps/emote/dist examples/extension-weather/dist"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

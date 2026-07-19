@@ -76,6 +76,8 @@ export interface ToolDefinition {
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+  /** Whether an agent may correct the arguments and try the tool again. */
+  retryable?: boolean;
 }
 
 /**
@@ -85,6 +87,8 @@ export interface ToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  /** Whether an agent should correct the call and retry this tool. */
+  retryable?: boolean;
 }
 
 /**

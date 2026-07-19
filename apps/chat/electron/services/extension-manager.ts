@@ -585,6 +585,10 @@ export class ExtensionManager {
     return this.registry.getAllTools();
   }
 
+  getToolsForExtension(extensionId: string): ToolDefinition[] {
+    return this.registry.getToolsByExtension(extensionId);
+  }
+
   getAllowedFunctions(): Set<string> {
     return new Set(this.registry.getAllTools().map((t) => t.function.name));
   }
@@ -865,18 +869,47 @@ export class ExtensionManager {
 
     try {
       const panel = slotEntry.slot.state.getState().panel;
+
+      if (actionType === "panel-action") {
+        const action = panel.actions?.find(
+          (candidate) => candidate.id === actionId,
+        );
+        if (action?.onClick && !action.disabled) {
+          await action.onClick();
+          return { success: true };
+        }
+        return {
+          success: false,
+          error: `Action not found: ${actionType}:${actionId}`,
+        };
+      }
+
+      if (panel.type === "grid") {
+        if (actionType === "cell-click") {
+          const cell = panel.cells.find(
+            (candidate) => candidate.id === actionId,
+          );
+          if (cell?.onClick && !cell.disabled) {
+            await cell.onClick();
+            return { success: true };
+          }
+        }
+        return {
+          success: false,
+          error: `Action not found: ${actionType}:${actionId}`,
+        };
+      }
+
       const items = [
         ...(panel.items ?? []),
         ...(panel.sections?.flatMap((section) => section.items) ?? []),
       ];
       const action =
-        actionType === "panel-action"
-          ? panel.actions?.find((candidate) => candidate.id === actionId)
-          : actionType === "section-action"
-            ? panel.sections
-                ?.flatMap((section) => section.actions ?? [])
-                .find((candidate) => candidate.id === actionId)
-            : undefined;
+        actionType === "section-action"
+          ? panel.sections
+              ?.flatMap((section) => section.actions ?? [])
+              .find((candidate) => candidate.id === actionId)
+          : undefined;
       const item =
         actionType === "item-click" || actionType === "item-toggle"
           ? items.find((candidate) => candidate.id === actionId)

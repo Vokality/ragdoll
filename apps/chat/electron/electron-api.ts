@@ -50,7 +50,11 @@ export interface SlotChangeEvent {
 }
 
 export type SlotActionType =
-  "panel-action" | "section-action" | "item-click" | "item-toggle";
+  | "panel-action"
+  | "section-action"
+  | "item-click"
+  | "item-toggle"
+  | "cell-click";
 
 export interface OAuthState {
   status: "disconnected" | "connecting" | "connected" | "error" | "expired";

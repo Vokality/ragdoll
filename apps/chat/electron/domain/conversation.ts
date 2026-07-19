@@ -16,6 +16,12 @@ export const conversationEventInputSchema = z
       .regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/),
     payload: z.record(z.string(), z.json()),
     turnPolicy: z.enum(["record-only", "start-turn"]),
+    requiredToolName: z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
+      .optional(),
     deduplicationKey: z.string().min(1).max(200).optional(),
   })
   .strict();
@@ -28,6 +34,7 @@ export const extensionConversationEventSchema = z
     type: conversationEventInputSchema.shape.type,
     payload: conversationEventInputSchema.shape.payload,
     turnPolicy: conversationEventInputSchema.shape.turnPolicy,
+    requiredToolName: conversationEventInputSchema.shape.requiredToolName,
     deduplicationKey: conversationEventInputSchema.shape.deduplicationKey,
     occurredAt: z.number().int().nonnegative(),
   })

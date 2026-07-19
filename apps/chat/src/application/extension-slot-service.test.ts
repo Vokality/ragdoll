@@ -60,7 +60,10 @@ describe("ExtensionSlotService", () => {
 
     const slot = service.getSnapshot()[0];
     expect(slot?.icon).toBe("checklist");
-    slot?.state.getState().panel.items?.[0]?.onClick?.();
+    const panel = slot?.state.getState().panel;
+    expect(panel?.type).toBe("list");
+    if (panel?.type !== "list") throw new Error("expected list panel");
+    panel.items?.[0]?.onClick?.();
     await Promise.resolve();
     expect(testGateway.actions).toEqual(["item-click:task-1"]);
 
@@ -73,5 +76,42 @@ describe("ExtensionSlotService", () => {
     await expect(service.start()).rejects.toThrow(
       "Missing state for slot: tasks.main",
     );
+  });
+
+  it("hydrates grid cells and routes cell-click actions", async () => {
+    const gridState: SerializedSlotState = {
+      badge: null,
+      visible: true,
+      panel: {
+        type: "grid",
+        title: "Board",
+        columns: 3,
+        cells: [
+          { id: "1-1", label: "", canClick: true },
+          { id: "1-2", label: "X", canClick: false },
+          {
+            id: "1-3",
+            label: "",
+            disabled: true,
+            canClick: true,
+          },
+        ],
+      },
+    };
+    const testGateway = createGateway(gridState);
+    const service = new ExtensionSlotService(testGateway.gateway);
+    await service.start();
+
+    const slot = service.getSnapshot()[0];
+    const panel = slot?.state.getState().panel;
+    expect(panel?.type).toBe("grid");
+    if (panel?.type !== "grid") throw new Error("expected grid panel");
+    panel.cells[0]?.onClick?.();
+    await Promise.resolve();
+    expect(testGateway.actions).toEqual(["cell-click:1-1"]);
+    expect(panel.cells[1]?.onClick).toBeUndefined();
+    expect(panel.cells[2]?.onClick).toBeUndefined();
+
+    service.stop();
   });
 });

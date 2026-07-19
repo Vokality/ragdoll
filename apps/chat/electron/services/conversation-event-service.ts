@@ -30,6 +30,9 @@ export class ConversationEventService implements ExtensionConversationEventPubli
     input: ConversationEventInput,
   ): Promise<PublishedConversationEvent> {
     const validated = conversationEventInputSchema.parse(input);
+    if (validated.requiredToolName && validated.turnPolicy !== "start-turn") {
+      throw new Error("requiredToolName requires turnPolicy 'start-turn'");
+    }
     let eventId = "";
     let turnQueued = false;
 
@@ -58,6 +61,7 @@ export class ConversationEventService implements ExtensionConversationEventPubli
         type: validated.type,
         payload: validated.payload,
         turnPolicy: validated.turnPolicy,
+        requiredToolName: validated.requiredToolName,
         deduplicationKey: validated.deduplicationKey,
         occurredAt: Date.now(),
       };

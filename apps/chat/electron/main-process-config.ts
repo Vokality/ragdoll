@@ -62,7 +62,7 @@ export function createMainProcessConfig(
     rendererHtmlPath: join(moduleDirectory, "../renderer/index.html"),
     developmentServerUrl: "http://localhost:5173",
     chat: {
-      model: "gpt-5.1",
+      model: "gpt-5.4-mini",
       maxCompletionTokens: 140,
       maxToolRounds: 8,
       systemPrompt: SYSTEM_PROMPT,

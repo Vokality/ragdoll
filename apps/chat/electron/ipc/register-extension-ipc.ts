@@ -13,6 +13,7 @@ const slotActionSchema = z.enum([
   "section-action",
   "item-click",
   "item-toggle",
+  "cell-click",
 ]);
 
 async function operation(

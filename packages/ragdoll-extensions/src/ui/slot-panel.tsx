@@ -16,6 +16,8 @@ import type {
   SlotPanelProps,
   PanelConfig,
   ListPanelConfig,
+  GridPanelConfig,
+  GridPanelCell,
   ListPanelItem,
   ListPanelSection,
   PanelAction,
@@ -116,15 +118,116 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
       />
 
       {/* Sheet */}
-      <div className={`slot-panel-sheet ${isExiting ? "exiting" : ""}`}>
+      <div
+        className={`slot-panel-sheet ${panel.type === "grid" ? "slot-panel-sheet-grid" : ""} ${isExiting ? "exiting" : ""}`}
+      >
         {/* Handle */}
         <div style={styles.handleWrapper}>
           <div style={styles.handle} />
         </div>
 
-        <ListPanel config={panel} onClose={handleClose} />
+        {panel.type === "list" ? (
+          <ListPanel config={panel} onClose={handleClose} />
+        ) : (
+          <GridPanel config={panel} onClose={handleClose} />
+        )}
       </div>
     </>
+  );
+}
+
+// =============================================================================
+// Grid Panel Renderer
+// =============================================================================
+
+interface GridPanelProps {
+  config: GridPanelConfig;
+  onClose: () => void;
+}
+
+function GridPanel({ config, onClose }: GridPanelProps) {
+  const { title, emptyMessage, columns, cells, actions } = config;
+  const hasCells = cells.length > 0;
+
+  return (
+    <>
+      <div style={styles.header}>
+        <h2 style={styles.title}>{title}</h2>
+        <button
+          onClick={onClose}
+          style={styles.closeButton}
+          className="slot-panel-close"
+          aria-label="Close"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div style={styles.gridContent}>
+        <div style={styles.gridViewport}>
+          {!hasCells ? (
+            <div style={styles.emptyState}>
+              <p style={styles.emptyText}>{emptyMessage ?? "No cells"}</p>
+            </div>
+          ) : (
+            <div
+              style={{
+                ...styles.grid,
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              }}
+            >
+              {cells.map((cell, index) => (
+                <GridCell key={cell.id} cell={cell} index={index} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {actions && actions.length > 0 && (
+          <div style={{ ...styles.actions, ...styles.gridActions }}>
+            {actions.map((action) => (
+              <ActionButton key={action.id} action={action} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface GridCellProps {
+  cell: GridPanelCell;
+  index: number;
+}
+
+function GridCell({ cell, index }: GridCellProps) {
+  const statusStyle = getGridStatusStyle(cell.status);
+  const clickable = typeof cell.onClick === "function" && !cell.disabled;
+
+  return (
+    <button
+      type="button"
+      className="slot-panel-grid-cell"
+      onClick={clickable ? cell.onClick : undefined}
+      disabled={!clickable}
+      aria-label={
+        cell.ariaLabel ??
+        (cell.sublabel
+          ? `${cell.label} ${cell.sublabel}`
+          : cell.label || `Cell ${index + 1}`)
+      }
+      style={{
+        ...styles.gridCell,
+        ...statusStyle,
+        animationDelay: `${index * 30}ms`,
+        cursor: clickable ? "pointer" : "default",
+      }}
+    >
+      <span style={styles.gridCellLabel}>{cell.label || "\u00A0"}</span>
+      {cell.sublabel && (
+        <span style={styles.gridCellSublabel}>{cell.sublabel}</span>
+      )}
+    </button>
   );
 }
 
@@ -406,6 +509,22 @@ function getStatusStyle(status?: ItemStatus): CSSProperties {
   }
 }
 
+/** Grid cells always set resettable fields so a prior "active" glow cannot stick. */
+function getGridStatusStyle(status?: ItemStatus): CSSProperties {
+  const highlight = getStatusStyle(status);
+  if (status && status !== "default") {
+    return {
+      backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
+      ...highlight,
+    };
+  }
+  return {
+    borderColor: "var(--border, rgba(148, 163, 184, 0.2))",
+    boxShadow: "none",
+    backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
+  };
+}
+
 function getActionVariantStyle(
   variant?: PanelAction["variant"],
 ): CSSProperties {
@@ -514,6 +633,10 @@ const panelStyles = `
     animation: slotPanelSlideDown ${ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
   }
 
+  .slot-panel-sheet-grid {
+    height: min(70vh, 500px);
+  }
+
   .slot-panel-item {
     animation: slotPanelItemFadeIn 200ms ease-out backwards;
   }
@@ -545,6 +668,28 @@ const panelStyles = `
   .slot-panel-action:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .slot-panel-grid-cell {
+    animation: slotPanelItemFadeIn 200ms ease-out backwards;
+  }
+
+  .slot-panel-grid-cell:hover:not(:disabled) {
+    border-color: var(--accent, #5a9bc4);
+    background: var(--bg-glass-light, rgba(51, 65, 85, 0.6));
+  }
+
+  .slot-panel-grid-cell:focus {
+    outline: none;
+  }
+
+  .slot-panel-grid-cell:focus-visible:not(:disabled) {
+    outline: 2px solid var(--accent, #5a9bc4);
+    outline-offset: 2px;
+  }
+
+  .slot-panel-grid-cell:disabled {
+    cursor: default;
   }
 `;
 
@@ -596,6 +741,21 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     overflow: "auto",
     padding: "16px 20px 24px",
+  },
+  gridContent: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    padding: "16px 20px 20px",
+  },
+  gridViewport: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
   },
   emptyState: {
     display: "flex",
@@ -651,6 +811,36 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "8px",
+  },
+  grid: {
+    display: "grid",
+    gap: "8px",
+    width: "min(100%, 300px, calc(70vh - 190px))",
+    margin: "0 auto",
+  },
+  gridCell: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    aspectRatio: "1 / 1",
+    padding: "12px 8px",
+    backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
+    borderRadius: "var(--radius-md, 10px)",
+    border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
+    color: "var(--text-primary, #f1f5f9)",
+    transition:
+      "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease",
+  },
+  gridCellLabel: {
+    fontSize: "22px",
+    fontWeight: "600",
+    lineHeight: 1.2,
+  },
+  gridCellSublabel: {
+    fontSize: "11px",
+    color: "var(--text-muted, #94a3b8)",
+    marginTop: "4px",
   },
   item: {
     display: "flex",
@@ -724,6 +914,10 @@ const styles: Record<string, CSSProperties> = {
     marginTop: "20px",
     paddingTop: "16px",
     borderTop: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
+  },
+  gridActions: {
+    flexShrink: 0,
+    marginTop: "16px",
   },
   actionButton: {
     flex: 1,

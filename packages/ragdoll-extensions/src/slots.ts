@@ -37,7 +37,8 @@ export type PresetIconName =
   | "bookmark"
   | "flag"
   | "star"
-  | "music";
+  | "music"
+  | "grid";
 
 /**
  * A single item in a list panel
@@ -80,7 +81,7 @@ export interface PanelAction {
   /** Whether button is disabled */
   disabled?: boolean;
   /** Click handler */
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
 }
 
 /**
@@ -119,9 +120,48 @@ export interface ListPanelConfig {
 }
 
 /**
+ * A single clickable cell in a grid panel
+ */
+export interface GridPanelCell {
+  /** Unique identifier */
+  id: string;
+  /** Primary text */
+  label: string;
+  /** Secondary text (optional) */
+  sublabel?: string;
+  /** Visual status indicator */
+  status?: ItemStatus;
+  /** Whether the cell control is disabled */
+  disabled?: boolean;
+  /** Additional metadata for rendering */
+  meta?: Record<string, unknown>;
+  /** Accessible name for the interactive cell */
+  ariaLabel?: string;
+  /** Called when the cell is clicked */
+  onClick?: () => void | Promise<void>;
+}
+
+/**
+ * Configuration for a grid-based panel (React-free version)
+ */
+export interface GridPanelConfig {
+  type: "grid";
+  /** Panel title */
+  title: string;
+  /** Message to show when the grid is empty */
+  emptyMessage?: string;
+  /** Column count for CSS grid layout */
+  columns: number;
+  /** Grid cells in row-major order */
+  cells: GridPanelCell[];
+  /** Panel-level actions (shown in header or footer) */
+  actions?: PanelAction[];
+}
+
+/**
  * Union of panel configuration types (React-free version)
  */
-export type PanelConfig = ListPanelConfig;
+export type PanelConfig = ListPanelConfig | GridPanelConfig;
 
 /**
  * Dynamic state exposed by a slot
@@ -197,11 +237,29 @@ export type SerializedListPanelConfig = Omit<
   actions?: SerializedPanelAction[];
 };
 
+/** Cell metadata safe to send across a process boundary. */
+export type SerializedGridPanelCell = Omit<GridPanelCell, "onClick"> & {
+  canClick: boolean;
+};
+
+/** Grid panel data with executable callbacks removed. */
+export type SerializedGridPanelConfig = Omit<
+  GridPanelConfig,
+  "cells" | "actions"
+> & {
+  cells: SerializedGridPanelCell[];
+  actions?: SerializedPanelAction[];
+};
+
+/** Panel data safe to send across a process boundary. */
+export type SerializedPanelConfig =
+  SerializedListPanelConfig | SerializedGridPanelConfig;
+
 /** Slot state safe to send across IPC or another structured-clone boundary. */
 export interface SerializedSlotState {
   badge: number | string | null;
   visible: boolean;
-  panel: SerializedListPanelConfig;
+  panel: SerializedPanelConfig;
 }
 
 function serializeAction({
@@ -223,9 +281,31 @@ function serializeItem({
   };
 }
 
+function serializeCell({
+  onClick,
+  ...cell
+}: GridPanelCell): SerializedGridPanelCell {
+  return {
+    ...cell,
+    canClick: cell.disabled !== true && typeof onClick === "function",
+  };
+}
+
 /** Remove executable callbacks while preserving which actions the host supports. */
 export function serializeSlotState(state: SlotState): SerializedSlotState {
   const panel = state.panel;
+  if (panel.type === "grid") {
+    return {
+      badge: state.badge,
+      visible: state.visible,
+      panel: {
+        ...panel,
+        cells: panel.cells.map(serializeCell),
+        actions: panel.actions?.map(serializeAction),
+      },
+    };
+  }
+
   return {
     badge: state.badge,
     visible: state.visible,
@@ -420,6 +500,32 @@ export function createListSlotState(
       type: "list",
       title,
       items: [],
+      emptyMessage: options.emptyMessage,
+    },
+  };
+}
+
+/**
+ * Create a slot state for a grid panel
+ */
+export function createGridSlotState(
+  title: string,
+  columns: number,
+  options: {
+    badge?: number | string | null;
+    visible?: boolean;
+    emptyMessage?: string;
+    cells?: GridPanelCell[];
+  } = {},
+): SlotState {
+  return {
+    badge: options.badge ?? null,
+    visible: options.visible ?? true,
+    panel: {
+      type: "grid",
+      title,
+      columns,
+      cells: options.cells ?? [],
       emptyMessage: options.emptyMessage,
     },
   };

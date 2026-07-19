@@ -51,6 +51,8 @@ export interface ConversationEventInput<
   type: string;
   payload: TPayload;
   turnPolicy: EventTurnPolicy;
+  /** Tool owned by this extension that must succeed before the event turn may finish. */
+  requiredToolName?: string;
   deduplicationKey?: string;
 }
 

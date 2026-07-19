@@ -1,4 +1,5 @@
 import type {
+  SerializedGridPanelCell,
   SerializedListPanelItem,
   SerializedListPanelSection,
   SerializedPanelAction,
@@ -6,6 +7,7 @@ import type {
 } from "@vokality/ragdoll-extensions";
 import {
   createSlotState,
+  type GridPanelCell,
   type ListPanelItem,
   type ListPanelSection,
   type MutableSlotStateStore,
@@ -136,6 +138,31 @@ export class ExtensionSlotService {
       ...action,
       onClick: () => this.executeAction(slotId, actionType, action.id),
     });
+
+    if (state.panel.type === "grid") {
+      const attachCell = (cell: SerializedGridPanelCell): GridPanelCell => {
+        const { canClick, ...metadata } = cell;
+        return {
+          ...metadata,
+          onClick:
+            canClick && !metadata.disabled
+              ? () => this.executeAction(slotId, "cell-click", cell.id)
+              : undefined,
+        };
+      };
+
+      return {
+        ...state,
+        panel: {
+          ...state.panel,
+          actions: state.panel.actions?.map((action) =>
+            attachAction("panel-action", action),
+          ),
+          cells: state.panel.cells.map(attachCell),
+        },
+      };
+    }
+
     const attachItem = (item: SerializedListPanelItem): ListPanelItem => {
       const { canClick, canToggle, ...metadata } = item;
       return {

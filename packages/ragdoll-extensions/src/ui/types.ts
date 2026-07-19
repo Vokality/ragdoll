@@ -1,5 +1,7 @@
 import type {
   ExtensionSlot,
+  GridPanelCell,
+  GridPanelConfig,
   ItemStatus,
   ListPanelConfig,
   ListPanelItem,
@@ -13,6 +15,8 @@ import type {
 } from "../slots.js";
 
 export type {
+  GridPanelCell,
+  GridPanelConfig,
   ItemStatus,
   ListPanelConfig,
   ListPanelItem,

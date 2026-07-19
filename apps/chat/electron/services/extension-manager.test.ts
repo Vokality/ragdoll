@@ -155,7 +155,13 @@ describe("ExtensionManager slot integration", () => {
         type: "list",
         title: "Actions",
         actions: [
-          { id: "panel", label: "Panel", onClick: () => calls.push("panel") },
+          {
+            id: "panel",
+            label: "Panel",
+            onClick: () => {
+              calls.push("panel");
+            },
+          },
         ],
         items: [
           {
@@ -172,7 +178,9 @@ describe("ExtensionManager slot integration", () => {
               {
                 id: "section",
                 label: "Section",
-                onClick: () => calls.push("section"),
+                onClick: () => {
+                  calls.push("section");
+                },
               },
             ],
             items: [
@@ -250,6 +258,109 @@ describe("ExtensionManager slot integration", () => {
           id: "section",
           items: [{ id: "section-item", canClick: true, canToggle: true }],
         },
+      ],
+    });
+
+    await manager.destroy();
+  });
+
+  it("routes grid cell-click actions and serializes canClick", async () => {
+    const calls: string[] = [];
+    const manager = createManager();
+    await manager.initialize();
+
+    const slotState = createSlotState({
+      badge: null,
+      visible: true,
+      panel: {
+        type: "grid",
+        title: "Board",
+        columns: 3,
+        cells: [
+          {
+            id: "0-0",
+            label: "X",
+            disabled: true,
+            onClick: () => {
+              calls.push("disabled-cell");
+            },
+          },
+          {
+            id: "0-1",
+            label: "",
+            onClick: () => {
+              calls.push("cell");
+            },
+          },
+        ],
+        actions: [
+          {
+            id: "new",
+            label: "New",
+            onClick: () => {
+              calls.push("panel");
+            },
+          },
+          {
+            id: "disabled",
+            label: "Disabled",
+            disabled: true,
+            onClick: () => {
+              calls.push("disabled-panel");
+            },
+          },
+        ],
+      },
+    });
+    const extension = createExtension({
+      id: "actions",
+      name: "Actions",
+      version: "1.0.0",
+      slots: [
+        {
+          id: "actions.main",
+          label: "Actions",
+          icon: "grid",
+          state: slotState,
+        },
+      ],
+    });
+
+    await manager.getRegistry().register(extension, { host });
+
+    expect(
+      await manager.executeSlotAction("actions.main", "cell-click", "0-1"),
+    ).toEqual({ success: true });
+    expect(
+      await manager.executeSlotAction("actions.main", "panel-action", "new"),
+    ).toEqual({ success: true });
+    expect(
+      await manager.executeSlotAction("actions.main", "cell-click", "0-0"),
+    ).toEqual({
+      success: false,
+      error: "Action not found: cell-click:0-0",
+    });
+    expect(
+      await manager.executeSlotAction(
+        "actions.main",
+        "panel-action",
+        "disabled",
+      ),
+    ).toEqual({
+      success: false,
+      error: "Action not found: panel-action:disabled",
+    });
+    expect(calls).toEqual(["cell", "panel"]);
+    expect(manager.getSlotState("actions.main")?.panel).toMatchObject({
+      type: "grid",
+      columns: 3,
+      cells: [
+        { id: "0-0", label: "X", canClick: false },
+        { id: "0-1", label: "", canClick: true },
+      ],
+      actions: [
+        { id: "new", label: "New" },
+        { id: "disabled", label: "Disabled", disabled: true },
       ],
     });
 

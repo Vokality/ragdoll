@@ -50,9 +50,11 @@ export type {
   ListPanelItem,
   PanelAction,
   ListPanelSection,
+  GridPanelCell,
 
   // Panel configuration types
   ListPanelConfig,
+  GridPanelConfig,
   PanelConfig,
 
   // Slot state types
@@ -82,6 +84,7 @@ export {
   createDerivedSlotState,
   createHiddenSlotState,
   createListSlotState,
+  createGridSlotState,
   type MutableSlotStateStore,
   type DerivedSlotStateOptions,
 } from "./create-slot-state.js";

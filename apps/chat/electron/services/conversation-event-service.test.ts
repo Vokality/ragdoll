@@ -34,6 +34,7 @@ describe("ConversationEventService", () => {
       type: "timer.completed",
       payload: { completedPhase: "focus" },
       turnPolicy: "start-turn",
+      requiredToolName: "pomodoro_acknowledge",
       deduplicationKey: "focus:1",
     });
 
@@ -44,6 +45,7 @@ describe("ConversationEventService", () => {
       extensionId: "pomodoro",
       type: "timer.completed",
       turnPolicy: "start-turn",
+      requiredToolName: "pomodoro_acknowledge",
     });
     expect(snapshot.pendingAgentTurns).toEqual([
       { triggerEventId: published.eventId, createdAt: expect.any(Number) },
@@ -67,5 +69,20 @@ describe("ConversationEventService", () => {
     expect(duplicate).toEqual(first);
     expect(storage.snapshot().conversation).toHaveLength(1);
     expect(storage.snapshot().pendingAgentTurns).toHaveLength(1);
+  });
+
+  it("rejects a required tool on an event that does not start a turn", async () => {
+    const storage = createInMemoryStorageRepository();
+    const service = new ConversationEventService(storage);
+
+    await expect(
+      service.publish("calendar", {
+        type: "calendar.synchronized",
+        payload: {},
+        turnPolicy: "record-only",
+        requiredToolName: "calendar_acknowledge",
+      }),
+    ).rejects.toThrow("requiredToolName requires turnPolicy 'start-turn'");
+    expect(storage.snapshot().conversation).toBeUndefined();
   });
 });

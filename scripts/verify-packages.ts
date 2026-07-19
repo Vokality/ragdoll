@@ -8,6 +8,7 @@ const packageDirectories = [
   "packages/ragdoll-extension-tasks",
   "packages/ragdoll-extension-pomodoro",
   "packages/ragdoll-extension-spotify",
+  "packages/ragdoll-extension-tic-tac-toe",
   "examples/extension-weather",
 ] as const;
 
@@ -84,6 +85,8 @@ import { createExtension as createPomodoro } from "@vokality/ragdoll-extension-p
 import pomodoroManifest from "@vokality/ragdoll-extension-pomodoro/manifest" with { type: "json" };
 import { createExtension as createSpotify } from "@vokality/ragdoll-extension-spotify";
 import spotifyManifest from "@vokality/ragdoll-extension-spotify/manifest" with { type: "json" };
+import { createExtension as createTicTacToe } from "@vokality/ragdoll-extension-tic-tac-toe";
+import ticTacToeManifest from "@vokality/ragdoll-extension-tic-tac-toe/manifest" with { type: "json" };
 import { createExtension as createWeather } from "@example/ragdoll-extension-weather";
 import weatherManifest from "@example/ragdoll-extension-weather/manifest" with { type: "json" };
 
@@ -104,6 +107,7 @@ const factories = [
   [createTasks, tasksManifest],
   [createPomodoro, pomodoroManifest],
   [createSpotify, spotifyManifest],
+  [createTicTacToe, ticTacToeManifest],
   [createWeather, weatherManifest],
 ] as const;
 for (const [factory, packageJson] of factories) {
