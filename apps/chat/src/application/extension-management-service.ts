@@ -4,7 +4,8 @@ import type {
   ExtensionInfo,
   InstalledExtension,
   InstallResult,
-  OAuthEvent,
+  OAuthConnectedEvent,
+  OAuthFailedEvent,
   OAuthState,
   OperationResult,
   UpdateCheckResult,
@@ -33,8 +34,8 @@ export type ExtensionManagementGateway = Pick<
   | "getOAuthState"
   | "getUserInstalledExtensions"
   | "installExtensionFromGitHub"
-  | "onOAuthError"
-  | "onOAuthSuccess"
+  | "onOAuthConnected"
+  | "onOAuthFailed"
   | "setConfigValues"
   | "setDisabledExtensions"
   | "startOAuthFlow"
@@ -92,12 +93,12 @@ export class ExtensionManagementService {
     return this.api.getOAuthState(extensionId);
   }
 
-  onOAuthSuccess(callback: (event: OAuthEvent) => void): () => void {
-    return this.api.onOAuthSuccess(callback);
+  onOAuthConnected(callback: (event: OAuthConnectedEvent) => void): () => void {
+    return this.api.onOAuthConnected(callback);
   }
 
-  onOAuthError(callback: (event: OAuthEvent) => void): () => void {
-    return this.api.onOAuthError(callback);
+  onOAuthFailed(callback: (event: OAuthFailedEvent) => void): () => void {
+    return this.api.onOAuthFailed(callback);
   }
 
   async saveConfiguration(

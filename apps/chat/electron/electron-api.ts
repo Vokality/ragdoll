@@ -59,10 +59,21 @@ export interface OAuthState {
   error?: string;
 }
 
-export interface OAuthEvent {
+export interface OAuthConnectedEvent {
   extensionId: string;
-  error?: string;
 }
+
+export interface OAuthFailedEvent {
+  extensionId: string;
+  error: string;
+}
+
+export const EXTENSION_EVENT_CHANNELS = {
+  slotStateChanged: "extensions:slot-state-changed",
+  slotsChanged: "extensions:slots-changed",
+  oauthConnected: "extensions:oauth-connected",
+  oauthFailed: "extensions:oauth-failed",
+} as const;
 
 export interface ExtensionConfigStatus {
   isConfigured: boolean;
@@ -142,8 +153,8 @@ export interface ElectronAPI {
   getOAuthState(extensionId: string): Promise<OAuthState | null>;
   startOAuthFlow(extensionId: string): Promise<OperationResult>;
   disconnectOAuth(extensionId: string): Promise<OperationResult>;
-  onOAuthSuccess(callback: (event: OAuthEvent) => void): () => void;
-  onOAuthError(callback: (event: OAuthEvent) => void): () => void;
+  onOAuthConnected(callback: (event: OAuthConnectedEvent) => void): () => void;
+  onOAuthFailed(callback: (event: OAuthFailedEvent) => void): () => void;
   getConfigStatus(extensionId: string): Promise<ExtensionConfigStatus | null>;
   getConfigSchema(extensionId: string): Promise<ConfigSchema | null>;
   setConfigValues(

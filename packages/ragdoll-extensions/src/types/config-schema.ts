@@ -180,27 +180,6 @@ export interface HostOAuthCapability {
   isAuthenticated(): boolean;
 }
 
-/**
- * OAuth event types
- */
-export type OAuthEventType =
-  | "oauth:connected"
-  | "oauth:disconnected"
-  | "oauth:error"
-  | "oauth:token-refreshed"
-  | "oauth:expired";
-
-/**
- * OAuth event payload
- */
-export interface OAuthEvent {
-  type: OAuthEventType;
-  state: OAuthState;
-  timestamp: number;
-}
-
-export type OAuthEventCallback = (event: OAuthEvent) => void;
-
 // =============================================================================
 // Config Values Types
 // =============================================================================

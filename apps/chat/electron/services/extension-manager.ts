@@ -5,7 +5,7 @@
  * - Manages the ExtensionRegistry lifecycle
  * - Provides ExtensionHostEnvironment to extensions (including OAuth/Config)
  * - Discovers and loads extension packages dynamically
- * - Handles OAuth callbacks for extensions that require it
+ * - Coordinates extension configuration and OAuth services
  * - Syncs state changes to the renderer via IPC
  */
 
@@ -42,6 +42,7 @@ import type { ExtensionMessageBus } from "./extension-message-bus.js";
 import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
 import type { ExtensionHostDataStore } from "../infrastructure/extension-host-data-repository.js";
 import type { OAuthRedirectService } from "./oauth-loopback-service.js";
+import type { ServiceLogger } from "./service-logger.js";
 
 // =============================================================================
 // Types
@@ -58,26 +59,31 @@ export interface ExtensionInfo {
 }
 
 export interface ExtensionManagerConfig {
-  onSlotStateChange?: (
-    extensionId: string,
-    slotId: string,
-    state: SerializedSlotState,
-  ) => void;
-  onSlotsChange?: () => void;
+  events: ExtensionManagerEventSink;
   onNotification?: NotificationCallback;
   packageRoots: ExtensionLoaderConfig["packageRoots"];
-  disabledExtensions?: string[];
+  disabledExtensions: readonly string[];
   /** Function to open URLs in system browser (for OAuth) */
   openExternal: (url: string) => Promise<void>;
   oauthRedirects: OAuthRedirectService;
   hostData: ExtensionHostDataStore;
-  onOAuthSucceeded?: (extensionId: string) => void;
-  onOAuthFailed?: (extensionId: string, error: string) => void;
   builtInExtensions: readonly BuiltInExtensionDefinition[];
   fileSystem: ExtensionLoaderConfig["fileSystem"];
   storage: ExtensionStorage;
   messageBus: ExtensionMessageBus;
   conversationEvents: ExtensionConversationEventPublisher;
+  logger: ServiceLogger;
+}
+
+export interface ExtensionManagerEventSink {
+  slotStateChanged(
+    extensionId: string,
+    slotId: string,
+    state: SerializedSlotState,
+  ): void;
+  slotsChanged(): void;
+  oauthConnected(extensionId: string): void;
+  oauthFailed(extensionId: string, error: string): void;
 }
 
 export interface BuiltInExtensionDefinition {
@@ -106,7 +112,7 @@ export class ExtensionManager {
 
   constructor(config: ExtensionManagerConfig) {
     this.config = config;
-    this.disabledExtensions = new Set(config.disabledExtensions ?? []);
+    this.disabledExtensions = new Set(config.disabledExtensions);
     this.registry = createRegistry();
 
     // Use getHostEnvironment to provide extension-specific capabilities
@@ -137,19 +143,21 @@ export class ExtensionManager {
     const extensionId = manifest.id;
     const packageInfo = this.packageInfoCache.get(extensionId);
 
-    // Determine capabilities based on package requirements
-    const capabilities = new Set<ExtensionHostCapability>([
-      "storage",
-      "ipc",
-      "logger",
+    const requestedCapabilities = new Set<ExtensionHostCapability>([
+      ...(manifest.requiredCapabilities ?? []),
+      ...(manifest.optionalCapabilities ?? []),
     ]);
+    const capabilities = new Set<ExtensionHostCapability>();
 
-    if (this.config.onNotification) {
+    if (
+      requestedCapabilities.has("notifications") &&
+      this.config.onNotification
+    ) {
       capabilities.add("notifications");
     }
 
     const canPublishConversationEvents =
-      manifest.requiredCapabilities?.includes("conversationEvents") ?? false;
+      requestedCapabilities.has("conversationEvents");
     if (canPublishConversationEvents) {
       capabilities.add("conversationEvents");
     }
@@ -161,16 +169,31 @@ export class ExtensionManager {
       capabilities.add("config");
     }
 
-    const logger = {
-      debug: (...args: unknown[]) => console.debug(`[${extensionId}]`, ...args),
-      info: (...args: unknown[]) => console.info(`[${extensionId}]`, ...args),
-      warn: (...args: unknown[]) => console.warn(`[${extensionId}]`, ...args),
-      error: (...args: unknown[]) => console.error(`[${extensionId}]`, ...args),
-    };
+    const logger = requestedCapabilities.has("logger")
+      ? {
+          debug: (message: string, metadata?: Record<string, unknown>) =>
+            this.config.logger.debug(`[${extensionId}]`, message, metadata),
+          info: (message: string, metadata?: Record<string, unknown>) =>
+            this.config.logger.info(`[${extensionId}]`, message, metadata),
+          warn: (message: string, metadata?: Record<string, unknown>) =>
+            this.config.logger.warn(`[${extensionId}]`, message, metadata),
+          error: (message: string, metadata?: Record<string, unknown>) =>
+            this.config.logger.error(`[${extensionId}]`, message, metadata),
+        }
+      : undefined;
 
-    const storage = this.createStorageCapability(extensionId);
-    const notifications = this.config.onNotification;
-    const ipc = this.createIpcCapability(extensionId);
+    const storage = requestedCapabilities.has("storage")
+      ? this.createStorageCapability(extensionId)
+      : undefined;
+    const notifications = requestedCapabilities.has("notifications")
+      ? this.config.onNotification
+      : undefined;
+    const ipc = requestedCapabilities.has("ipc")
+      ? this.createIpcCapability(extensionId)
+      : undefined;
+    if (storage) capabilities.add("storage");
+    if (ipc) capabilities.add("ipc");
+    if (logger) capabilities.add("logger");
     const conversationEvents = canPublishConversationEvents
       ? {
           publish: (event: ConversationEventInput) =>
@@ -221,9 +244,8 @@ export class ExtensionManager {
     oauthConfig: OAuthConfig,
     configSchema?: ConfigSchema,
   ): OAuthManager {
-    if (this.oauthManagers.has(extensionId)) {
-      return this.oauthManagers.get(extensionId)!;
-    }
+    const existingManager = this.oauthManagers.get(extensionId);
+    if (existingManager) return existingManager;
 
     const clientIdField = configSchema?.[oauthConfig.clientIdConfigKey];
     if (!clientIdField || clientIdField.type !== "string") {
@@ -250,14 +272,12 @@ export class ExtensionManager {
         this.config.hostData.saveOAuthTokens(extensionId, tokens),
       clearTokens: () => this.config.hostData.clearOAuthTokens(extensionId),
       openExternal: this.config.openExternal,
-      onConnected: () => this.config.onOAuthSucceeded?.(extensionId),
-      onError: (error) => this.config.onOAuthFailed?.(extensionId, error),
-      logger: {
-        debug: (...args) => console.debug(`[OAuth:${extensionId}]`, ...args),
-        info: (...args) => console.info(`[OAuth:${extensionId}]`, ...args),
-        warn: (...args) => console.warn(`[OAuth:${extensionId}]`, ...args),
-        error: (...args) => console.error(`[OAuth:${extensionId}]`, ...args),
+      events: {
+        connected: () => this.config.events.oauthConnected(extensionId),
+        failed: (error) => this.config.events.oauthFailed(extensionId, error),
       },
+      fetch: globalThis.fetch,
+      logger: this.config.logger,
     });
 
     this.oauthManagers.set(extensionId, manager);
@@ -301,9 +321,8 @@ export class ExtensionManager {
     extensionId: string,
     schema: ConfigSchema,
   ): ConfigManager {
-    if (this.configManagers.has(extensionId)) {
-      return this.configManagers.get(extensionId)!;
-    }
+    const existingManager = this.configManagers.get(extensionId);
+    if (existingManager) return existingManager;
 
     const manager = createConfigManager({
       extensionId,
@@ -312,12 +331,7 @@ export class ExtensionManager {
         this.config.hostData.loadConfig(extensionId, schema),
       saveValues: (values) =>
         this.config.hostData.saveConfig(extensionId, schema, values),
-      logger: {
-        debug: (...args) => console.debug(`[Config:${extensionId}]`, ...args),
-        info: (...args) => console.info(`[Config:${extensionId}]`, ...args),
-        warn: (...args) => console.warn(`[Config:${extensionId}]`, ...args),
-        error: (...args) => console.error(`[Config:${extensionId}]`, ...args),
-      },
+      logger: this.config.logger,
     });
 
     this.configManagers.set(extensionId, manager);
@@ -437,6 +451,7 @@ export class ExtensionManager {
         description:
           descriptor.description ?? runtimeExtension.manifest.description,
         requiredCapabilities: descriptor.requiredCapabilities,
+        optionalCapabilities: descriptor.optionalCapabilities,
       });
 
       await this.registry.register(extension, {
@@ -542,14 +557,14 @@ export class ExtensionManager {
       if (!entry) return;
       const unsubscribe = entry.slot.state.subscribe(() => {
         const state = entry.slot.state.getState();
-        this.config.onSlotStateChange?.(
+        this.config.events.slotStateChanged(
           entry.extensionId,
           entry.slot.id,
           serializeSlotState(state),
         );
       });
       this.slotStateUnsubscribers.set(event.capabilityId, unsubscribe);
-      this.config.onSlotsChange?.();
+      this.config.events.slotsChanged();
     }
   }
 
@@ -559,7 +574,7 @@ export class ExtensionManager {
     const unsubscribe = subscriptions?.get(event.capabilityId);
     unsubscribe?.();
     subscriptions?.delete(event.capabilityId);
-    if (event.capabilityType === "slot") this.config.onSlotsChange?.();
+    if (event.capabilityType === "slot") this.config.events.slotsChanged();
   }
 
   // ===========================================================================

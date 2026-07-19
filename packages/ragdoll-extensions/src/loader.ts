@@ -83,11 +83,38 @@ const ExtensionPackageManifestSchema = z
       .refine((values) => new Set(values).size === values.length, {
         message: "requiredCapabilities must not contain duplicates",
       }),
+    optionalCapabilities: z
+      .array(
+        z.enum([
+          "storage",
+          "notifications",
+          "conversationEvents",
+          "timers",
+          "scheduler",
+          "ipc",
+          "logger",
+          "oauth",
+          "config",
+        ]),
+      )
+      .refine((values) => new Set(values).size === values.length, {
+        message: "optionalCapabilities must not contain duplicates",
+      }),
     configSchema: ConfigSchemaSchema.optional(),
     oauth: OAuthConfigSchema.optional(),
   })
   .strict()
   .superRefine((manifest, context) => {
+    const duplicateCapability = manifest.requiredCapabilities.find(
+      (capability) => manifest.optionalCapabilities.includes(capability),
+    );
+    if (duplicateCapability) {
+      context.addIssue({
+        code: "custom",
+        path: ["optionalCapabilities"],
+        message: `Capability '${duplicateCapability}' cannot be both required and optional`,
+      });
+    }
     if (!manifest.oauth) return;
     if (!manifest.requiredCapabilities.includes("oauth")) {
       context.addIssue({
@@ -148,6 +175,7 @@ export interface ExtensionPackageDescriptor {
   configSchema?: ExtensionPackageManifest["configSchema"];
   oauth?: ExtensionPackageManifest["oauth"];
   requiredCapabilities: ExtensionHostCapability[];
+  optionalCapabilities: ExtensionHostCapability[];
 }
 
 export interface ExtensionPackageInfo extends ExtensionPackageDescriptor {
@@ -171,6 +199,7 @@ export function createExtensionPackageDescriptor(
     configSchema: manifest.configSchema,
     oauth: manifest.oauth,
     requiredCapabilities: manifest.requiredCapabilities,
+    optionalCapabilities: manifest.optionalCapabilities,
   };
 }
 
@@ -178,25 +207,59 @@ export function wrapExtensionWithPackageManifest(
   extension: RagdollExtension,
   packageMetadata: Pick<
     ExtensionManifest,
-    "id" | "name" | "version" | "description" | "requiredCapabilities"
+    | "id"
+    | "name"
+    | "version"
+    | "description"
+    | "requiredCapabilities"
+    | "optionalCapabilities"
   >,
 ): RagdollExtension {
-  const requiredCapabilities = [
-    ...new Set([
-      ...(extension.manifest.requiredCapabilities ?? []),
-      ...(packageMetadata.requiredCapabilities ?? []),
-    ]),
-  ];
+  const runtimeRequired = extension.manifest.requiredCapabilities ?? [];
+  const packageRequired = packageMetadata.requiredCapabilities ?? [];
+  assertMatchingHostCapabilities(
+    extension.manifest.id,
+    "required",
+    runtimeRequired,
+    packageRequired,
+  );
+  const runtimeOptional = extension.manifest.optionalCapabilities ?? [];
+  const packageOptional = packageMetadata.optionalCapabilities ?? [];
+  assertMatchingHostCapabilities(
+    extension.manifest.id,
+    "optional",
+    runtimeOptional,
+    packageOptional,
+  );
 
   return {
     manifest: {
       ...extension.manifest,
       ...packageMetadata,
-      requiredCapabilities,
+      requiredCapabilities: packageRequired,
+      optionalCapabilities: packageOptional,
     },
     activate: extension.activate.bind(extension),
     deactivate: extension.deactivate?.bind(extension),
   };
+}
+
+function assertMatchingHostCapabilities(
+  extensionId: string,
+  kind: "required" | "optional",
+  runtimeCapabilities: ReadonlyArray<ExtensionHostCapability>,
+  packageCapabilities: ReadonlyArray<ExtensionHostCapability>,
+): void {
+  const runtime = [...runtimeCapabilities].sort();
+  const packageManifest = [...packageCapabilities].sort();
+  if (
+    runtime.length !== packageManifest.length ||
+    runtime.some((capability, index) => capability !== packageManifest[index])
+  ) {
+    throw new Error(
+      `Extension '${extensionId}' runtime ${kind} host capabilities do not match its package manifest`,
+    );
+  }
 }
 
 /**
@@ -539,6 +602,7 @@ export class ExtensionLoader {
           packageJson.description ??
           extension.manifest.description,
         requiredCapabilities: packageManifest.requiredCapabilities,
+        optionalCapabilities: packageManifest.optionalCapabilities,
       });
 
       const host = this.resolveHostEnvironment(finalExtension.manifest);

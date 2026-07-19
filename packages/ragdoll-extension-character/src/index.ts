@@ -257,34 +257,23 @@ import {
 } from "@vokality/ragdoll-extensions";
 
 const DEFAULT_EXTENSION_ID = "character";
-
-export interface CharacterRuntimeOptions {
-  /** Override the channel used for IPC forwarding (default: extension-tool:<id>) */
-  channelId?: string;
-  /** Override the extension id included in forwarded payloads */
-  extensionId?: string;
-}
+const CHARACTER_IPC_CHANNEL = `extension-tool:${DEFAULT_EXTENSION_ID}`;
 
 /**
  * Create runtime contributions for the character extension.
  */
 function createRuntime(
-  options: CharacterRuntimeOptions | undefined,
   host: ExtensionHostEnvironment,
 ): ExtensionRuntimeContribution {
-  const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
-  const channelId = options?.channelId ?? `extension-tool:${extensionId}`;
+  const ipc = host.ipc;
+  if (!ipc) throw new Error("Character requires the host IPC capability");
 
   const forward = (
     methodName: string,
     args: Record<string, unknown>,
   ): ToolResult => {
-    if (!host.ipc?.publish) {
-      return { success: false, error: "Host IPC capability is not available" };
-    }
-    host.logger?.debug?.(`[${extensionId}] forwarding tool '${methodName}'`);
-    host.ipc.publish(channelId, {
-      extensionId,
+    ipc.publish(CHARACTER_IPC_CHANNEL, {
+      extensionId: DEFAULT_EXTENSION_ID,
       tool: methodName,
       args,
     });
@@ -308,14 +297,14 @@ function createRuntime(
 /**
  * Create the character extension.
  */
-export function createExtension(
-  _config?: Record<string, unknown>,
-): RagdollExtension {
+export function createExtension(): RagdollExtension {
   return defineExtension({
     id: DEFAULT_EXTENSION_ID,
     name: "Character",
     version: "0.1.0",
     description: "Facial expressions and animations",
-    createRuntime: (host, _context) => createRuntime(undefined, host),
+    requiredCapabilities: ["ipc"],
+    optionalCapabilities: [],
+    createRuntime: (host) => createRuntime(host),
   });
 }

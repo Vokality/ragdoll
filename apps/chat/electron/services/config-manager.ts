@@ -14,6 +14,7 @@ import type {
   ExtensionConfigStatus,
   HostConfigCapability,
 } from "@vokality/ragdoll-extensions";
+import type { ServiceLogger } from "./service-logger.js";
 
 // =============================================================================
 // Types
@@ -23,18 +24,13 @@ export interface ConfigManagerConfig {
   /** Extension ID */
   extensionId: string;
   /** Config schema from package.json */
-  schema?: ConfigSchema;
+  schema: ConfigSchema;
   /** Load config values from storage */
   loadValues: () => Promise<ConfigValues | null>;
   /** Save config values to storage */
   saveValues: (values: ConfigValues) => Promise<void>;
   /** Logger */
-  logger?: {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
-  };
+  logger: ServiceLogger;
 }
 
 type ConfigChangeListener = (values: ConfigValues) => void;
@@ -53,11 +49,9 @@ export class ConfigManager implements HostConfigCapability {
     this.config = config;
 
     // Initialize with defaults from schema
-    if (config.schema) {
-      for (const [key, field] of Object.entries(config.schema)) {
-        if (field.default !== undefined) {
-          this.values[key] = field.default as string | number | boolean;
-        }
+    for (const [key, field] of Object.entries(config.schema)) {
+      if (field.default !== undefined) {
+        this.values[key] = field.default as string | number | boolean;
       }
     }
   }
@@ -71,7 +65,7 @@ export class ConfigManager implements HostConfigCapability {
     const stored = await this.config.loadValues();
     if (stored) {
       for (const [key, value] of Object.entries(stored)) {
-        const field = this.config.schema?.[key];
+        const field = this.config.schema[key];
         if (!field) throw new Error(`Unknown config field: ${key}`);
         const error = this.validateValue(key, value, field);
         if (error) throw new Error(error);
@@ -86,7 +80,7 @@ export class ConfigManager implements HostConfigCapability {
   // HostConfigCapability Implementation
   // ===========================================================================
 
-  getSchema(): ConfigSchema | undefined {
+  getSchema(): ConfigSchema {
     return this.config.schema;
   }
 
@@ -95,35 +89,28 @@ export class ConfigManager implements HostConfigCapability {
   }
 
   getStatus(): ExtensionConfigStatus {
-    const schema = this.config.schema;
     const missingFields: string[] = [];
 
-    if (schema) {
-      for (const [key, field] of Object.entries(schema)) {
-        if (
-          field.required &&
-          (this.values[key] === undefined || this.values[key] === "")
-        ) {
-          missingFields.push(key);
-        }
+    for (const [key, field] of Object.entries(this.config.schema)) {
+      if (
+        field.required &&
+        (this.values[key] === undefined || this.values[key] === "")
+      ) {
+        missingFields.push(key);
       }
     }
 
     // Create values with secrets redacted for display
     const redactedValues: Record<string, unknown> = {};
-    if (schema) {
-      for (const [key, field] of Object.entries(schema)) {
-        const value = this.values[key];
-        // secret property only exists on string and number types
-        const isSecret = "secret" in field && field.secret;
-        if (isSecret && value) {
-          redactedValues[key] = "********";
-        } else {
-          redactedValues[key] = value;
-        }
+    for (const [key, field] of Object.entries(this.config.schema)) {
+      const value = this.values[key];
+      // secret property only exists on string and number types
+      const isSecret = "secret" in field && field.secret;
+      if (isSecret && value) {
+        redactedValues[key] = "********";
+      } else {
+        redactedValues[key] = value;
       }
-    } else {
-      Object.assign(redactedValues, this.values);
     }
 
     return {
@@ -139,10 +126,7 @@ export class ConfigManager implements HostConfigCapability {
   }
 
   async setValue(key: string, value: string | number | boolean): Promise<void> {
-    const schema = this.config.schema;
-
-    // Validate against schema if present
-    const field = schema?.[key];
+    const field = this.config.schema[key];
     if (!field) throw new Error(`Unknown config field: ${key}`);
     const error = this.validateValue(key, value, field);
     if (error) throw new Error(error);
@@ -169,11 +153,9 @@ export class ConfigManager implements HostConfigCapability {
    * Set multiple values at once
    */
   async setValues(values: ConfigValues): Promise<void> {
-    const schema = this.config.schema;
-
     // Validate all values first
     for (const [key, value] of Object.entries(values)) {
-      const field = schema?.[key];
+      const field = this.config.schema[key];
       if (!field) throw new Error(`Unknown config field: ${key}`);
       const error = this.validateValue(key, value, field);
       if (error) {
@@ -198,11 +180,9 @@ export class ConfigManager implements HostConfigCapability {
     const nextValues: ConfigValues = {};
 
     // Re-apply defaults
-    if (this.config.schema) {
-      for (const [key, field] of Object.entries(this.config.schema)) {
-        if (field.default !== undefined) {
-          nextValues[key] = field.default as string | number | boolean;
-        }
+    for (const [key, field] of Object.entries(this.config.schema)) {
+      if (field.default !== undefined) {
+        nextValues[key] = field.default as string | number | boolean;
       }
     }
 
@@ -296,10 +276,7 @@ export class ConfigManager implements HostConfigCapability {
     level: "debug" | "info" | "warn" | "error",
     ...args: unknown[]
   ): void {
-    const logger = this.config.logger;
-    if (logger) {
-      logger[level](`[Config:${this.config.extensionId}]`, ...args);
-    }
+    this.config.logger[level](`[Config:${this.config.extensionId}]`, ...args);
   }
 
   /**

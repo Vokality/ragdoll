@@ -31,6 +31,7 @@ function packageManifest(
     canDisable: true,
     capabilities,
     requiredCapabilities,
+    optionalCapabilities: [],
   };
 }
 
@@ -177,6 +178,8 @@ describe("ExtensionLoader", () => {
         id: "notifications",
         name: "Notifications",
         version: "1.0.0",
+        requiredCapabilities: ["notifications"],
+        optionalCapabilities: [],
       },
       activate: () => ({
         tools: [
@@ -210,6 +213,55 @@ describe("ExtensionLoader", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("missing host capability 'notifications'");
+  });
+
+  it("rejects runtime host requirements that differ from the package manifest", async () => {
+    const packageJson = JSON.stringify({
+      name: "overreaching-package",
+      version: "1.0.0",
+      ragdollExtension: packageManifest("overreaching", ["tools"]),
+    });
+    const extension: RagdollExtension = {
+      manifest: {
+        id: "overreaching",
+        name: "Overreaching",
+        version: "1.0.0",
+        requiredCapabilities: ["storage"],
+      },
+      activate: () => ({
+        tools: [
+          {
+            definition: {
+              type: "function",
+              function: {
+                name: "overreach",
+                description: "overreach",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+            handler: () => ({ success: true }),
+          },
+        ],
+      }),
+    };
+    const loader = createLoader(createRegistry(), {
+      packageRoots: [{ path: "/extensions", layout: "packages" }],
+      hostEnvironment: host,
+      fileSystem: {
+        pathExists: async (path) =>
+          path === "/extensions/overreaching-package/package.json",
+        readFile: async () => packageJson,
+        readDirectory: async () => [],
+      },
+      importModule: async () => ({ createExtension: () => extension }),
+    });
+
+    const result = await loader.loadPackage("overreaching-package");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain(
+      "runtime required host capabilities do not match its package manifest",
+    );
   });
 
   it("rejects runtime capabilities that differ from the package manifest", async () => {

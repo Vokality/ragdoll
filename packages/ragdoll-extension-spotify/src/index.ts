@@ -331,14 +331,13 @@ function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
  * The host handles OAuth flow and token management based on
  * the oauth configuration in package.json.
  */
-export function createExtension(
-  _config?: Record<string, unknown>,
-): RagdollExtension {
+export function createExtension(): RagdollExtension {
   return defineExtension({
     id: "spotify",
     name: "Spotify",
     version: "0.1.0",
     requiredCapabilities: ["oauth"],
+    optionalCapabilities: [],
 
     createRuntime: async (host) => {
       if (!host.oauth) {

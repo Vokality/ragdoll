@@ -92,9 +92,6 @@ export type {
   OAuthTokens,
   OAuthConnectionStatus,
   OAuthState,
-  OAuthEventType,
-  OAuthEvent,
-  OAuthEventCallback,
   HostOAuthCapability,
 } from "./types/config-schema.js";
 

@@ -10,6 +10,13 @@ const schema = {
   },
 };
 
+const logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+
 describe("ConfigManager", () => {
   it("rejects stored fields outside the declared schema", async () => {
     const manager = new ConfigManager({
@@ -17,6 +24,7 @@ describe("ConfigManager", () => {
       schema,
       loadValues: async () => ({ unexpected: "value" }),
       saveValues: async () => undefined,
+      logger,
     });
 
     await expect(manager.initialize()).rejects.toThrow("Unknown config field");
@@ -31,6 +39,7 @@ describe("ConfigManager", () => {
       saveValues: async () => {
         throw new Error("storage unavailable");
       },
+      logger,
     });
     await manager.initialize();
 

@@ -154,6 +154,8 @@ export interface ExtensionManifest {
   description?: string;
   /** Capabilities that must be provided by the host environment */
   requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+  /** Capabilities used when available without preventing activation */
+  optionalCapabilities?: ReadonlyArray<ExtensionHostCapability>;
 }
 
 /**
@@ -299,6 +301,7 @@ export interface ExtensionConfig {
   version: string;
   description?: string;
   requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+  optionalCapabilities?: ReadonlyArray<ExtensionHostCapability>;
   tools?:
     | ExtensionTool[]
     | ((
@@ -372,9 +375,6 @@ export type {
   OAuthTokens,
   OAuthConnectionStatus,
   OAuthState,
-  OAuthEventType,
-  OAuthEvent,
-  OAuthEventCallback,
   HostOAuthCapability,
 } from "./types/config-schema.js";
 

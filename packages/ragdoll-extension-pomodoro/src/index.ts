@@ -249,30 +249,23 @@ function mapPomodoroState(manager: PomodoroManager): PomodoroStateData {
 }
 
 const DEFAULT_EXTENSION_ID = "pomodoro";
-
-export interface PomodoroRuntimeOptions {
-  /** Override the extension identifier (default: "pomodoro") */
-  extensionId?: string;
-  /** Default focus session duration */
-  sessionDuration?: SessionDuration;
-  /** Default break duration */
-  breakDuration?: BreakDuration;
-}
+const REQUIRED_HOST_CAPABILITIES = ["conversationEvents", "logger"] as const;
 
 function createRuntime(
-  options: PomodoroRuntimeOptions | undefined,
   host: ExtensionHostEnvironment,
 ): ExtensionRuntimeContribution {
   const conversationEvents = host.conversationEvents;
-  if (!conversationEvents) {
-    throw new Error("Pomodoro requires the conversationEvents host capability");
+  const logger = host.logger;
+  if (!conversationEvents || !logger) {
+    throw new Error(
+      "Pomodoro requires conversationEvents and logger host capabilities",
+    );
   }
 
-  const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
-  const sessionDuration = options?.sessionDuration ?? DEFAULT_SESSION_DURATION;
-  const breakDuration = options?.breakDuration ?? DEFAULT_BREAK_DURATION;
-
-  const manager = createPomodoroManager(sessionDuration, breakDuration);
+  const manager = createPomodoroManager(
+    DEFAULT_SESSION_DURATION,
+    DEFAULT_BREAK_DURATION,
+  );
   const stateListeners = new Set<(state: PomodoroStateData) => void>();
 
   const notify = (state: PomodoroStateData): void => {
@@ -300,7 +293,7 @@ function createRuntime(
         deduplicationKey: `${event.type}:${event.timestamp}`,
       })
       .catch((error: unknown) => {
-        host.logger?.error("Failed to publish timer completion", {
+        logger.error("Failed to publish timer completion", {
           error: error instanceof Error ? error.message : String(error),
         });
       });
@@ -343,7 +336,7 @@ function createRuntime(
   };
 
   const stateChannel: ExtensionStateChannel<PomodoroStateData> = {
-    id: `${extensionId}:state`,
+    id: `${DEFAULT_EXTENSION_ID}:state`,
     description: "Pomodoro timer state",
     getState: () => mapPomodoroState(manager),
     subscribe: (listener: (state: PomodoroStateData) => void) => {
@@ -488,7 +481,7 @@ function createRuntime(
     stateChannels: [stateChannel],
     slots: [
       {
-        id: `${extensionId}.main`,
+        id: `${DEFAULT_EXTENSION_ID}.main`,
         label: "Timer",
         icon: "timer",
         priority: 90,
@@ -512,16 +505,14 @@ import {
 /**
  * Create the pomodoro extension.
  */
-export function createExtension(
-  config?: Record<string, unknown>,
-): RagdollExtension {
+export function createExtension(): RagdollExtension {
   return defineExtension({
     id: DEFAULT_EXTENSION_ID,
     name: "Pomodoro Timer",
     version: "0.1.0",
     description: "Pomodoro-style focus sessions and notifications",
-    requiredCapabilities: ["conversationEvents"],
-    createRuntime: (host, _context) =>
-      createRuntime(config as PomodoroRuntimeOptions | undefined, host),
+    requiredCapabilities: REQUIRED_HOST_CAPABILITIES,
+    optionalCapabilities: ["notifications"],
+    createRuntime: (host) => createRuntime(host),
   });
 }

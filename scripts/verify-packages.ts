@@ -124,6 +124,36 @@ for (const [factory, packageJson] of factories) {
       "A packed extension runtime does not match its canonical package manifest.",
     );
   }
+  const runtimeRequirements = [
+    ...(runtime.manifest.requiredCapabilities ?? []),
+  ].sort();
+  const packageRequirements = [...descriptor.requiredCapabilities].sort();
+  if (
+    runtimeRequirements.length !== packageRequirements.length ||
+    runtimeRequirements.some(
+      (capability, index) => capability !== packageRequirements[index],
+    )
+  ) {
+    throw new Error(
+      "An extension runtime does not match its package host requirements.",
+    );
+  }
+  const runtimeOptionalCapabilities = [
+    ...(runtime.manifest.optionalCapabilities ?? []),
+  ].sort();
+  const packageOptionalCapabilities = [
+    ...descriptor.optionalCapabilities,
+  ].sort();
+  if (
+    runtimeOptionalCapabilities.length !== packageOptionalCapabilities.length ||
+    runtimeOptionalCapabilities.some(
+      (capability, index) => capability !== packageOptionalCapabilities[index],
+    )
+  ) {
+    throw new Error(
+      "An extension runtime does not match its package optional capabilities.",
+    );
+  }
 
   const extension = wrapExtensionWithPackageManifest(runtime, {
     id: descriptor.extensionId,
@@ -131,18 +161,10 @@ for (const [factory, packageJson] of factories) {
     version: descriptor.version,
     description: descriptor.description,
     requiredCapabilities: descriptor.requiredCapabilities,
+    optionalCapabilities: descriptor.optionalCapabilities,
   });
   if (typeof extension.activate !== "function") {
     throw new Error("An extension package did not create a valid extension.");
-  }
-  if (
-    extension.manifest.requiredCapabilities?.some(
-      (capability) => !descriptor.requiredCapabilities.includes(capability),
-    )
-  ) {
-    throw new Error(
-      "An extension runtime requires a capability missing from its package manifest.",
-    );
   }
 }
 

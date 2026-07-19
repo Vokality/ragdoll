@@ -66,17 +66,17 @@ export function useExtensionConfiguration(
 
   useEffect(() => {
     if (!isOpen || !hasOAuth) return;
-    const unsubscribeSuccess = service.onOAuthSuccess((event) => {
+    const unsubscribeConnected = service.onOAuthConnected((event) => {
       if (event.extensionId === extensionId) void loadOAuth();
     });
-    const unsubscribeError = service.onOAuthError((event) => {
+    const unsubscribeFailed = service.onOAuthFailed((event) => {
       if (event.extensionId !== extensionId) return;
-      setError(event.error ?? "OAuth authentication failed");
+      setError(event.error);
       void loadOAuth();
     });
     return () => {
-      unsubscribeSuccess();
-      unsubscribeError();
+      unsubscribeConnected();
+      unsubscribeFailed();
     };
   }, [extensionId, hasOAuth, isOpen, loadOAuth, service]);
 

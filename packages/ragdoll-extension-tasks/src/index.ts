@@ -17,6 +17,8 @@ import type {
   ExtensionRuntimeContribution,
   ExtensionStateChannel,
   ExtensionTool,
+  HostLoggerCapability,
+  HostStorageCapability,
   ToolResult,
   ValidationResult,
 } from "@vokality/ragdoll-extensions";
@@ -343,66 +345,43 @@ const DEFAULT_TASK_STATE: TaskState = {
 
 const DEFAULT_EXTENSION_ID = "tasks";
 const DEFAULT_STORAGE_KEY = "state";
-async function loadPersistedTaskState(
-  host: ExtensionHostEnvironment,
-  extensionId: string,
-  storageKey: string,
-  fallback?: TaskState,
-): Promise<TaskState> {
-  if (host.storage) {
-    try {
-      const stored = await host.storage.read<TaskState>(
-        extensionId,
-        storageKey,
-      );
-      if (stored) {
-        return stored;
-      }
-    } catch (error) {
-      host.logger?.warn?.(
-        `[${extensionId}] Failed to load task state from storage`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
-    }
-  }
+const REQUIRED_HOST_CAPABILITIES = ["storage", "logger"] as const;
 
-  return fallback ?? DEFAULT_TASK_STATE;
+function requireHostCapabilities(host: ExtensionHostEnvironment): {
+  storage: HostStorageCapability;
+  logger: HostLoggerCapability;
+} {
+  if (!host.storage || !host.logger) {
+    throw new Error("Tasks requires host storage and logger capabilities");
+  }
+  return { storage: host.storage, logger: host.logger };
 }
 
-export interface TaskRuntimeOptions {
-  /** Provide a fallback state when no persisted data exists */
-  initialState?: TaskState;
-  /** Custom storage key when falling back to host storage */
-  storageKey?: string;
-  /** Override the extension identifier used for persistence */
-  extensionId?: string;
+async function loadTaskState(
+  storage: HostStorageCapability,
+): Promise<TaskState> {
+  return (
+    (await storage.read<TaskState>(
+      DEFAULT_EXTENSION_ID,
+      DEFAULT_STORAGE_KEY,
+    )) ?? DEFAULT_TASK_STATE
+  );
 }
 
 async function createRuntime(
-  options: TaskRuntimeOptions | undefined,
   host: ExtensionHostEnvironment,
 ): Promise<ExtensionRuntimeContribution> {
-  const extensionId = options?.extensionId ?? DEFAULT_EXTENSION_ID;
-  const storageKey = options?.storageKey ?? DEFAULT_STORAGE_KEY;
-  const startingState = await loadPersistedTaskState(
-    host,
-    extensionId,
-    storageKey,
-    options?.initialState,
-  );
+  const { storage, logger } = requireHostCapabilities(host);
+  const startingState = await loadTaskState(storage);
 
   const manager = createTaskManager(startingState);
   const stateListeners = new Set<(state: TaskState) => void>();
 
   const persistState = async (state: TaskState): Promise<void> => {
     try {
-      if (host.storage) {
-        await host.storage.write(extensionId, storageKey, state);
-      }
+      await storage.write(DEFAULT_EXTENSION_ID, DEFAULT_STORAGE_KEY, state);
     } catch (error) {
-      host.logger?.error?.(`[${extensionId}] Failed to persist task state`, {
+      logger.error(`[${DEFAULT_EXTENSION_ID}] Failed to persist task state`, {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -414,7 +393,7 @@ async function createRuntime(
       try {
         listener(event.state);
       } catch (error) {
-        host.logger?.warn?.(`[${extensionId}] State channel listener error`, {
+        logger.warn(`[${DEFAULT_EXTENSION_ID}] State channel listener error`, {
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -476,7 +455,7 @@ async function createRuntime(
   };
 
   const stateChannel: ExtensionStateChannel<TaskState> = {
-    id: `${extensionId}:state`,
+    id: `${DEFAULT_EXTENSION_ID}:state`,
     description: "Live task state stream",
     getState: () => manager.getState(),
     subscribe: (listener: (state: TaskState) => void) => {
@@ -570,7 +549,7 @@ async function createRuntime(
     stateChannels: [stateChannel],
     slots: [
       {
-        id: `${extensionId}.main`,
+        id: `${DEFAULT_EXTENSION_ID}.main`,
         label: "Tasks",
         icon: "checklist",
         priority: 100,
@@ -594,15 +573,14 @@ import {
 /**
  * Create the tasks extension.
  */
-export function createExtension(
-  config?: Record<string, unknown>,
-): RagdollExtension {
+export function createExtension(): RagdollExtension {
   return defineExtension({
     id: DEFAULT_EXTENSION_ID,
     name: "Task Manager",
     version: "0.1.0",
     description: "Task tracking and management tools",
-    createRuntime: (host, _context) =>
-      createRuntime(config as TaskRuntimeOptions | undefined, host),
+    requiredCapabilities: REQUIRED_HOST_CAPABILITIES,
+    optionalCapabilities: [],
+    createRuntime: (host) => createRuntime(host),
   });
 }

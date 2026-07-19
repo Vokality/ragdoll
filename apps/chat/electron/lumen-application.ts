@@ -57,6 +57,7 @@ export class LumenApplication {
       storage: new ExtensionStorage(config.userExtensionsPath),
       messageBus,
       conversationEvents: this.conversationEvents,
+      logger: console,
       hostData: new ExtensionHostDataRepository(storage, safeStorage),
       oauthRedirects: this.oauthRedirects,
       disabledExtensions,
@@ -64,18 +65,20 @@ export class LumenApplication {
         const result = await this.navigation.open(url);
         if (!result.success) throw new Error(result.error);
       },
-      onSlotStateChange: (extensionId, slotId, state) =>
-        this.rendererEvents.slotChanged({ extensionId, slotId, state }),
-      onSlotsChange: () => this.rendererEvents.slotsChanged(),
+      events: {
+        slotStateChanged: (extensionId, slotId, state) =>
+          this.rendererEvents.slotStateChanged({ extensionId, slotId, state }),
+        slotsChanged: () => this.rendererEvents.slotsChanged(),
+        oauthConnected: (extensionId) => {
+          this.rendererEvents.oauthConnected({ extensionId });
+          this.rendererEvents.focus();
+        },
+        oauthFailed: (extensionId, error) =>
+          this.rendererEvents.oauthFailed({ extensionId, error }),
+      },
       onNotification: Notification.isSupported()
         ? (request) => new Notification(request).show()
         : undefined,
-      onOAuthSucceeded: (extensionId) => {
-        this.rendererEvents.oauthSucceeded({ extensionId });
-        this.rendererEvents.focus();
-      },
-      onOAuthFailed: (extensionId, error) =>
-        this.rendererEvents.oauthFailed({ extensionId, error }),
     });
     this.windows = new WindowService(
       config,

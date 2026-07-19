@@ -13,6 +13,7 @@ describe("built-in extension descriptors", () => {
     expect(spotify).toMatchObject({
       capabilities: ["tools"],
       requiredCapabilities: ["oauth"],
+      optionalCapabilities: [],
       oauth: {
         provider: "spotify",
         clientIdConfigKey: "clientId",

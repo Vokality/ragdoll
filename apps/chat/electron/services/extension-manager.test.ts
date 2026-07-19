@@ -9,6 +9,7 @@ import type { ExtensionPackageDescriptor } from "@vokality/ragdoll-extensions/lo
 import {
   ExtensionManager,
   type BuiltInExtensionDefinition,
+  type ExtensionManagerEventSink,
 } from "./extension-manager.js";
 import { ExtensionStorage } from "../infrastructure/extension-storage.js";
 import { ExtensionMessageBus } from "./extension-message-bus.js";
@@ -33,6 +34,13 @@ const oauthRedirects: OAuthRedirectService = {
   destroy: () => undefined,
 };
 
+const noOpEvents: ExtensionManagerEventSink = {
+  slotStateChanged: () => undefined,
+  slotsChanged: () => undefined,
+  oauthConnected: () => undefined,
+  oauthFailed: () => undefined,
+};
+
 function descriptor(
   id: string,
   capabilities: ExtensionPackageDescriptor["capabilities"],
@@ -40,6 +48,7 @@ function descriptor(
     name?: string;
     canDisable?: boolean;
     requiredCapabilities?: ExtensionPackageDescriptor["requiredCapabilities"];
+    optionalCapabilities?: ExtensionPackageDescriptor["optionalCapabilities"];
     configSchema?: ConfigSchema;
     oauth?: ExtensionPackageDescriptor["oauth"];
   } = {},
@@ -52,6 +61,7 @@ function descriptor(
     canDisable: options.canDisable ?? false,
     capabilities,
     requiredCapabilities: options.requiredCapabilities ?? [],
+    optionalCapabilities: options.optionalCapabilities ?? [],
     configSchema: options.configSchema,
     oauth: options.oauth,
   };
@@ -76,12 +86,22 @@ function createManager(
     storage: new ExtensionStorage("/tmp/ragdoll-extension-manager-test"),
     messageBus: new ExtensionMessageBus(() => undefined),
     conversationEvents,
+    logger: {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    },
     hostData: hostDataStore,
     oauthRedirects,
+    disabledExtensions: [],
     openExternal: async () => {},
-    onSlotStateChange: onSlotStateChange
-      ? () => onSlotStateChange()
-      : undefined,
+    events: {
+      ...noOpEvents,
+      slotStateChanged: onSlotStateChange
+        ? () => onSlotStateChange()
+        : noOpEvents.slotStateChanged,
+    },
   });
 }
 
@@ -356,6 +376,7 @@ describe("ExtensionManager built-in boundaries", () => {
               id: "publisher",
               name: "Publisher",
               version: "1.0.0",
+              requiredCapabilities: ["conversationEvents"],
               tools: [tool],
               onInitialize: async (_context, hostEnvironment) => {
                 if (!hostEnvironment.conversationEvents) {
@@ -407,6 +428,54 @@ describe("ExtensionManager built-in boundaries", () => {
       { extensionId: "publisher", type: "test.completed" },
     ]);
     expect(undeclaredCapabilityWasPresent).toBe(false);
+    await manager.destroy();
+  });
+
+  it("grants only declared required and available optional capabilities", async () => {
+    const receivedHosts: ExtensionHostEnvironment[] = [];
+    const manager = createManager(undefined, [
+      {
+        descriptor: descriptor("isolated", ["tools"], {
+          name: "Isolated",
+          requiredCapabilities: ["storage"],
+          optionalCapabilities: ["notifications"],
+        }),
+        createExtension: () =>
+          createExtension({
+            id: "isolated",
+            name: "Isolated",
+            version: "1.0.0",
+            requiredCapabilities: ["storage"],
+            optionalCapabilities: ["notifications"],
+            onInitialize: (_context, environment) => {
+              receivedHosts.push(environment);
+            },
+            tools: [
+              {
+                definition: {
+                  type: "function",
+                  function: {
+                    name: "isolatedTool",
+                    description: "Isolated tool",
+                    parameters: { type: "object", properties: {} },
+                  },
+                },
+                handler: () => ({ success: true }),
+              },
+            ],
+          }),
+      },
+    ]);
+
+    await manager.initialize();
+
+    const receivedHost = receivedHosts[0];
+    if (!receivedHost) throw new Error("Isolated extension did not initialize");
+    expect(receivedHost?.capabilities).toEqual(new Set(["storage"]));
+    expect(receivedHost?.storage).toBeDefined();
+    expect(receivedHost?.notifications).toBeUndefined();
+    expect(receivedHost?.ipc).toBeUndefined();
+    expect(receivedHost?.logger).toBeUndefined();
     await manager.destroy();
   });
 

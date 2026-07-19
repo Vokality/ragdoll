@@ -42,7 +42,11 @@
       "slots"
     ],
     "requiredCapabilities": [
-      "conversationEvents"
+      "conversationEvents",
+      "logger"
+    ],
+    "optionalCapabilities": [
+      "notifications"
     ],
     "entry": "./dist/index.js",
     "canDisable": false

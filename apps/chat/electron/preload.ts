@@ -3,10 +3,12 @@ import type {
   ChatMessageDto,
   CharacterSettings,
   ElectronAPI,
-  OAuthEvent,
+  OAuthConnectedEvent,
+  OAuthFailedEvent,
   SlotActionType,
   SlotChangeEvent,
 } from "./electron-api.js";
+import { EXTENSION_EVENT_CHANNELS } from "./electron-api.js";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Auth
@@ -81,15 +83,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onSlotStateChanged: (callback: (event: SlotChangeEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: SlotChangeEvent) =>
       callback(event);
-    ipcRenderer.on("extension-slot:changed", handler);
+    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.slotStateChanged, handler);
     return () => {
-      ipcRenderer.removeListener("extension-slot:changed", handler);
+      ipcRenderer.removeListener(
+        EXTENSION_EVENT_CHANNELS.slotStateChanged,
+        handler,
+      );
     };
   },
   onExtensionSlotsChanged: (callback: () => void) => {
-    ipcRenderer.on("extension-slots:changed", callback);
+    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.slotsChanged, callback);
     return () => {
-      ipcRenderer.removeListener("extension-slots:changed", callback);
+      ipcRenderer.removeListener(
+        EXTENSION_EVENT_CHANNELS.slotsChanged,
+        callback,
+      );
     };
   },
   executeSlotAction: (
@@ -111,20 +119,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("extensions:oauth-start-flow", extensionId),
   disconnectOAuth: (extensionId: string) =>
     ipcRenderer.invoke("extensions:oauth-disconnect", extensionId),
-  onOAuthSuccess: (callback: (event: OAuthEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, event: OAuthEvent) =>
-      callback(event);
-    ipcRenderer.on("oauth:success", handler);
+  onOAuthConnected: (callback: (event: OAuthConnectedEvent) => void) => {
+    const handler = (
+      _: Electron.IpcRendererEvent,
+      event: OAuthConnectedEvent,
+    ) => callback(event);
+    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.oauthConnected, handler);
     return () => {
-      ipcRenderer.removeListener("oauth:success", handler);
+      ipcRenderer.removeListener(
+        EXTENSION_EVENT_CHANNELS.oauthConnected,
+        handler,
+      );
     };
   },
-  onOAuthError: (callback: (event: OAuthEvent) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, event: OAuthEvent) =>
+  onOAuthFailed: (callback: (event: OAuthFailedEvent) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, event: OAuthFailedEvent) =>
       callback(event);
-    ipcRenderer.on("oauth:error", handler);
+    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.oauthFailed, handler);
     return () => {
-      ipcRenderer.removeListener("oauth:error", handler);
+      ipcRenderer.removeListener(EXTENSION_EVENT_CHANNELS.oauthFailed, handler);
     };
   },
 

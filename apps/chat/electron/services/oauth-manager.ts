@@ -10,6 +10,7 @@ import type {
   OAuthRedirectService,
   OAuthRedirectSession,
 } from "./oauth-loopback-service.js";
+import type { ServiceLogger } from "./service-logger.js";
 
 const TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
 const SCHEDULED_REFRESH_LEAD_MS = 5 * 60 * 1000;
@@ -33,18 +34,17 @@ export interface OAuthManagerConfig {
   saveTokens: (tokens: OAuthTokens) => Promise<void>;
   clearTokens: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
-  onConnected?: () => void;
-  onError?: (error: string) => void;
-  fetch?: (
+  events: OAuthManagerEventSink;
+  fetch: (
     input: string | URL | Request,
     init?: RequestInit,
   ) => Promise<Response>;
-  logger?: {
-    debug: (...args: unknown[]) => void;
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
-  };
+  logger: ServiceLogger;
+}
+
+export interface OAuthManagerEventSink {
+  connected(): void;
+  failed(error: string): void;
 }
 
 interface PendingAuthorization {
@@ -252,7 +252,7 @@ export class OAuthManager implements HostOAuthCapability {
       this.markConnected();
       this.log("info", "OAuth connected");
       this.pendingAuthorization = null;
-      this.config.onConnected?.();
+      this.config.events.connected();
     } catch (error) {
       if (this.pendingAuthorization !== transaction) return;
       this.pendingAuthorization = null;
@@ -325,14 +325,11 @@ export class OAuthManager implements HostOAuthCapability {
   private async requestToken(
     parameters: Record<string, string>,
   ): Promise<z.infer<typeof oauthTokenResponseSchema>> {
-    const response = await (this.config.fetch ?? fetch)(
-      this.config.oauthConfig.tokenUrl,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(parameters),
-      },
-    );
+    const response = await this.config.fetch(this.config.oauthConfig.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(parameters),
+    });
     if (!response.ok) {
       throw new Error(
         `OAuth token request failed with status ${response.status}: ${await readOAuthError(response)}`,
@@ -379,7 +376,7 @@ export class OAuthManager implements HostOAuthCapability {
   private fail(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     this.setState({ status: "error", isAuthenticated: false, error: message });
-    this.config.onError?.(message);
+    this.config.events.failed(message);
   }
 
   private setState(partial: Partial<OAuthState>): void {
@@ -425,7 +422,7 @@ export class OAuthManager implements HostOAuthCapability {
     level: "debug" | "info" | "warn" | "error",
     ...args: unknown[]
   ): void {
-    this.config.logger?.[level](`[OAuth:${this.config.extensionId}]`, ...args);
+    this.config.logger[level](`[OAuth:${this.config.extensionId}]`, ...args);
   }
 }
 

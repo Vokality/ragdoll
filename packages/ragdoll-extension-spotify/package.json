@@ -42,6 +42,7 @@
     "requiredCapabilities": [
       "oauth"
     ],
+    "optionalCapabilities": [],
     "entry": "./dist/index.js",
     "canDisable": true,
     "configSchema": {

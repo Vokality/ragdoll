@@ -5,25 +5,20 @@
  * storing state and emitting events when changes occur.
  */
 
-// Browser-compatible UUID generation
 function generateUUID(): string {
-  // Use crypto.randomUUID if available (modern browsers and Node.js 19+)
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  // Fallback for older environments
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return crypto.randomUUID();
 }
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export const TASK_STATUSES = ["todo", "in_progress", "blocked", "done"] as const;
+export const TASK_STATUSES = [
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export interface Task {
@@ -71,10 +66,8 @@ export class TaskManager {
   private isExpanded: boolean = false;
   private listeners: Set<TaskEventCallback> = new Set();
 
-  constructor(initialState?: TaskState) {
-    if (initialState) {
-      this.loadState(initialState);
-    }
+  constructor(initialState: TaskState) {
+    this.loadState(initialState);
   }
 
   // ===========================================================================
@@ -90,7 +83,7 @@ export class TaskManager {
       this.tasks.set(task.id, { ...task });
     }
     this.activeTaskId = state.activeTaskId;
-    this.isExpanded = state.isExpanded ?? false;
+    this.isExpanded = state.isExpanded;
     this.emit("state:changed");
   }
 
@@ -161,7 +154,7 @@ export class TaskManager {
   updateTaskStatus(
     taskId: string,
     status: TaskStatus,
-    blockedReason?: string
+    blockedReason?: string,
   ): Task | null {
     const task = this.tasks.get(taskId);
     if (!task) return null;
@@ -391,6 +384,6 @@ export class TaskManager {
 /**
  * Create a new TaskManager instance.
  */
-export function createTaskManager(initialState?: TaskState): TaskManager {
+export function createTaskManager(initialState: TaskState): TaskManager {
   return new TaskManager(initialState);
 }

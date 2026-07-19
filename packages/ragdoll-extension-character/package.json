@@ -41,6 +41,7 @@
     "requiredCapabilities": [
       "ipc"
     ],
+    "optionalCapabilities": [],
     "entry": "./dist/index.js",
     "canDisable": false
   }

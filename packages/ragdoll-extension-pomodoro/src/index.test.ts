@@ -20,9 +20,17 @@ describe("Pomodoro conversation events", () => {
       parseExtensionPackageJson(JSON.stringify(packageJson)),
     );
 
-    expect(descriptor?.requiredCapabilities).toEqual(["conversationEvents"]);
+    expect(descriptor?.requiredCapabilities).toEqual([
+      "conversationEvents",
+      "logger",
+    ]);
     expect(createExtension().manifest.requiredCapabilities).toEqual([
       "conversationEvents",
+      "logger",
+    ]);
+    expect(descriptor?.optionalCapabilities).toEqual(["notifications"]);
+    expect(createExtension().manifest.optionalCapabilities).toEqual([
+      "notifications",
     ]);
   });
 
@@ -30,18 +38,21 @@ describe("Pomodoro conversation events", () => {
     jest.useFakeTimers({ now: 1_000 });
     const published: ConversationEventInput[] = [];
     const host: ExtensionHostEnvironment = {
-      capabilities: new Set(["conversationEvents"]),
+      capabilities: new Set(["conversationEvents", "logger"]),
       conversationEvents: {
         publish: async (event) => {
           published.push(event);
           return { eventId: `event-${published.length}` };
         },
       },
+      logger: {
+        debug: () => undefined,
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
     };
-    const extension = createExtension({
-      sessionDuration: 5,
-      breakDuration: 5,
-    });
+    const extension = createExtension();
     const runtime = await extension.activate(host, {
       instanceId: "pomodoro-test",
       createdAt: Date.now(),
@@ -51,7 +62,10 @@ describe("Pomodoro conversation events", () => {
     );
     if (!start) throw new Error("startPomodoro tool was not registered");
 
-    await start.handler({}, { extensionId: "pomodoro" });
+    await start.handler(
+      { sessionDuration: 5, breakDuration: 5 },
+      { extensionId: "pomodoro" },
+    );
     jest.advanceTimersByTime(5 * 60 * 1_000);
     await Promise.resolve();
     jest.advanceTimersByTime(5 * 60 * 1_000);

@@ -2,6 +2,10 @@ import { describe, expect, it } from "bun:test";
 import type { OAuthTokens } from "@vokality/ragdoll-extensions";
 import { OAuthManager } from "./oauth-manager.js";
 import type {
+  OAuthManagerConfig,
+  OAuthManagerEventSink,
+} from "./oauth-manager.js";
+import type {
   OAuthCallbackResult,
   OAuthRedirectService,
 } from "./oauth-loopback-service.js";
@@ -43,6 +47,18 @@ const oauthConfig = {
   pkce: true as const,
 };
 
+const noOpEvents: OAuthManagerEventSink = {
+  connected: () => undefined,
+  failed: () => undefined,
+};
+
+const noOpLogger: OAuthManagerConfig["logger"] = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+
 describe("OAuthManager", () => {
   it("rejects a callback with the wrong one-use state before token exchange", async () => {
     const callback = deferred<OAuthCallbackResult>();
@@ -62,6 +78,8 @@ describe("OAuthManager", () => {
       openExternal: async (url) => {
         openedUrl = url;
       },
+      events: noOpEvents,
+      logger: noOpLogger,
       fetch: async () => {
         tokenRequests += 1;
         return new Response();
@@ -104,6 +122,8 @@ describe("OAuthManager", () => {
       openExternal: async (url) => {
         openedUrl = url;
       },
+      events: noOpEvents,
+      logger: noOpLogger,
       fetch: async (_url, request) => {
         const body = new URLSearchParams(String(request?.body));
         expect(body.get("code_verifier")?.length).toBe(64);
@@ -157,6 +177,8 @@ describe("OAuthManager", () => {
       saveTokens: async () => undefined,
       clearTokens: async () => undefined,
       openExternal: async () => undefined,
+      events: noOpEvents,
+      logger: noOpLogger,
       fetch: async () => {
         requests += 1;
         return refreshResponse.promise;

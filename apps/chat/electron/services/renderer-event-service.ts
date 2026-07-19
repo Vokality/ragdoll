@@ -1,9 +1,11 @@
 import type { BrowserWindow } from "electron";
 import type {
   ChatMessageDto,
-  OAuthEvent,
+  OAuthConnectedEvent,
+  OAuthFailedEvent,
   SlotChangeEvent,
 } from "../electron-api.js";
+import { EXTENSION_EVENT_CHANNELS } from "../electron-api.js";
 
 export class RendererEventService {
   private window: BrowserWindow | null = null;
@@ -24,20 +26,20 @@ export class RendererEventService {
     this.send("chat:conversation-changed", conversation);
   }
 
-  slotChanged(event: SlotChangeEvent): void {
-    this.send("extension-slot:changed", event);
+  slotStateChanged(event: SlotChangeEvent): void {
+    this.send(EXTENSION_EVENT_CHANNELS.slotStateChanged, event);
   }
 
   slotsChanged(): void {
-    this.send("extension-slots:changed");
+    this.send(EXTENSION_EVENT_CHANNELS.slotsChanged);
   }
 
-  oauthSucceeded(event: OAuthEvent): void {
-    this.send("oauth:success", event);
+  oauthConnected(event: OAuthConnectedEvent): void {
+    this.send(EXTENSION_EVENT_CHANNELS.oauthConnected, event);
   }
 
-  oauthFailed(event: OAuthEvent): void {
-    this.send("oauth:error", event);
+  oauthFailed(event: OAuthFailedEvent): void {
+    this.send(EXTENSION_EVENT_CHANNELS.oauthFailed, event);
   }
 
   focus(): void {
