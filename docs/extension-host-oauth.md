@@ -102,7 +102,11 @@ Refresh tokens remain private to the host.
 - Tokens and secret config values are absent from plaintext application and
   extension storage.
 - Concurrent access-token requests share one refresh.
-- Spotify can be configured, authenticated, searched, and controlled through
-  the generic host capabilities.
-- Spotify correctly distinguishes no playback from API failure and accepts only
-  the current development-mode search limit.
+- Spotify can be configured, authenticated, and controlled through the generic
+  host capabilities.
+- Spotify search resolution remains inside the extension service. The current
+  playback tool exposes only track title and artist names, or episode title and
+  show; IDs, URIs, artwork, album, device, progress, and raw provider payloads
+  do not enter agent tool results.
+- Spotify correctly distinguishes idle playback from API failure and treats
+  undocumented provider payloads as contract violations.

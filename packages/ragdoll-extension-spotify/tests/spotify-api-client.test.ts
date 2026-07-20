@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { HostOAuthCapability } from "@vokality/ragdoll-extensions";
-import { createExtension } from "../src/index.js";
 import { createSpotifyApiClient } from "../src/spotify-api-client.js";
 
 const oauth: HostOAuthCapability = {
@@ -13,114 +12,146 @@ const oauth: HostOAuthCapability = {
 };
 
 describe("SpotifyApiClient", () => {
-  it("treats only a 204 response as empty playback", async () => {
+  it("distinguishes empty playback from an API failure", async () => {
     const emptyClient = createSpotifyApiClient(
       oauth,
       async () => new Response(null, { status: 204 }),
-      () => 123,
     );
-    expect(await emptyClient.getPlaybackState()).toMatchObject({
-      isPlaying: false,
+    expect(await emptyClient.getCurrentPlayback()).toEqual({
+      status: "idle",
       item: null,
-      device: null,
     });
 
-    const failedClient = createSpotifyApiClient(
-      oauth,
-      async () =>
-        Response.json({ error: { message: "token expired" } }, { status: 401 }),
-      () => 123,
+    const failedClient = createSpotifyApiClient(oauth, async () =>
+      Response.json({ error: { message: "token expired" } }, { status: 401 }),
     );
-    await expect(failedClient.getPlaybackState()).rejects.toThrow(
+    await expect(failedClient.getCurrentPlayback()).rejects.toThrow(
       "Spotify authentication expired",
     );
   });
 
-  it("maps episode playback and requests every supported playback item type", async () => {
+  it("returns only the current track title and artist names", async () => {
     let requestedUrl = "";
-    const client = createSpotifyApiClient(
-      oauth,
-      async (input) => {
-        requestedUrl = String(input);
-        return Response.json({
-          is_playing: true,
-          progress_ms: 2_000,
-          timestamp: 123,
-          shuffle_state: false,
-          repeat_state: "off",
-          device: {
-            id: null,
-            name: "Desktop",
-            type: "Computer",
-            is_active: true,
-            volume_percent: null,
-          },
-          item: {
-            type: "episode",
-            id: "episode-id",
-            name: "Episode",
-            uri: "spotify:episode:episode-id",
-            duration_ms: 60_000,
-            images: [{ url: "https://image", height: 300, width: 300 }],
-            show: {
-              id: "show-id",
-              name: "Show",
-              uri: "spotify:show:show-id",
-            },
-          },
-        });
-      },
-      () => 123,
-    );
+    const client = createSpotifyApiClient(oauth, async (input) => {
+      requestedUrl = String(input);
+      return Response.json({
+        is_playing: true,
+        item: {
+          type: "track",
+          id: "must-not-leak",
+          uri: "spotify:track:must-not-leak",
+          name: "So What",
+          artists: [
+            { id: "must-not-leak", name: "Miles Davis" },
+            { id: "must-not-leak", name: "John Coltrane" },
+          ],
+          album: { name: "Must Not Leak" },
+        },
+        device: { id: "must-not-leak", name: "Must Not Leak" },
+        progress_ms: 12_345,
+      });
+    });
 
-    expect(await client.getPlaybackState()).toMatchObject({
+    expect(await client.getCurrentPlayback()).toEqual({
+      status: "playing",
       item: {
-        type: "episode",
-        id: "episode-id",
-        show: { id: "show-id" },
+        type: "track",
+        title: "So What",
+        artists: ["Miles Davis", "John Coltrane"],
       },
-      device: { id: null, volumePercent: null },
-      timestamp: 123,
     });
     expect(new URL(requestedUrl).searchParams.get("additional_types")).toBe(
       "track,episode",
     );
   });
 
-  it("encodes device identifiers in playback commands", async () => {
-    let requestedUrl = "";
-    const client = createSpotifyApiClient(
-      oauth,
-      async (input) => {
-        requestedUrl = String(input);
-        return new Response(null, { status: 204 });
+  it("returns episode title and show without additional metadata", async () => {
+    const client = createSpotifyApiClient(oauth, async () =>
+      Response.json({
+        is_playing: false,
+        item: {
+          type: "episode",
+          id: "must-not-leak",
+          name: "Episode title",
+          show: { id: "must-not-leak", name: "Show name" },
+          images: [{ url: "https://must-not-leak" }],
+        },
+      }),
+    );
+
+    expect(await client.getCurrentPlayback()).toEqual({
+      status: "paused",
+      item: {
+        type: "episode",
+        title: "Episode title",
+        show: "Show name",
       },
-      () => 123,
-    );
-
-    await client.pause("living room/device");
-    expect(new URL(requestedUrl).searchParams.get("device_id")).toBe(
-      "living room/device",
-    );
+    });
   });
-});
 
-describe("Spotify tools", () => {
-  it("enforces the current development-mode search limit", async () => {
-    const runtime = await createExtension().activate(
-      { capabilities: new Set(["oauth"]), oauth },
-      { instanceId: "test", createdAt: Date.now() },
-    );
-    const search = runtime.tools?.find(
-      ({ definition }) => definition.function.name === "searchSpotify",
+  it("resolves and plays the first matching track inside the service", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const client = createSpotifyApiClient(oauth, async (input, init) => {
+      requests.push({ url: String(input), init });
+      if (requests.length === 1) {
+        return Response.json({
+          tracks: {
+            items: [
+              {
+                uri: "spotify:track:track-id",
+                name: "Must remain inside the Spotify client",
+              },
+            ],
+          },
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+
+    expect(await client.playSearch("jazz", "track")).toBe(true);
+    expect(new URL(requests[0]!.url).searchParams.get("q")).toBe("jazz");
+    expect(new URL(requests[0]!.url).searchParams.get("type")).toBe("track");
+    expect(new URL(requests[0]!.url).searchParams.get("limit")).toBe("1");
+    expect(requests[1]!.url).toEndWith("/me/player/play");
+    expect(JSON.parse(String(requests[1]!.init?.body))).toEqual({
+      uris: ["spotify:track:track-id"],
+    });
+  });
+
+  it("uses context playback for albums, artists, and playlists", async () => {
+    const requestBodies: string[] = [];
+    const client = createSpotifyApiClient(oauth, async (_input, init) => {
+      if (init?.method === "PUT") {
+        requestBodies.push(String(init.body));
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({
+        playlists: { items: [{ uri: "spotify:playlist:playlist-id" }] },
+      });
+    });
+
+    expect(await client.playSearch("focus", "playlist")).toBe(true);
+    expect(JSON.parse(requestBodies[0]!)).toEqual({
+      context_uri: "spotify:playlist:playlist-id",
+    });
+  });
+
+  it("returns no match without issuing a playback request", async () => {
+    let requestCount = 0;
+    const client = createSpotifyApiClient(oauth, async () => {
+      requestCount += 1;
+      return Response.json({ tracks: { items: [] } });
+    });
+
+    expect(await client.playSearch("missing", "track")).toBe(false);
+    expect(requestCount).toBe(1);
+  });
+
+  it("rejects undocumented null search entries as provider contract violations", async () => {
+    const client = createSpotifyApiClient(oauth, async () =>
+      Response.json({ playlists: { items: [null] } }),
     );
 
-    expect(search?.validate?.({ query: "music", limit: 10 })).toEqual({
-      valid: true,
-    });
-    expect(search?.validate?.({ query: "music", limit: 11 })).toEqual({
-      valid: false,
-      error: "limit must be a number between 1 and 10",
-    });
+    await expect(client.playSearch("jazz", "playlist")).rejects.toThrow();
   });
 });
