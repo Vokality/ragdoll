@@ -5,7 +5,7 @@ import type {
   OAuthFailedEvent,
   SlotChangeEvent,
 } from "../electron-api.js";
-import { EXTENSION_EVENT_CHANNELS } from "../electron-api.js";
+import { IPC_CHANNELS } from "../electron-api.js";
 
 export class RendererEventService {
   private window: BrowserWindow | null = null;
@@ -19,27 +19,27 @@ export class RendererEventService {
   }
 
   functionCall(name: string, args: Record<string, unknown>): void {
-    this.send("chat:function-call", name, args);
+    this.send(IPC_CHANNELS.chat.functionCall, name, args);
   }
 
   conversationChanged(conversation: ChatMessageDto[]): void {
-    this.send("chat:conversation-changed", conversation);
+    this.send(IPC_CHANNELS.chat.conversationChanged, conversation);
   }
 
   slotStateChanged(event: SlotChangeEvent): void {
-    this.send(EXTENSION_EVENT_CHANNELS.slotStateChanged, event);
+    this.send(IPC_CHANNELS.extensions.slotStateChanged, event);
   }
 
   slotsChanged(): void {
-    this.send(EXTENSION_EVENT_CHANNELS.slotsChanged);
+    this.send(IPC_CHANNELS.extensions.slotsChanged);
   }
 
   oauthConnected(event: OAuthConnectedEvent): void {
-    this.send(EXTENSION_EVENT_CHANNELS.oauthConnected, event);
+    this.send(IPC_CHANNELS.extensions.oauthConnected, event);
   }
 
   oauthFailed(event: OAuthFailedEvent): void {
-    this.send(EXTENSION_EVENT_CHANNELS.oauthFailed, event);
+    this.send(IPC_CHANNELS.extensions.oauthFailed, event);
   }
 
   focus(): void {

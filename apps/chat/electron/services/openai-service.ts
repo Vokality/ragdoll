@@ -265,15 +265,17 @@ class OpenAICompletionSession implements AgentCompletionSession {
   }
 }
 
-const openAICompletionSessions: AgentCompletionSessionFactory = {
-  create: (apiKey, config) => new OpenAICompletionSession(apiKey, config),
-};
+export function createOpenAICompletionSessionFactory(): AgentCompletionSessionFactory {
+  return {
+    create: (apiKey, config) => new OpenAICompletionSession(apiKey, config),
+  };
+}
 
 export class OpenAIAgentRunner implements AgentRunner {
   constructor(
     private readonly extensions: AgentToolService,
     private readonly config: ChatCompletionConfig,
-    private readonly completionSessions: AgentCompletionSessionFactory = openAICompletionSessions,
+    private readonly completionSessions: AgentCompletionSessionFactory,
   ) {}
 
   async runUserTurn(

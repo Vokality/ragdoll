@@ -3,9 +3,14 @@ import { CharacterController } from "../../src/controllers/character-controller"
 
 describe("CharacterController", () => {
   let controller: CharacterController;
+  const defaultConfig = {
+    themeId: "default",
+    variantId: "human",
+    onEventSubscriberError: () => undefined,
+  };
 
   beforeEach(() => {
-    controller = new CharacterController();
+    controller = new CharacterController(defaultConfig);
   });
 
   describe("initialization", () => {
@@ -16,13 +21,21 @@ describe("CharacterController", () => {
     });
 
     it("should initialize with custom theme", () => {
-      const customController = new CharacterController("robot");
+      const customController = new CharacterController({
+        themeId: "robot",
+        variantId: "human",
+        onEventSubscriberError: () => undefined,
+      });
       const state = customController.getState();
       expect(state).toBeDefined();
     });
 
     it("should initialize with custom theme and variant", () => {
-      const customController = new CharacterController("robot", "einstein");
+      const customController = new CharacterController({
+        themeId: "robot",
+        variantId: "einstein",
+        onEventSubscriberError: () => undefined,
+      });
       const state = customController.getState();
       expect(state).toBeDefined();
     });
@@ -125,7 +138,11 @@ describe("CharacterController", () => {
 
     it("should set variant", () => {
       // CharacterController doesn't expose setVariant, variant is set in constructor
-      const customController = new CharacterController("default", "einstein");
+      const customController = new CharacterController({
+        themeId: "default",
+        variantId: "einstein",
+        onEventSubscriberError: () => undefined,
+      });
       const geometry = customController.getGeometry();
       expect(geometry.variant.id).toBe("einstein");
     });
@@ -157,7 +174,7 @@ describe("CharacterController", () => {
 
   describe("event bus integration", () => {
     it("should emit mood change events", () => {
-      const customController = new CharacterController();
+      const customController = new CharacterController(defaultConfig);
       // Access event bus through state manager
       const stateManager = (customController as any).stateManager;
       const bus = stateManager.getEventBus();
@@ -173,7 +190,7 @@ describe("CharacterController", () => {
     });
 
     it("should emit action triggered events", () => {
-      const customController = new CharacterController();
+      const customController = new CharacterController(defaultConfig);
       const stateManager = (customController as any).stateManager;
       const bus = stateManager.getEventBus();
 

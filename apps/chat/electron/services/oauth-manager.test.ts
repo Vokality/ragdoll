@@ -5,6 +5,7 @@ import type {
   OAuthManagerConfig,
   OAuthManagerEventSink,
 } from "./oauth-manager.js";
+import { createHostTimersCapability } from "./host-timers-capability.js";
 import type {
   OAuthCallbackResult,
   OAuthRedirectService,
@@ -59,6 +60,11 @@ const noOpLogger: OAuthManagerConfig["logger"] = {
   error: () => undefined,
 };
 
+const timing = {
+  timers: createHostTimersCapability(),
+  now: Date.now,
+};
+
 describe("OAuthManager", () => {
   it("rejects a callback with the wrong one-use state before token exchange", async () => {
     const callback = deferred<OAuthCallbackResult>();
@@ -84,6 +90,7 @@ describe("OAuthManager", () => {
         tokenRequests += 1;
         return new Response();
       },
+      ...timing,
     });
 
     await manager.startFlow();
@@ -137,6 +144,7 @@ describe("OAuthManager", () => {
           token_type: "Bearer",
         });
       },
+      ...timing,
     });
 
     await manager.startFlow();
@@ -183,6 +191,7 @@ describe("OAuthManager", () => {
         requests += 1;
         return refreshResponse.promise;
       },
+      ...timing,
     });
     await manager.initialize();
 

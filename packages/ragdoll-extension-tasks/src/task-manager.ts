@@ -5,10 +5,6 @@
  * storing state and emitting events when changes occur.
  */
 
-function generateUUID(): string {
-  return crypto.randomUUID();
-}
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -52,6 +48,13 @@ export interface TaskEvent {
 }
 
 export type TaskEventCallback = (event: TaskEvent) => void;
+export type TaskListenerErrorHandler = (error: unknown) => void;
+
+export interface TaskManagerDependencies {
+  createId(): string;
+  now(): number;
+  onListenerError: TaskListenerErrorHandler;
+}
 
 // =============================================================================
 // TaskManager
@@ -66,7 +69,10 @@ export class TaskManager {
   private isExpanded: boolean = false;
   private listeners: Set<TaskEventCallback> = new Set();
 
-  constructor(initialState: TaskState) {
+  constructor(
+    initialState: TaskState,
+    private readonly dependencies: TaskManagerDependencies,
+  ) {
     this.loadState(initialState);
   }
 
@@ -136,10 +142,10 @@ export class TaskManager {
    */
   addTask(text: string, status: TaskStatus = "todo"): Task {
     const task: Task = {
-      id: generateUUID(),
+      id: this.dependencies.createId(),
       text: text.trim(),
       status,
-      createdAt: Date.now(),
+      createdAt: this.dependencies.now(),
     };
 
     this.tasks.set(task.id, task);
@@ -320,14 +326,14 @@ export class TaskManager {
       task,
       taskId: task?.id,
       state: this.getState(),
-      timestamp: Date.now(),
+      timestamp: this.dependencies.now(),
     };
 
     for (const callback of this.listeners) {
       try {
         callback(event);
       } catch (error) {
-        console.error("[TaskManager] Error in event listener:", error);
+        this.dependencies.onListenerError(error);
       }
     }
   }
@@ -379,11 +385,4 @@ export class TaskManager {
       done,
     };
   }
-}
-
-/**
- * Create a new TaskManager instance.
- */
-export function createTaskManager(initialState: TaskState): TaskManager {
-  return new TaskManager(initialState);
 }

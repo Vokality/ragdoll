@@ -3,21 +3,17 @@ import type { RagdollTheme } from "@vokality/ragdoll";
 
 interface SpeechBubbleProps {
   text: string | null;
-  tone?: "default" | "whisper" | "shout";
-  theme?: RagdollTheme;
+  tone: "default" | "whisper" | "shout";
+  theme: RagdollTheme;
 }
 
-export function SpeechBubble({
-  text,
-  tone = "default",
-  theme,
-}: SpeechBubbleProps) {
+export function SpeechBubble({ text, tone, theme }: SpeechBubbleProps) {
   if (!text) return null;
 
   // Derive the bubble palette from the active character theme.
-  const textColor = theme?.colors.hair.light ?? "#f1f5f9";
-  const border = theme?.colors.shadow.color ?? "rgba(148, 163, 184, 0.2)";
-  const background = theme?.colors.shadow.transparent ?? "rgba(0, 0, 0, 0.15)";
+  const textColor = theme.colors.hair.light;
+  const border = theme.colors.shadow.color;
+  const background = theme.colors.shadow.transparent;
 
   const isWhisper = tone === "whisper";
 

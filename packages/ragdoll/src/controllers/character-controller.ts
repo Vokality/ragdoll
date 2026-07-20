@@ -10,8 +10,8 @@ import { StateManager } from "../state/state-manager";
 import { EventBus } from "../state/event-bus";
 import type { FeaturePlugin } from "../plugins/plugin-interface";
 import type { RagdollTheme } from "../themes/types";
-import { getTheme, getDefaultTheme } from "../themes";
-import { getVariant, getDefaultVariant } from "../variants";
+import { getTheme } from "../themes";
+import { getVariant } from "../variants";
 import type { CharacterVariant } from "../variants/types";
 import type {
   CharacterState,
@@ -36,11 +36,15 @@ export class CharacterController {
   private eventBus: EventBus;
   private plugins: Map<string, FeaturePlugin> = new Map();
 
-  constructor(themeId?: string, variantId?: string) {
+  constructor(config: {
+    themeId: string;
+    variantId: string;
+    onEventSubscriberError: (error: unknown) => void;
+  }) {
     this.skeleton = new RagdollSkeleton();
-    this.variant = variantId ? getVariant(variantId) : getDefaultVariant();
+    this.variant = getVariant(config.variantId);
     this.geometry = new RagdollGeometry(this.variant);
-    this.theme = themeId ? getTheme(themeId) : getDefaultTheme();
+    this.theme = getTheme(config.themeId);
     this.headPoseController = new HeadPoseController(this.skeleton);
     this.actionController = new ActionController(this.headPoseController);
     this.expressionController = new ExpressionController(
@@ -50,7 +54,7 @@ export class CharacterController {
     this.idleController = new IdleController();
 
     // Initialize state management
-    this.eventBus = new EventBus();
+    this.eventBus = new EventBus(config.onEventSubscriberError);
     const joints: Record<JointName, { x: number; y: number; z: number }> = {
       headPivot: { x: 0, y: 0, z: 0 },
       neck: { x: 0, y: 0, z: 0 },
@@ -115,8 +119,6 @@ export class CharacterController {
   public nudgeHead(delta: Partial<HeadPose>, duration?: number): void {
     this.headPoseController.nudge(delta, duration);
   }
-
-
   public setJointRotation(command: JointCommand): void {
     const angle = command.angle ?? command.rotation;
     if (!angle) return;
@@ -349,14 +351,12 @@ export class CharacterController {
     return this.theme.id;
   }
 
-
   /**
    * Register a feature plugin
    */
   public registerPlugin(plugin: FeaturePlugin): void {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`Plugin ${plugin.name} is already registered`);
-      return;
+      throw new Error(`Plugin '${plugin.name}' is already registered`);
     }
     this.plugins.set(plugin.name, plugin);
     plugin.initialize(this);

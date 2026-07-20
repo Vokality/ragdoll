@@ -87,6 +87,16 @@ Extensions contribute React-free observable slot state. `serializeSlotState` rem
 
 This keeps functions and React objects out of IPC payloads.
 
+### Event naming
+
+Event names identify their boundary:
+
+- in-process lifecycle events use `scope:event` (for example, `task:added`);
+- persisted extension conversation events use `domain.event` (for example, `timer.completed`);
+- Electron IPC channels use `namespace:operation` and are declared once in `IPC_CHANNELS`.
+
+Conversation-event input is validated at the host boundary before it is persisted. IPC producers and consumers share the same channel constants.
+
 ## Application composition
 
 ### Chat

@@ -39,9 +39,9 @@
   ],
   "scripts": {
     "prebuild": "bun run clean",
-    "build": "bunx --bun --no-install tsc",
-    "dev": "bunx --bun --no-install tsc --watch",
-    "typecheck": "bunx --bun --no-install tsc --noEmit",
+    "build": "bun run ../../scripts/run-typescript.ts",
+    "dev": "bun run ../../scripts/run-typescript.ts --watch",
+    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit",
     "clean": "bun run ../../scripts/clean.ts dist",
     "test": "bun test tests/**/*.test.ts"
   },

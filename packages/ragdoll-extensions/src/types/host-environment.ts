@@ -130,7 +130,7 @@ export interface HostConfigCapability {
   /**
    * Get the config schema for this extension (from package.json)
    */
-  getSchema(): ConfigSchema | undefined;
+  getSchema(): ConfigSchema;
 
   /**
    * Get current configuration values

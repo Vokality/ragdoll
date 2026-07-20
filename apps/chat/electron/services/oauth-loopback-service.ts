@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
+import type { HostTimersCapability } from "@vokality/ragdoll-extensions";
 
 const LOOPBACK_HOST = "127.0.0.1";
-const DEFAULT_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface OAuthCallbackResult {
   code: string | null;
@@ -27,7 +27,8 @@ export class OAuthLoopbackService implements OAuthRedirectService {
   private readonly servers = new Map<Server, () => void>();
 
   constructor(
-    private readonly callbackTimeoutMs = DEFAULT_CALLBACK_TIMEOUT_MS,
+    private readonly callbackTimeoutMs: number,
+    private readonly timers: HostTimersCapability,
   ) {}
 
   async createSession(
@@ -100,13 +101,15 @@ export class OAuthLoopbackService implements OAuthRedirectService {
       throw new Error("OAuth callback listener did not bind to a TCP port");
     }
 
-    const timeout = setTimeout(() => {
+    const timeout = this.timers.setTimeout(() => {
       if (completed) return;
       completed = true;
       settle?.reject(new Error("OAuth authorization timed out"));
       this.closeServer(server);
     }, this.callbackTimeoutMs);
-    result.finally(() => clearTimeout(timeout)).catch(() => undefined);
+    result
+      .finally(() => this.timers.clearTimeout(timeout))
+      .catch(() => undefined);
 
     return {
       redirectUri: `http://${LOOPBACK_HOST}:${address.port}${callbackPath}`,

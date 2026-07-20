@@ -177,14 +177,8 @@ export class RagdollGeometry {
     neckHeight: 55,
   };
 
-  constructor(variant?: CharacterVariant) {
-    // Use provided variant or default to human
-    this.variant = variant || {
-      id: "human",
-      name: "Human",
-      hairStyle: "default",
-      mustacheStyle: "none",
-    };
+  constructor(variant: CharacterVariant) {
+    this.variant = variant;
 
     // Merge variant dimension overrides with base dimensions
     this.dimensions = {

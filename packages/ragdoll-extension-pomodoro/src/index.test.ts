@@ -23,10 +23,12 @@ describe("Pomodoro conversation events", () => {
     expect(descriptor?.requiredCapabilities).toEqual([
       "conversationEvents",
       "logger",
+      "timers",
     ]);
     expect(createExtension().manifest.requiredCapabilities).toEqual([
       "conversationEvents",
       "logger",
+      "timers",
     ]);
     expect(descriptor?.optionalCapabilities).toEqual(["notifications"]);
     expect(createExtension().manifest.optionalCapabilities).toEqual([
@@ -38,7 +40,7 @@ describe("Pomodoro conversation events", () => {
     jest.useFakeTimers({ now: 1_000 });
     const published: ConversationEventInput[] = [];
     const host: ExtensionHostEnvironment = {
-      capabilities: new Set(["conversationEvents", "logger"]),
+      capabilities: new Set(["conversationEvents", "logger", "timers"]),
       conversationEvents: {
         publish: async (event) => {
           published.push(event);
@@ -50,6 +52,15 @@ describe("Pomodoro conversation events", () => {
         info: () => undefined,
         warn: () => undefined,
         error: () => undefined,
+      },
+      timers: {
+        setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+        clearTimeout: (handle) =>
+          clearTimeout(handle as ReturnType<typeof setTimeout>),
+        setInterval: (callback, intervalMs) =>
+          setInterval(callback, intervalMs),
+        clearInterval: (handle) =>
+          clearInterval(handle as ReturnType<typeof setInterval>),
       },
     };
     const extension = createExtension();

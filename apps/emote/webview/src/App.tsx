@@ -84,7 +84,7 @@ function isExtensionMessage(value: unknown): value is ExtensionMessage {
     case "setSpeechBubble":
       return (
         (typeof payload.text === "string" || payload.text === null) &&
-        (payload.tone === undefined || isAllowed(payload.tone, VALID_TONES))
+        isAllowed(payload.tone, VALID_TONES)
       );
     case "setTheme":
       return isAllowed(payload.themeId, VALID_THEMES);
@@ -181,7 +181,7 @@ export function App() {
         case "setSpeechBubble":
           setBubbleState({
             text: message.text,
-            tone: message.tone ?? "default",
+            tone: message.tone,
           });
           break;
         case "setTheme": {
@@ -224,6 +224,9 @@ export function App() {
         <RagdollCharacter
           key={`${theme.id}-${variant}`}
           onControllerReady={handleControllerReady}
+          onEventSubscriberError={(error) => {
+            console.error("Ragdoll event subscriber failed", error);
+          }}
           theme={theme}
           variant={variant}
         />

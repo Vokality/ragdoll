@@ -18,6 +18,7 @@ import type {
   ListPanelConfig,
   GridPanelConfig,
   GridPanelCell,
+  GridPanelResult,
   ListPanelItem,
   ListPanelSection,
   PanelAction,
@@ -146,7 +147,7 @@ interface GridPanelProps {
 }
 
 function GridPanel({ config, onClose }: GridPanelProps) {
-  const { title, emptyMessage, columns, cells, actions } = config;
+  const { title, emptyMessage, columns, cells, result, actions } = config;
   const hasCells = cells.length > 0;
 
   return (
@@ -165,7 +166,9 @@ function GridPanel({ config, onClose }: GridPanelProps) {
 
       <div style={styles.gridContent}>
         <div style={styles.gridViewport}>
-          {!hasCells ? (
+          {result ? (
+            <GridResult result={result} />
+          ) : !hasCells ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>{emptyMessage ?? "No cells"}</p>
             </div>
@@ -192,6 +195,36 @@ function GridPanel({ config, onClose }: GridPanelProps) {
         )}
       </div>
     </>
+  );
+}
+
+interface GridResultProps {
+  result: GridPanelResult;
+}
+
+function GridResult({ result }: GridResultProps) {
+  const symbol =
+    result.status === "success" ? "✓" : result.status === "error" ? "×" : "–";
+
+  return (
+    <div
+      className="slot-panel-grid-result"
+      style={styles.gridResult}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        className={`slot-panel-grid-result-symbol slot-panel-grid-result-symbol-${result.status}`}
+        style={styles.gridResultSymbol}
+        aria-hidden="true"
+      >
+        {symbol}
+      </span>
+      <h3 style={styles.gridResultTitle}>{result.title}</h3>
+      {result.message ? (
+        <p style={styles.gridResultMessage}>{result.message}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -597,6 +630,17 @@ const panelStyles = `
     }
   }
 
+  @keyframes slotPanelResultEnter {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   .slot-panel-backdrop {
     position: fixed;
     inset: 0;
@@ -691,6 +735,34 @@ const panelStyles = `
   .slot-panel-grid-cell:disabled {
     cursor: default;
   }
+
+  .slot-panel-grid-result {
+    animation: slotPanelResultEnter 250ms ease-out both;
+  }
+
+  .slot-panel-grid-result-symbol-success {
+    color: var(--success, #4ade80);
+    border-color: var(--success, #4ade80);
+    background: var(--success-dim, rgba(74, 222, 128, 0.12));
+  }
+
+  .slot-panel-grid-result-symbol-error {
+    color: var(--error, #f87171);
+    border-color: var(--error, #f87171);
+    background: var(--error-dim, rgba(248, 113, 113, 0.12));
+  }
+
+  .slot-panel-grid-result-symbol-default {
+    color: var(--text-muted, #94a3b8);
+    border-color: var(--border, rgba(148, 163, 184, 0.35));
+    background: var(--bg-glass, rgba(30, 41, 59, 0.8));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slot-panel-grid-result {
+      animation: none;
+    }
+  }
 `;
 
 // =============================================================================
@@ -756,6 +828,42 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
+  },
+  gridResult: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    padding: "24px 20px",
+  },
+  gridResultSymbol: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "72px",
+    height: "72px",
+    border: "2px solid",
+    borderRadius: "50%",
+    fontSize: "42px",
+    fontWeight: "500",
+    lineHeight: 1,
+    marginBottom: "18px",
+  },
+  gridResultTitle: {
+    margin: 0,
+    color: "var(--text-primary, #f1f5f9)",
+    fontSize: "26px",
+    fontWeight: "650",
+    lineHeight: 1.2,
+  },
+  gridResultMessage: {
+    maxWidth: "280px",
+    margin: "8px 0 0",
+    color: "var(--text-muted, #94a3b8)",
+    fontSize: "14px",
+    lineHeight: 1.5,
   },
   emptyState: {
     display: "flex",

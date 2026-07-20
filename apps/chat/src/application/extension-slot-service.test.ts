@@ -55,7 +55,10 @@ function createGateway(state: SerializedSlotState | null) {
 describe("ExtensionSlotService", () => {
   it("hydrates strict slot contracts and routes actions", async () => {
     const testGateway = createGateway(initialState);
-    const service = new ExtensionSlotService(testGateway.gateway);
+    const service = new ExtensionSlotService(
+      testGateway.gateway,
+      () => undefined,
+    );
     await service.start();
 
     const slot = service.getSnapshot()[0];
@@ -72,8 +75,15 @@ describe("ExtensionSlotService", () => {
   });
 
   it("rejects a slot without state instead of fabricating defaults", async () => {
-    const service = new ExtensionSlotService(createGateway(null).gateway);
-    await expect(service.start()).rejects.toThrow(
+    const errors: unknown[] = [];
+    const service = new ExtensionSlotService(
+      createGateway(null).gateway,
+      (error) => errors.push(error),
+    );
+    await service.start();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect((errors[0] as Error).message).toBe(
       "Missing state for slot: tasks.main",
     );
   });
@@ -86,6 +96,10 @@ describe("ExtensionSlotService", () => {
         type: "grid",
         title: "Board",
         columns: 3,
+        result: {
+          title: "You win!",
+          status: "success",
+        },
         cells: [
           { id: "1-1", label: "", canClick: true },
           { id: "1-2", label: "X", canClick: false },
@@ -99,13 +113,17 @@ describe("ExtensionSlotService", () => {
       },
     };
     const testGateway = createGateway(gridState);
-    const service = new ExtensionSlotService(testGateway.gateway);
+    const service = new ExtensionSlotService(
+      testGateway.gateway,
+      () => undefined,
+    );
     await service.start();
 
     const slot = service.getSnapshot()[0];
     const panel = slot?.state.getState().panel;
     expect(panel?.type).toBe("grid");
     if (panel?.type !== "grid") throw new Error("expected grid panel");
+    expect(panel.result).toEqual({ title: "You win!", status: "success" });
     panel.cells[0]?.onClick?.();
     await Promise.resolve();
     expect(testGateway.actions).toEqual(["cell-click:1-1"]);

@@ -62,8 +62,8 @@ export function createExtension(config: ExtensionConfig): RagdollExtension {
       name: config.name,
       version: config.version,
       description: config.description,
-      requiredCapabilities: config.requiredCapabilities,
-      optionalCapabilities: config.optionalCapabilities,
+      requiredCapabilities: config.requiredCapabilities ?? [],
+      optionalCapabilities: config.optionalCapabilities ?? [],
     },
 
     async activate(host, context) {

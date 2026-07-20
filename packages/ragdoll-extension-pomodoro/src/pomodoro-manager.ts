@@ -5,6 +5,11 @@
  * managing timer state and emitting events when changes occur.
  */
 
+import type {
+  HostLoggerCapability,
+  HostTimersCapability,
+} from "@vokality/ragdoll-extensions";
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -49,9 +54,15 @@ export type PomodoroEventCallback = (event: PomodoroEvent) => void;
 // Constants
 // =============================================================================
 
-const DEFAULT_SESSION_DURATION_MINUTES = 30;
-const DEFAULT_BREAK_DURATION_MINUTES = 5;
 const TICK_INTERVAL_MS = 1000;
+
+export interface PomodoroManagerConfig {
+  sessionDurationMinutes: SessionDuration;
+  breakDurationMinutes: BreakDuration;
+  timers: HostTimersCapability;
+  logger: HostLoggerCapability;
+  now: () => number;
+}
 
 // =============================================================================
 // PomodoroManager
@@ -67,15 +78,12 @@ export class PomodoroManager {
   private breakDurationMs: number;
   private isBreak: boolean = false;
   private sessionsCompleted: number = 0;
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private intervalId: unknown | null = null;
   private listeners: Set<PomodoroEventCallback> = new Set();
 
-  constructor(
-    sessionDurationMinutes: SessionDuration = DEFAULT_SESSION_DURATION_MINUTES,
-    breakDurationMinutes: BreakDuration = DEFAULT_BREAK_DURATION_MINUTES
-  ) {
-    this.sessionDurationMs = sessionDurationMinutes * 60 * 1000;
-    this.breakDurationMs = breakDurationMinutes * 60 * 1000;
+  constructor(private readonly config: PomodoroManagerConfig) {
+    this.sessionDurationMs = config.sessionDurationMinutes * 60 * 1000;
+    this.breakDurationMs = config.breakDurationMinutes * 60 * 1000;
     this.remainingMs = this.sessionDurationMs;
   }
 
@@ -144,7 +152,7 @@ export class PomodoroManager {
    */
   start(
     sessionDurationMinutes?: SessionDuration,
-    breakDurationMinutes?: BreakDuration
+    breakDurationMinutes?: BreakDuration,
   ): void {
     // Update durations if provided
     if (sessionDurationMinutes !== undefined) {
@@ -227,7 +235,7 @@ export class PomodoroManager {
       return;
     }
 
-    this.intervalId = setInterval(() => {
+    this.intervalId = this.config.timers.setInterval(() => {
       this.tick();
     }, TICK_INTERVAL_MS);
   }
@@ -237,7 +245,7 @@ export class PomodoroManager {
    */
   private stopInterval(): void {
     if (this.intervalId !== null) {
-      clearInterval(this.intervalId);
+      this.config.timers.clearInterval(this.intervalId);
       this.intervalId = null;
     }
   }
@@ -350,14 +358,16 @@ export class PomodoroManager {
     const event: PomodoroEvent = {
       type,
       state: this.getState(),
-      timestamp: Date.now(),
+      timestamp: this.config.now(),
     };
 
     for (const callback of this.listeners) {
       try {
         callback(event);
       } catch (error) {
-        console.error("[PomodoroManager] Error in event listener:", error);
+        this.config.logger.error("Pomodoro event listener failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
@@ -381,14 +391,4 @@ export class PomodoroManager {
     this.removeAllListeners();
     this.phase = "idle";
   }
-}
-
-/**
- * Create a new PomodoroManager instance.
- */
-export function createPomodoroManager(
-  sessionDurationMinutes?: SessionDuration,
-  breakDurationMinutes?: BreakDuration
-): PomodoroManager {
-  return new PomodoroManager(sessionDurationMinutes, breakDurationMinutes);
 }

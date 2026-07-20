@@ -1,36 +1,39 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   ChatMessageDto,
-  CharacterSettings,
+  CharacterSettingsUpdate,
   ElectronAPI,
   OAuthConnectedEvent,
   OAuthFailedEvent,
   SlotActionType,
   SlotChangeEvent,
 } from "./electron-api.js";
-import { EXTENSION_EVENT_CHANNELS } from "./electron-api.js";
+import { IPC_CHANNELS } from "./electron-api.js";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Auth
-  hasApiKey: () => ipcRenderer.invoke("auth:has-key"),
-  setApiKey: (key: string) => ipcRenderer.invoke("auth:set-key", key),
-  validateApiKey: (key: string) => ipcRenderer.invoke("auth:validate-key", key),
-  clearApiKey: () => ipcRenderer.invoke("auth:clear-key"),
-  openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url),
+  hasApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.auth.hasKey),
+  setApiKey: (key: string) => ipcRenderer.invoke(IPC_CHANNELS.auth.setKey, key),
+  validateApiKey: (key: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.auth.validateKey, key),
+  clearApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.auth.clearKey),
+  openExternal: (url: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.shell.openExternal, url),
 
   // Chat
   sendMessage: (message: string) =>
-    ipcRenderer.invoke("chat:send-message", message),
-  getConversation: () => ipcRenderer.invoke("chat:get-conversation"),
-  clearConversation: () => ipcRenderer.invoke("chat:clear-conversation"),
+    ipcRenderer.invoke(IPC_CHANNELS.chat.sendMessage, message),
+  getConversation: () => ipcRenderer.invoke(IPC_CHANNELS.chat.getConversation),
+  clearConversation: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.chat.clearConversation),
 
   // Streaming events
   onStreamingText: (callback: (text: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, text: string) =>
       callback(text);
-    ipcRenderer.on("chat:streaming-text", handler);
+    ipcRenderer.on(IPC_CHANNELS.chat.streamingText, handler);
     return () => {
-      ipcRenderer.removeListener("chat:streaming-text", handler);
+      ipcRenderer.removeListener(IPC_CHANNELS.chat.streamingText, handler);
     };
   },
   onConversationChanged: (
@@ -40,9 +43,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       _: Electron.IpcRendererEvent,
       conversation: ChatMessageDto[],
     ) => callback(conversation);
-    ipcRenderer.on("chat:conversation-changed", handler);
+    ipcRenderer.on(IPC_CHANNELS.chat.conversationChanged, handler);
     return () => {
-      ipcRenderer.removeListener("chat:conversation-changed", handler);
+      ipcRenderer.removeListener(
+        IPC_CHANNELS.chat.conversationChanged,
+        handler,
+      );
     };
   },
   onFunctionCall: (
@@ -53,49 +59,50 @@ contextBridge.exposeInMainWorld("electronAPI", {
       name: string,
       args: Record<string, unknown>,
     ) => callback(name, args);
-    ipcRenderer.on("chat:function-call", handler);
+    ipcRenderer.on(IPC_CHANNELS.chat.functionCall, handler);
     return () => {
-      ipcRenderer.removeListener("chat:function-call", handler);
+      ipcRenderer.removeListener(IPC_CHANNELS.chat.functionCall, handler);
     };
   },
   onStreamEnd: (callback: () => void) => {
     const handler = () => callback();
-    ipcRenderer.on("chat:stream-end", handler);
+    ipcRenderer.on(IPC_CHANNELS.chat.streamEnd, handler);
     return () => {
-      ipcRenderer.removeListener("chat:stream-end", handler);
+      ipcRenderer.removeListener(IPC_CHANNELS.chat.streamEnd, handler);
     };
   },
 
   // Settings
-  getSettings: () => ipcRenderer.invoke("settings:get"),
-  setSettings: (settings: CharacterSettings) =>
-    ipcRenderer.invoke("settings:set", settings),
+  getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.settings.get),
+  setSettings: (settings: CharacterSettingsUpdate) =>
+    ipcRenderer.invoke(IPC_CHANNELS.settings.set, settings),
 
   // Extensions
-  getExtensionSlots: () => ipcRenderer.invoke("extensions:get-slots"),
+  getExtensionSlots: () => ipcRenderer.invoke(IPC_CHANNELS.extensions.getSlots),
   getSlotState: (slotId: string) =>
-    ipcRenderer.invoke("extensions:get-slot-state", slotId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.getSlotState, slotId),
   getDiscoveredExtensions: () =>
-    ipcRenderer.invoke("extensions:get-discovered"),
-  getDisabledExtensions: () => ipcRenderer.invoke("extensions:get-disabled"),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.getDiscovered),
+  getDisabledExtensions: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.getDisabled),
   setDisabledExtensions: (extensionIds: string[]) =>
-    ipcRenderer.invoke("extensions:set-disabled", extensionIds),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.setDisabled, extensionIds),
   onSlotStateChanged: (callback: (event: SlotChangeEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: SlotChangeEvent) =>
       callback(event);
-    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.slotStateChanged, handler);
+    ipcRenderer.on(IPC_CHANNELS.extensions.slotStateChanged, handler);
     return () => {
       ipcRenderer.removeListener(
-        EXTENSION_EVENT_CHANNELS.slotStateChanged,
+        IPC_CHANNELS.extensions.slotStateChanged,
         handler,
       );
     };
   },
   onExtensionSlotsChanged: (callback: () => void) => {
-    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.slotsChanged, callback);
+    ipcRenderer.on(IPC_CHANNELS.extensions.slotsChanged, callback);
     return () => {
       ipcRenderer.removeListener(
-        EXTENSION_EVENT_CHANNELS.slotsChanged,
+        IPC_CHANNELS.extensions.slotsChanged,
         callback,
       );
     };
@@ -106,7 +113,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     actionId: string,
   ) =>
     ipcRenderer.invoke(
-      "extensions:execute-slot-action",
+      IPC_CHANNELS.extensions.executeSlotAction,
       slotId,
       actionType,
       actionId,
@@ -114,20 +121,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Extension OAuth
   getOAuthState: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:oauth-get-state", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.oauthGetState, extensionId),
   startOAuthFlow: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:oauth-start-flow", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.oauthStartFlow, extensionId),
   disconnectOAuth: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:oauth-disconnect", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.oauthDisconnect, extensionId),
   onOAuthConnected: (callback: (event: OAuthConnectedEvent) => void) => {
     const handler = (
       _: Electron.IpcRendererEvent,
       event: OAuthConnectedEvent,
     ) => callback(event);
-    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.oauthConnected, handler);
+    ipcRenderer.on(IPC_CHANNELS.extensions.oauthConnected, handler);
     return () => {
       ipcRenderer.removeListener(
-        EXTENSION_EVENT_CHANNELS.oauthConnected,
+        IPC_CHANNELS.extensions.oauthConnected,
         handler,
       );
     };
@@ -135,30 +142,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onOAuthFailed: (callback: (event: OAuthFailedEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: OAuthFailedEvent) =>
       callback(event);
-    ipcRenderer.on(EXTENSION_EVENT_CHANNELS.oauthFailed, handler);
+    ipcRenderer.on(IPC_CHANNELS.extensions.oauthFailed, handler);
     return () => {
-      ipcRenderer.removeListener(EXTENSION_EVENT_CHANNELS.oauthFailed, handler);
+      ipcRenderer.removeListener(IPC_CHANNELS.extensions.oauthFailed, handler);
     };
   },
 
   // Extension Config
   getConfigStatus: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:config-get-status", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.configGetStatus, extensionId),
   getConfigSchema: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:config-get-schema", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.configGetSchema, extensionId),
   setConfigValues: (
     extensionId: string,
     values: Record<string, string | number | boolean>,
-  ) => ipcRenderer.invoke("extensions:config-set-values", extensionId, values),
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.extensions.configSetValues,
+      extensionId,
+      values,
+    ),
 
   // Extension Installation
   installExtensionFromGitHub: (repoUrl: string) =>
-    ipcRenderer.invoke("extensions:install-from-github", repoUrl),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.installFromGitHub, repoUrl),
   uninstallExtension: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:uninstall", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.uninstall, extensionId),
   getUserInstalledExtensions: () =>
-    ipcRenderer.invoke("extensions:get-user-installed"),
-  checkExtensionUpdates: () => ipcRenderer.invoke("extensions:check-updates"),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.getUserInstalled),
+  checkExtensionUpdates: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.checkUpdates),
   updateExtension: (extensionId: string) =>
-    ipcRenderer.invoke("extensions:update", extensionId),
+    ipcRenderer.invoke(IPC_CHANNELS.extensions.update, extensionId),
 } satisfies ElectronAPI);

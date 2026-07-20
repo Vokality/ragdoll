@@ -49,6 +49,7 @@ export function App({ services }: AppProps) {
     return (
       <SetupScreen
         service={services.setup}
+        reportError={services.reportError}
         onComplete={() => setAppState("ready")}
       />
     );
@@ -60,6 +61,7 @@ export function App({ services }: AppProps) {
       characterCommands={services.characterCommands}
       extensionSlots={services.extensionSlots}
       extensions={services.extensions}
+      reportError={services.reportError}
       onLogout={() => setAppState("setup-api-key")}
     />
   );

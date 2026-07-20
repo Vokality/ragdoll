@@ -10,6 +10,7 @@ export class RagdollPanel {
   private readonly extensionUri: vscode.Uri;
   private disposables: vscode.Disposable[] = [];
   private isReady = false;
+  private isDisposed = false;
   private pendingMessages: ExtensionMessage[] = [];
 
   public static createOrShow(extensionUri: vscode.Uri): RagdollPanel {
@@ -50,14 +51,6 @@ export class RagdollPanel {
 
   public static hide(): void {
     RagdollPanel.currentPanel?.dispose();
-  }
-
-  public static toggle(extensionUri: vscode.Uri): void {
-    if (RagdollPanel.currentPanel) {
-      RagdollPanel.hide();
-    } else {
-      RagdollPanel.createOrShow(extensionUri);
-    }
   }
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -110,6 +103,8 @@ export class RagdollPanel {
   }
 
   public dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
     RagdollPanel.currentPanel = undefined;
 
     // Clean up resources

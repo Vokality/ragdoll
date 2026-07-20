@@ -47,6 +47,11 @@ describe("serializeSlotState", () => {
         type: "grid",
         title: "Board",
         columns: 3,
+        result: {
+          title: "You win!",
+          message: "Three in a row.",
+          status: "success",
+        },
         cells: [
           { id: "0-0", label: "X" },
           { id: "0-1", label: "", onClick: () => undefined },
@@ -64,6 +69,11 @@ describe("serializeSlotState", () => {
     expect(serialized.panel.type).toBe("grid");
     if (serialized.panel.type !== "grid") throw new Error("expected grid");
     expect(serialized.panel.columns).toBe(3);
+    expect(serialized.panel.result).toEqual({
+      title: "You win!",
+      message: "Three in a row.",
+      status: "success",
+    });
     expect(serialized.panel.cells).toEqual([
       { id: "0-0", label: "X", canClick: false },
       { id: "0-1", label: "", canClick: true },

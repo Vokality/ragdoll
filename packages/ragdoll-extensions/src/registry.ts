@@ -63,6 +63,8 @@ class RegistryEventBus {
   private listeners: Map<RegistryEventType, Set<RegistryEventCallback>> =
     new Map();
 
+  constructor(private readonly onListenerError: (error: unknown) => void) {}
+
   on(
     eventType: RegistryEventType,
     callback: RegistryEventCallback,
@@ -86,10 +88,7 @@ class RegistryEventBus {
       try {
         await callback(event);
       } catch (error) {
-        console.error(
-          `Error in registry event listener for '${event.type}':`,
-          error,
-        );
+        this.onListenerError(error);
       }
     });
 
@@ -115,13 +114,13 @@ class RegistryEventBus {
 
 function ensureHostCapabilities(
   extensionId: string,
-  required: ReadonlyArray<ExtensionHostCapability> | undefined,
+  required: ReadonlyArray<ExtensionHostCapability>,
   host: ExtensionHostEnvironment,
 ): void {
-  if (!required || required.length === 0) {
+  if (required.length === 0) {
     return;
   }
-  const available = host.capabilities ?? new Set();
+  const available = host.capabilities;
   for (const capability of required) {
     if (!available.has(capability)) {
       throw new Error(
@@ -255,8 +254,12 @@ export class ExtensionRegistry {
   private readonly serviceIndex = new Map<string, ServiceEntry>();
   private readonly stateChannelIndex = new Map<string, StateChannelEntry>();
   private readonly slotIndex = new Map<string, SlotEntry>();
-  private readonly eventBus = new RegistryEventBus();
+  private readonly eventBus: RegistryEventBus;
   private instanceCounter = 0;
+
+  constructor(private readonly dependencies: ExtensionRegistryDependencies) {
+    this.eventBus = new RegistryEventBus(dependencies.onListenerError);
+  }
 
   async register(
     extension: RagdollExtension,
@@ -288,8 +291,7 @@ export class ExtensionRegistry {
 
     const context: ExtensionContext = {
       instanceId: `${extensionId}-${++this.instanceCounter}`,
-      createdAt: Date.now(),
-      config: options.config,
+      createdAt: this.dependencies.now(),
     };
 
     let contribution: ExtensionRuntimeContribution | undefined;
@@ -767,6 +769,13 @@ export class ExtensionRegistry {
   }
 }
 
-export function createRegistry(): ExtensionRegistry {
-  return new ExtensionRegistry();
+export interface ExtensionRegistryDependencies {
+  now(): number;
+  onListenerError(error: unknown): void;
+}
+
+export function createRegistry(
+  dependencies: ExtensionRegistryDependencies,
+): ExtensionRegistry {
+  return new ExtensionRegistry(dependencies);
 }

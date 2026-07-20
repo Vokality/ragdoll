@@ -116,7 +116,8 @@ export class SpotifyApiError extends Error {
 
 export function createSpotifyApiClient(
   oauth: HostOAuthCapability,
-  fetchRequest: Fetch = fetch,
+  fetchRequest: Fetch,
+  now: () => number,
 ): SpotifyApiClient {
   async function apiRequest<T>(
     endpoint: string,
@@ -186,7 +187,7 @@ export function createSpotifyApiClient(
         `/me/player?${query.toString()}`,
         apiPlaybackStateSchema,
       );
-      if (!data) return emptyPlaybackState();
+      if (!data) return emptyPlaybackState(now());
 
       return {
         isPlaying: data.is_playing,
@@ -248,7 +249,7 @@ function playerEndpoint(action: string, deviceId?: string): string {
   return `/me/player${action}${suffix}`;
 }
 
-function emptyPlaybackState(): SpotifyPlaybackState {
+function emptyPlaybackState(timestamp: number): SpotifyPlaybackState {
   return {
     isPlaying: false,
     item: null,
@@ -256,7 +257,7 @@ function emptyPlaybackState(): SpotifyPlaybackState {
     device: null,
     shuffleState: false,
     repeatState: "off",
-    timestamp: Date.now(),
+    timestamp,
   };
 }
 

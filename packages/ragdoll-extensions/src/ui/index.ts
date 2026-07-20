@@ -16,16 +16,20 @@
  * } from "@vokality/ragdoll-extensions/ui";
  *
  * // Create a slot with managed state
- * const slotState = createSlotState({
- *   badge: 0,
- *   visible: false,
- *   panel: { type: "list", title: "My Items", items: [] },
- * });
+ * const slotState = createSlotState(
+ *   {
+ *     badge: 0,
+ *     visible: false,
+ *     panel: { type: "list", title: "My Items", items: [] },
+ *   },
+ *   reportError,
+ * );
  *
  * const mySlot: ExtensionUISlot = {
  *   id: "my-extension.main",
  *   label: "My Extension",
  *   icon: "star",
+ *   priority: 0,
  *   state: slotState,
  * };
  *
@@ -51,6 +55,7 @@ export type {
   PanelAction,
   ListPanelSection,
   GridPanelCell,
+  GridPanelResult,
 
   // Panel configuration types
   ListPanelConfig,

@@ -21,9 +21,16 @@ export type CharacterThemeId = (typeof CHARACTER_THEME_IDS)[number];
 export type CharacterVariantId = (typeof CHARACTER_VARIANT_IDS)[number];
 
 export interface CharacterSettings {
-  theme?: CharacterThemeId;
-  variant?: CharacterVariantId;
+  theme: CharacterThemeId;
+  variant: CharacterVariantId;
 }
+
+export type CharacterSettingsUpdate = Partial<CharacterSettings>;
+
+export const DEFAULT_CHARACTER_SETTINGS = {
+  theme: "default",
+  variant: "human",
+} as const satisfies CharacterSettings;
 
 export interface ExtensionInfo {
   packageName: string;
@@ -72,11 +79,52 @@ export interface OAuthFailedEvent {
   error: string;
 }
 
-export const EXTENSION_EVENT_CHANNELS = {
-  slotStateChanged: "extensions:slot-state-changed",
-  slotsChanged: "extensions:slots-changed",
-  oauthConnected: "extensions:oauth-connected",
-  oauthFailed: "extensions:oauth-failed",
+export const IPC_CHANNELS = {
+  auth: {
+    hasKey: "auth:has-key",
+    setKey: "auth:set-key",
+    validateKey: "auth:validate-key",
+    clearKey: "auth:clear-key",
+  },
+  shell: {
+    openExternal: "shell:open-external",
+  },
+  chat: {
+    sendMessage: "chat:send-message",
+    getConversation: "chat:get-conversation",
+    clearConversation: "chat:clear-conversation",
+    streamingText: "chat:streaming-text",
+    conversationChanged: "chat:conversation-changed",
+    functionCall: "chat:function-call",
+    streamEnd: "chat:stream-end",
+  },
+  settings: {
+    get: "settings:get",
+    set: "settings:set",
+  },
+  extensions: {
+    getSlots: "extensions:get-slots",
+    getSlotState: "extensions:get-slot-state",
+    getDiscovered: "extensions:get-discovered",
+    getDisabled: "extensions:get-disabled",
+    setDisabled: "extensions:set-disabled",
+    executeSlotAction: "extensions:execute-slot-action",
+    slotStateChanged: "extensions:slot-state-changed",
+    slotsChanged: "extensions:slots-changed",
+    oauthGetState: "extensions:oauth-get-state",
+    oauthStartFlow: "extensions:oauth-start-flow",
+    oauthDisconnect: "extensions:oauth-disconnect",
+    oauthConnected: "extensions:oauth-connected",
+    oauthFailed: "extensions:oauth-failed",
+    configGetStatus: "extensions:config-get-status",
+    configGetSchema: "extensions:config-get-schema",
+    configSetValues: "extensions:config-set-values",
+    installFromGitHub: "extensions:install-from-github",
+    uninstall: "extensions:uninstall",
+    getUserInstalled: "extensions:get-user-installed",
+    checkUpdates: "extensions:check-updates",
+    update: "extensions:update",
+  },
 } as const;
 
 export interface ExtensionConfigStatus {
@@ -139,7 +187,7 @@ export interface ElectronAPI {
   onStreamEnd(callback: () => void): () => void;
 
   getSettings(): Promise<CharacterSettings>;
-  setSettings(settings: CharacterSettings): Promise<OperationResult>;
+  setSettings(settings: CharacterSettingsUpdate): Promise<OperationResult>;
 
   getExtensionSlots(): Promise<SlotInfo[]>;
   getSlotState(slotId: string): Promise<SerializedSlotState | null>;

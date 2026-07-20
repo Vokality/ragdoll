@@ -10,6 +10,49 @@ import {
 } from "./extension-management-service";
 
 describe("ExtensionManagementService", () => {
+  it("derives built-in and configurable extension groups outside React", async () => {
+    const service = new ExtensionManagementService(
+      createGateway({
+        getDiscoveredExtensions: async () => [
+          {
+            packageName: "@vokality/built-in",
+            id: "built-in",
+            name: "Built in",
+            description: "Built in",
+            canDisable: true,
+            hasConfigSchema: true,
+            hasOAuth: false,
+          },
+          {
+            packageName: "@example/installed",
+            id: "installed",
+            name: "Installed",
+            description: "Installed",
+            canDisable: true,
+            hasConfigSchema: false,
+            hasOAuth: false,
+          },
+        ],
+        getUserInstalledExtensions: async () => [
+          {
+            id: "installed",
+            name: "Installed",
+            version: "1.0.0",
+            description: "Installed",
+            path: "/extensions/installed",
+            repoUrl: "https://github.com/example/installed",
+            installedAt: "2026-07-19T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    const overview = await service.loadOverview();
+
+    expect(overview.builtIn.map(({ id }) => id)).toEqual(["built-in"]);
+    expect(overview.configurable.map(({ id }) => id)).toEqual(["built-in"]);
+  });
+
   it("reloads configuration and OAuth state after saving configuration", async () => {
     const calls: string[] = [];
     const configurationStatus: ExtensionConfigStatus = {
@@ -63,6 +106,7 @@ describe("ExtensionManagementService", () => {
           },
         },
         status: configurationStatus,
+        values: { clientId: "new-client-id" },
       },
       oauth: oauthState,
     });

@@ -31,11 +31,12 @@ export class ChatApplicationService {
     private readonly apiKeys: ApiKeyProvider,
     private readonly agent: AgentRunner,
     private readonly conversationChanged: ConversationChangedCallback,
+    private readonly reportError: (error: unknown) => void,
   ) {}
 
   async getConversation(): Promise<ChatMessageDto[]> {
     const data = await this.storage.read();
-    return projectVisibleConversation(data.conversation ?? []);
+    return projectVisibleConversation(data.conversation);
   }
 
   clearConversation(): Promise<OperationResult> {
@@ -58,13 +59,13 @@ export class ChatApplicationService {
     return this.enqueueTurn(async () => {
       try {
         const data = await this.storage.update((draft) => {
-          (draft.conversation ??= []).push({ role: "user", content });
+          draft.conversation.push({ role: "user", content });
         });
-        this.publishConversation(data.conversation ?? []);
+        this.publishConversation(data.conversation);
 
         const response = await this.agent.runUserTurn(
           await this.apiKeys.getKey(),
-          data.conversation ?? [],
+          data.conversation,
           (text) => events.streamingText(text),
         );
         const completed = await this.appendAssistantResponse(response);
@@ -87,7 +88,7 @@ export class ChatApplicationService {
       try {
         await this.processPendingEventTurns();
       } catch (error) {
-        console.error("Failed to process extension event turn", error);
+        this.reportError(error);
       }
     });
     this.pendingEventRun = run.finally(() => {
@@ -99,10 +100,10 @@ export class ChatApplicationService {
   private async processPendingEventTurns(): Promise<void> {
     while (true) {
       const data = await this.storage.read();
-      const job = data.pendingAgentTurns?.[0];
+      const job = data.pendingAgentTurns[0];
       if (!job) return;
 
-      const trigger = data.conversation?.find(
+      const trigger = data.conversation.find(
         (entry): entry is ExtensionConversationEvent =>
           isExtensionConversationEvent(entry) &&
           entry.id === job.triggerEventId,
@@ -115,23 +116,23 @@ export class ChatApplicationService {
 
       const outcome = await this.agent.runEventTurn(
         await this.apiKeys.getKey(),
-        data.conversation ?? [],
+        data.conversation,
         trigger,
       );
       const completed = await this.storage.update((draft) => {
         if (outcome.disposition === "respond") {
-          (draft.conversation ??= []).push({
+          draft.conversation.push({
             role: "assistant",
             content: outcome.content,
           });
         }
-        draft.pendingAgentTurns = (draft.pendingAgentTurns ?? []).filter(
+        draft.pendingAgentTurns = draft.pendingAgentTurns.filter(
           (pending) => pending.triggerEventId !== trigger.id,
         );
       });
 
       if (outcome.disposition === "respond") {
-        this.publishConversation(completed.conversation ?? []);
+        this.publishConversation(completed.conversation);
       }
     }
   }
@@ -143,9 +144,9 @@ export class ChatApplicationService {
     if (!trimmed) throw new Error("The agent returned an empty response");
 
     const data = await this.storage.update((draft) => {
-      (draft.conversation ??= []).push({ role: "assistant", content: trimmed });
+      draft.conversation.push({ role: "assistant", content: trimmed });
     });
-    return data.conversation ?? [];
+    return data.conversation;
   }
 
   private publishConversation(

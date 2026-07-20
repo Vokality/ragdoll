@@ -47,11 +47,54 @@ describe("Tasks package boundaries", () => {
         error: () => undefined,
       },
     };
-    const registry = createRegistry();
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
 
     await registry.register(createExtension(), { host });
 
     expect(reads).toEqual([{ extensionId: "tasks", key: "state" }]);
     await registry.destroy();
+  });
+
+  it("rolls a mutation back when required storage rejects the commit", async () => {
+    const host: ExtensionHostEnvironment = {
+      capabilities: new Set<ExtensionHostCapability>(REQUIRED_CAPABILITIES),
+      storage: {
+        read: async () => undefined,
+        write: async () => {
+          throw new Error("storage unavailable");
+        },
+        delete: async () => undefined,
+        list: async () => [],
+      },
+      logger: {
+        debug: () => undefined,
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
+    };
+    const runtime = await createExtension().activate(host, {
+      instanceId: "tasks-test",
+      createdAt: 0,
+    });
+    const add = runtime.tools?.find(
+      (tool) => tool.definition.function.name === "addTask",
+    );
+    const list = runtime.tools?.find(
+      (tool) => tool.definition.function.name === "listTasks",
+    );
+    if (!add || !list) throw new Error("Task tools were not registered");
+
+    await expect(
+      add.handler({ text: "Must persist" }, { extensionId: "tasks" }),
+    ).rejects.toThrow("storage unavailable");
+    expect(await list.handler({}, { extensionId: "tasks" })).toMatchObject({
+      success: true,
+      data: { tasks: [] },
+    });
+    await runtime.dispose?.();
   });
 });

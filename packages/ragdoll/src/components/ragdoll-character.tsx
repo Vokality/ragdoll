@@ -5,10 +5,10 @@ import type { RagdollTheme } from "../themes/types";
 import type { GradientDef } from "../themes/types";
 
 interface RagdollCharacterProps {
-  onControllerReady?: (controller: CharacterController) => void;
-  theme?: RagdollTheme;
-  variant?: string; // Variant ID (e.g., "human", "einstein", "child")
-  destroyOnUnmount?: boolean;
+  onControllerReady: (controller: CharacterController) => void;
+  onEventSubscriberError: (error: unknown) => void;
+  theme: RagdollTheme;
+  variant: string;
 }
 
 /**
@@ -213,13 +213,18 @@ function computeRenderData(controller: CharacterController): RenderData {
 
 export function RagdollCharacter({
   onControllerReady,
+  onEventSubscriberError,
   theme,
   variant,
-  destroyOnUnmount = true,
 }: RagdollCharacterProps) {
   // Create controller once and store in state (not ref) so it's safe to read during render
   const [controller] = useState(
-    () => new CharacterController(theme?.id, variant),
+    () =>
+      new CharacterController({
+        themeId: theme.id,
+        variantId: variant,
+        onEventSubscriberError,
+      }),
   );
   const instanceId = useId().replace(/:/g, "");
   const lastTimeRef = useRef<number | null>(null);
@@ -232,17 +237,12 @@ export function RagdollCharacter({
 
   // Update theme if it changes
   useEffect(() => {
-    if (theme) {
-      controller.setTheme(theme.id);
-      // Re-compute render data to pick up new theme with variant overrides
-      setRenderData(computeRenderData(controller));
-    }
+    controller.setTheme(theme.id);
+    setRenderData(computeRenderData(controller));
   }, [theme, controller]);
 
   useEffect(() => {
-    if (onControllerReady) {
-      onControllerReady(controller);
-    }
+    onControllerReady(controller);
   }, [onControllerReady, controller]);
 
   // Update animations at 60fps
@@ -272,15 +272,7 @@ export function RagdollCharacter({
     };
   }, [controller, theme]);
 
-  // Cleanup owned controller when unmounting
-  useEffect(
-    () => () => {
-      if (destroyOnUnmount) {
-        controller.destroy();
-      }
-    },
-    [controller, destroyOnUnmount],
-  );
+  useEffect(() => () => controller.destroy(), [controller]);
 
   // Extract render data from state
   const {

@@ -3,6 +3,7 @@ import type { ConfigField } from "@vokality/ragdoll-extensions";
 import type { OAuthState } from "../../electron/electron-api";
 import type { ExtensionManagementService } from "../application/extension-management-service";
 import { useExtensionConfiguration } from "../hooks/use-extension-configuration";
+import { ModalShell } from "./modal-shell";
 
 interface ExtensionConfigModalProps {
   isOpen: boolean;
@@ -40,96 +41,81 @@ export function ExtensionConfigModal({
   const isFullyConfigured = isConfigComplete && isOAuthComplete;
 
   return (
-    <>
-      {/* Backdrop */}
-      <div style={styles.backdrop} onClick={onClose} />
-
-      {/* Modal */}
-      <div style={styles.modal} className="card animate-fadeIn">
-        {/* Header */}
-        <div style={styles.header}>
-          <h2 style={styles.title}>Configure {extensionName}</h2>
-          <button onClick={onClose} style={styles.closeButton}>
-            <CloseIcon />
-          </button>
+    <ModalShell
+      title={`Configure ${extensionName}`}
+      maxWidth={420}
+      onClose={onClose}
+    >
+      {configuration.error && (
+        <div style={styles.errorBanner}>
+          <ErrorIcon />
+          <span>{configuration.error}</span>
         </div>
+      )}
 
-        {/* Content */}
-        <div style={styles.content}>
-          {configuration.error && (
-            <div style={styles.errorBanner}>
-              <ErrorIcon />
-              <span>{configuration.error}</span>
-            </div>
-          )}
-
-          {/* Config Fields */}
-          {hasConfig && configuration.schema && (
-            <section style={styles.section}>
-              <h3 style={styles.sectionTitle}>Configuration</h3>
-              <div style={styles.fieldList}>
-                {Object.entries(configuration.schema).map(([key, field]) => (
-                  <ConfigFieldInput
-                    key={key}
-                    field={field}
-                    value={configuration.values[key]}
-                    onChange={(value) => configuration.changeValue(key, value)}
-                    isMissing={configuration.status?.missingFields.includes(
-                      key,
-                    )}
-                  />
-                ))}
-              </div>
-              <button
-                onClick={() => void configuration.save()}
-                disabled={configuration.saving}
-                className="btn-primary"
-                style={styles.saveButton}
-              >
-                {configuration.saving ? "Saving..." : "Save Configuration"}
-              </button>
-            </section>
-          )}
-
-          {/* OAuth Section */}
-          {hasOAuth && (
-            <section style={styles.section}>
-              <h3 style={styles.sectionTitle}>Authentication</h3>
-              <OAuthStatusCard
-                state={configuration.oauth}
-                onConnect={() => void configuration.connect()}
-                onDisconnect={() => void configuration.disconnect()}
+      {/* Config Fields */}
+      {hasConfig && configuration.schema && (
+        <section style={styles.section}>
+          <h3 style={styles.sectionTitle}>Configuration</h3>
+          <div style={styles.fieldList}>
+            {Object.entries(configuration.schema).map(([key, field]) => (
+              <ConfigFieldInput
+                key={key}
+                field={field}
+                value={configuration.values[key]}
+                onChange={(value) => configuration.changeValue(key, value)}
+                isMissing={configuration.status?.missingFields.includes(key)}
               />
-            </section>
-          )}
+            ))}
+          </div>
+          <button
+            onClick={() => void configuration.save()}
+            disabled={configuration.saving}
+            className="btn-primary"
+            style={styles.saveButton}
+          >
+            {configuration.saving ? "Saving..." : "Save Configuration"}
+          </button>
+        </section>
+      )}
 
-          {/* Status Summary */}
-          <section style={styles.section}>
-            <div style={styles.statusSummary}>
-              {isFullyConfigured ? (
-                <>
-                  <CheckCircleIcon />
-                  <span style={styles.statusText}>
-                    Extension is fully configured
-                  </span>
-                </>
-              ) : (
-                <>
-                  <WarningIcon />
-                  <span style={styles.statusText}>
-                    {!isConfigComplete && !isOAuthComplete
-                      ? "Configuration and authentication required"
-                      : !isConfigComplete
-                        ? "Configuration required"
-                        : "Authentication required"}
-                  </span>
-                </>
-              )}
-            </div>
-          </section>
+      {/* OAuth Section */}
+      {hasOAuth && (
+        <section style={styles.section}>
+          <h3 style={styles.sectionTitle}>Authentication</h3>
+          <OAuthStatusCard
+            state={configuration.oauth}
+            onConnect={() => void configuration.connect()}
+            onDisconnect={() => void configuration.disconnect()}
+          />
+        </section>
+      )}
+
+      {/* Status Summary */}
+      <section style={styles.section}>
+        <div style={styles.statusSummary}>
+          {isFullyConfigured ? (
+            <>
+              <CheckCircleIcon />
+              <span style={styles.statusText}>
+                Extension is fully configured
+              </span>
+            </>
+          ) : (
+            <>
+              <WarningIcon />
+              <span style={styles.statusText}>
+                {!isConfigComplete && !isOAuthComplete
+                  ? "Configuration and authentication required"
+                  : !isConfigComplete
+                    ? "Configuration required"
+                    : "Authentication required"}
+              </span>
+            </>
+          )}
         </div>
-      </div>
-    </>
+      </section>
+    </ModalShell>
   );
 }
 
@@ -324,22 +310,6 @@ function OAuthStatusCard({
 }
 
 // Icons
-function CloseIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
 function ErrorIcon() {
   return (
     <svg
@@ -392,54 +362,6 @@ function WarningIcon() {
 
 // Styles
 const styles: Record<string, CSSProperties> = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0, 0, 0, 0.6)",
-    backdropFilter: "blur(4px)",
-    zIndex: 1000,
-  },
-  modal: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "calc(100% - 48px)",
-    maxWidth: "420px",
-    maxHeight: "calc(100vh - 96px)",
-    overflow: "auto",
-    zIndex: 1001,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "20px 24px",
-    borderBottom: "1px solid var(--border)",
-  },
-  title: {
-    fontSize: "18px",
-    fontWeight: "600",
-    color: "var(--text-primary)",
-    margin: 0,
-  },
-  closeButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "32px",
-    height: "32px",
-    color: "var(--text-muted)",
-    borderRadius: "var(--radius-sm)",
-    cursor: "pointer",
-    background: "transparent",
-    border: "none",
-    transition:
-      "color var(--transition-fast), background var(--transition-fast)",
-  },
-  content: {
-    padding: "20px 24px 24px",
-  },
   section: {
     marginBottom: "24px",
   },

@@ -17,7 +17,7 @@ async function requireSuccess(
 
 export function createElectronChatGateway(api: ElectronAPI): ChatGateway {
   return {
-    async fetchSettings(): Promise<Partial<ChatSettings> | undefined> {
+    async fetchSettings(): Promise<ChatSettings> {
       return api.getSettings();
     },
     async persistSettings(settings: Partial<ChatSettings>): Promise<void> {

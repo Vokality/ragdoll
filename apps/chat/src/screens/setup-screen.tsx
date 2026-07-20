@@ -10,9 +10,14 @@ import type { SetupService } from "../application/setup-service";
 interface SetupScreenProps {
   onComplete: () => void;
   service: SetupService;
+  reportError: (error: unknown) => void;
 }
 
-export function SetupScreen({ onComplete, service }: SetupScreenProps) {
+export function SetupScreen({
+  onComplete,
+  service,
+  reportError,
+}: SetupScreenProps) {
   const controller = useRef<CharacterController | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +80,7 @@ export function SetupScreen({ onComplete, service }: SetupScreenProps) {
       <div style={styles.characterContainer}>
         <RagdollCharacter
           onControllerReady={handleControllerReady}
+          onEventSubscriberError={reportError}
           theme={theme}
           variant="human"
         />

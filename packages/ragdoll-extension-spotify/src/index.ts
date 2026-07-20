@@ -347,7 +347,7 @@ export function createExtension(): RagdollExtension {
         );
       }
 
-      const api = createSpotifyApiClient(host.oauth);
+      const api = createSpotifyApiClient(host.oauth, fetch, Date.now);
 
       return {
         tools: createSpotifyTools(api),

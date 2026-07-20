@@ -17,24 +17,26 @@ interface Message {
 
 interface CharacterViewProps {
   messages: Message[];
-  isStreaming?: boolean;
-  themeId?: CharacterThemeId;
-  variantId?: CharacterVariantId;
-  onControllerReady?: (controller: CharacterController) => void;
+  isStreaming: boolean;
+  themeId: CharacterThemeId;
+  variantId: CharacterVariantId;
+  onControllerReady: (controller: CharacterController) => void;
+  onEventSubscriberError: (error: unknown) => void;
 }
 
 export function CharacterView({
   messages,
   isStreaming,
-  themeId = "default",
-  variantId = "human",
+  themeId,
+  variantId,
   onControllerReady,
+  onEventSubscriberError,
 }: CharacterViewProps) {
   const theme = getTheme(themeId);
 
   const handleControllerReady = useCallback(
     (ctrl: CharacterController) => {
-      onControllerReady?.(ctrl);
+      onControllerReady(ctrl);
     },
     [onControllerReady],
   );
@@ -46,6 +48,7 @@ export function CharacterView({
         <RagdollCharacter
           key={`${themeId}-${variantId}`}
           onControllerReady={handleControllerReady}
+          onEventSubscriberError={onEventSubscriberError}
           theme={theme}
           variant={variantId}
         />

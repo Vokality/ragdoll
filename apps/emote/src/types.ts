@@ -55,10 +55,10 @@ export type ExtensionMessage =
   | {
       type: "setSpeechBubble";
       text: string | null;
-      tone?: BubbleTone;
+      tone: BubbleTone;
     }
-  | { type: "setTheme"; themeId: string }
-  | { type: "setVariant"; variantId: string };
+  | { type: "setTheme"; themeId: ThemeId }
+  | { type: "setVariant"; variantId: VariantId };
 
 export type WebviewMessage =
   { type: "ready" } | { type: "error"; message: string };

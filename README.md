@@ -39,6 +39,7 @@ The root build is dependency-ordered: core libraries, extension packages, the ex
 - `packages/ragdoll-extension-tasks` — task tools, state channel, and slot.
 - `packages/ragdoll-extension-pomodoro` — focus timer tools, state channel, and slot.
 - `packages/ragdoll-extension-spotify` — Spotify tools through host-provided OAuth.
+- `packages/ragdoll-extension-tic-tac-toe` — shared-board tic-tac-toe tools, events, and slot UI.
 
 ### Apps
 

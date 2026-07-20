@@ -2,6 +2,7 @@ import type {
   ExtensionSlot,
   GridPanelCell,
   GridPanelConfig,
+  GridPanelResult,
   ItemStatus,
   ListPanelConfig,
   ListPanelItem,
@@ -17,6 +18,7 @@ import type {
 export type {
   GridPanelCell,
   GridPanelConfig,
+  GridPanelResult,
   ItemStatus,
   ListPanelConfig,
   ListPanelItem,

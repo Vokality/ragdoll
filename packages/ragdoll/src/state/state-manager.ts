@@ -14,9 +14,9 @@ export class StateManager {
   private currentState: CharacterState;
   private eventBus: EventBus;
 
-  constructor(initialState: CharacterState, eventBus?: EventBus) {
+  constructor(initialState: CharacterState, eventBus: EventBus) {
     this.currentState = { ...initialState };
-    this.eventBus = eventBus ?? new EventBus();
+    this.eventBus = eventBus;
   }
 
   /**

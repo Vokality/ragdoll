@@ -18,7 +18,6 @@ import type {
 } from "@vokality/ragdoll-extensions";
 import {
   PomodoroManager,
-  createPomodoroManager,
   type PomodoroState,
   type PomodoroPhase,
   type PomodoroEvent,
@@ -48,7 +47,7 @@ export type {
   PomodoroEvent,
   PomodoroEventCallback,
 };
-export { PomodoroManager, createPomodoroManager };
+export { PomodoroManager };
 
 // =============================================================================
 // Tool Argument Types
@@ -249,23 +248,31 @@ function mapPomodoroState(manager: PomodoroManager): PomodoroStateData {
 }
 
 const DEFAULT_EXTENSION_ID = "pomodoro";
-const REQUIRED_HOST_CAPABILITIES = ["conversationEvents", "logger"] as const;
+const REQUIRED_HOST_CAPABILITIES = [
+  "conversationEvents",
+  "logger",
+  "timers",
+] as const;
 
 function createRuntime(
   host: ExtensionHostEnvironment,
 ): ExtensionRuntimeContribution {
   const conversationEvents = host.conversationEvents;
   const logger = host.logger;
-  if (!conversationEvents || !logger) {
+  const timers = host.timers;
+  if (!conversationEvents || !logger || !timers) {
     throw new Error(
-      "Pomodoro requires conversationEvents and logger host capabilities",
+      "Pomodoro requires conversationEvents, logger, and timers host capabilities",
     );
   }
 
-  const manager = createPomodoroManager(
-    DEFAULT_SESSION_DURATION,
-    DEFAULT_BREAK_DURATION,
-  );
+  const manager = new PomodoroManager({
+    sessionDurationMinutes: DEFAULT_SESSION_DURATION,
+    breakDurationMinutes: DEFAULT_BREAK_DURATION,
+    timers,
+    logger,
+    now: Date.now,
+  });
   const stateListeners = new Set<(state: PomodoroStateData) => void>();
 
   const notify = (state: PomodoroStateData): void => {
@@ -471,7 +478,14 @@ function createRuntime(
     };
   };
 
-  const slotState = createSlotState(deriveSlotState(mapPomodoroState(manager)));
+  const slotState = createSlotState(
+    deriveSlotState(mapPomodoroState(manager)),
+    (error) => {
+      logger.error("Pomodoro slot listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
   const unsubscribeSlot = manager.onStateChange(() => {
     slotState.replaceState(deriveSlotState(mapPomodoroState(manager)));
   });

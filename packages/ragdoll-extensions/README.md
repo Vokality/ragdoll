@@ -9,7 +9,7 @@ React-free extension contracts, lifecycle management, capability registration, a
 - `@vokality/ragdoll-extensions/slots` — explicit React-free slot entrypoint.
 - `@vokality/ragdoll-extensions/ui` — optional React components and hooks.
 
-Built-in extensions are independent packages. Import them directly from `@vokality/ragdoll-extension-character`, `@vokality/ragdoll-extension-tasks`, `@vokality/ragdoll-extension-pomodoro`, or `@vokality/ragdoll-extension-spotify`.
+Built-in extensions are independent packages. Import them directly from `@vokality/ragdoll-extension-character`, `@vokality/ragdoll-extension-tasks`, `@vokality/ragdoll-extension-pomodoro`, `@vokality/ragdoll-extension-spotify`, or `@vokality/ragdoll-extension-tic-tac-toe`.
 
 ## Installation
 
@@ -63,7 +63,10 @@ const weather = createExtension({
 });
 
 const host: ExtensionHostEnvironment = { capabilities: new Set() };
-const registry = createRegistry();
+const registry = createRegistry({
+  now: Date.now,
+  onListenerError: console.error,
+});
 await registry.register(weather, { host });
 
 const tools = registry.getAllTools();
@@ -134,11 +137,14 @@ import {
   serializeSlotState,
 } from "@vokality/ragdoll-extensions/slots";
 
-const state = createSlotState({
-  badge: 1,
-  visible: true,
-  panel: { type: "list", title: "Tasks", items: [] },
-});
+const state = createSlotState(
+  {
+    badge: 1,
+    visible: true,
+    panel: { type: "list", title: "Tasks", items: [] },
+  },
+  console.error,
+);
 
 const payload = serializeSlotState(state.getState());
 ```

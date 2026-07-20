@@ -10,7 +10,10 @@ describe("StateManager", () => {
 
   beforeEach(() => {
     initialState = new CharacterStateBuilder().build();
-    stateManager = new StateManager(initialState);
+    stateManager = new StateManager(
+      initialState,
+      new EventBus(() => undefined),
+    );
   });
 
   describe("state getter", () => {
@@ -37,7 +40,10 @@ describe("StateManager", () => {
 
     it("should emit mood change event", () => {
       const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
+      const customManager = new StateManager(
+        initialState,
+        spyBus as unknown as EventBus,
+      );
       customManager.setMood("smile", "neutral");
       expect(spyBus.emittedEvents.length).toBe(1);
       expect(spyBus.emittedEvents[0]).toMatchObject({
@@ -66,7 +72,10 @@ describe("StateManager", () => {
 
     it("should emit action triggered event", () => {
       const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
+      const customManager = new StateManager(
+        initialState,
+        spyBus as unknown as EventBus,
+      );
       customManager.setAction("wink", 0.5);
       expect(spyBus.emittedEvents.length).toBe(1);
       expect(spyBus.emittedEvents[0]).toMatchObject({
@@ -78,7 +87,10 @@ describe("StateManager", () => {
 
     it("should emit action cleared event", () => {
       const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
+      const customManager = new StateManager(
+        initialState,
+        spyBus as unknown as EventBus,
+      );
       customManager.setAction("wink", 0.5);
       customManager.setAction(null);
       expect(spyBus.emittedEvents.length).toBe(2);
@@ -89,7 +101,10 @@ describe("StateManager", () => {
 
     it("should not emit event when setting none action", () => {
       const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
+      const customManager = new StateManager(
+        initialState,
+        spyBus as unknown as EventBus,
+      );
       customManager.setAction("none");
       expect(spyBus.emittedEvents.length).toBe(0);
     });
@@ -105,7 +120,10 @@ describe("StateManager", () => {
 
     it("should emit head pose changed event", () => {
       const spyBus = new SpyEventBus();
-      const customManager = new StateManager(initialState, spyBus as unknown as EventBus);
+      const customManager = new StateManager(
+        initialState,
+        spyBus as unknown as EventBus,
+      );
       customManager.setHeadPose({ yaw: 0.3, pitch: 0.2 });
       expect(spyBus.emittedEvents.length).toBe(1);
       expect(spyBus.emittedEvents[0]).toMatchObject({
@@ -180,14 +198,8 @@ describe("StateManager", () => {
   });
 
   describe("event bus integration", () => {
-    it("should create default event bus if not provided", () => {
-      const manager = new StateManager(initialState);
-      const bus = manager.getEventBus();
-      expect(bus).toBeDefined();
-    });
-
     it("should use provided event bus", () => {
-      const customBus = new EventBus();
+      const customBus = new EventBus(() => undefined);
       const manager = new StateManager(initialState, customBus);
       const bus = manager.getEventBus();
       expect(bus).toBe(customBus);
@@ -201,4 +213,3 @@ describe("StateManager", () => {
     });
   });
 });
-

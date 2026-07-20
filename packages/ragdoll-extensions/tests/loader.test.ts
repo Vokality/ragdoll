@@ -7,6 +7,10 @@ import type {
 } from "../src/types.js";
 
 const host: ExtensionHostEnvironment = { capabilities: new Set() };
+const registryDependencies = {
+  now: Date.now,
+  onListenerError: () => undefined,
+};
 
 function packageManifest(
   id: string,
@@ -95,7 +99,7 @@ describe("ExtensionLoader", () => {
       version: "1.0.0",
       ragdollExtension: packageManifest("weather", ["tools"]),
     });
-    const loader = createLoader(createRegistry(), {
+    const loader = createLoader(createRegistry(registryDependencies), {
       packageRoots: [{ path: "/extensions", layout: "installed" }],
       hostEnvironment: host,
       fileSystem: {
@@ -112,7 +116,13 @@ describe("ExtensionLoader", () => {
   it("resolves the declared extension entrypoint", async () => {
     let importedPath = "";
     const loadedExtension: RagdollExtension = {
-      manifest: { id: "nested", name: "Nested", version: "1.0.0" },
+      manifest: {
+        id: "nested",
+        name: "Nested",
+        version: "1.0.0",
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
       activate: () => ({
         tools: [
           {
@@ -139,7 +149,7 @@ describe("ExtensionLoader", () => {
         "./dist/index.js",
       ),
     });
-    const loader = createLoader(createRegistry(), {
+    const loader = createLoader(createRegistry(registryDependencies), {
       packageRoots: [{ path: "/extensions", layout: "packages" }],
       hostEnvironment: host,
       fileSystem: {
@@ -197,7 +207,7 @@ describe("ExtensionLoader", () => {
         ],
       }),
     };
-    const loader = createLoader(createRegistry(), {
+    const loader = createLoader(createRegistry(registryDependencies), {
       packageRoots: [{ path: "/extensions", layout: "packages" }],
       hostEnvironment: host,
       fileSystem: {
@@ -227,6 +237,7 @@ describe("ExtensionLoader", () => {
         name: "Overreaching",
         version: "1.0.0",
         requiredCapabilities: ["storage"],
+        optionalCapabilities: [],
       },
       activate: () => ({
         tools: [
@@ -244,7 +255,7 @@ describe("ExtensionLoader", () => {
         ],
       }),
     };
-    const loader = createLoader(createRegistry(), {
+    const loader = createLoader(createRegistry(registryDependencies), {
       packageRoots: [{ path: "/extensions", layout: "packages" }],
       hostEnvironment: host,
       fileSystem: {
@@ -265,14 +276,20 @@ describe("ExtensionLoader", () => {
   });
 
   it("rejects runtime capabilities that differ from the package manifest", async () => {
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     const packageJson = JSON.stringify({
       name: "mismatched-package",
       version: "1.0.0",
       ragdollExtension: packageManifest("mismatched", ["slots"]),
     });
     const extension: RagdollExtension = {
-      manifest: { id: "mismatched", name: "Mismatched", version: "1.0.0" },
+      manifest: {
+        id: "mismatched",
+        name: "Mismatched",
+        version: "1.0.0",
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
       activate: () => ({
         tools: [
           {
@@ -316,7 +333,13 @@ describe("ExtensionLoader", () => {
       ragdollExtension: packageManifest("cleanup", ["tools"]),
     });
     const cleanupExtension: RagdollExtension = {
-      manifest: { id: "cleanup", name: "Cleanup", version: "1.0.0" },
+      manifest: {
+        id: "cleanup",
+        name: "Cleanup",
+        version: "1.0.0",
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
       activate: () => ({
         tools: [
           {
@@ -336,7 +359,7 @@ describe("ExtensionLoader", () => {
         },
       }),
     };
-    const loader = createLoader(createRegistry(), {
+    const loader = createLoader(createRegistry(registryDependencies), {
       packageRoots: [{ path: "/extensions", layout: "packages" }],
       hostEnvironment: host,
       fileSystem: {

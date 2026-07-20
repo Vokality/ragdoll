@@ -28,7 +28,6 @@ import {
 } from "@vokality/ragdoll-extensions/slots";
 import {
   TaskManager,
-  createTaskManager,
   type Task,
   type TaskState,
   type TaskStatus,
@@ -49,7 +48,7 @@ export const VALID_TASK_STATUSES = [
 
 // Re-export types from task-manager
 export type { Task, TaskState, TaskStatus, TaskEvent, TaskEventCallback };
-export { TaskManager, createTaskManager };
+export { TaskManager };
 
 // =============================================================================
 // Tool Argument Types
@@ -374,21 +373,37 @@ async function createRuntime(
   const { storage, logger } = requireHostCapabilities(host);
   const startingState = await loadTaskState(storage);
 
-  const manager = createTaskManager(startingState);
+  const manager = new TaskManager(startingState, {
+    createId: () => globalThis.crypto.randomUUID(),
+    now: Date.now,
+    onListenerError: (error) => {
+      logger.error("Task event listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const stateListeners = new Set<(state: TaskState) => void>();
 
-  const persistState = async (state: TaskState): Promise<void> => {
+  const mutate = async <T>(operation: () => T): Promise<T> => {
+    const checkpoint = manager.getState();
+    const result = operation();
     try {
-      await storage.write(DEFAULT_EXTENSION_ID, DEFAULT_STORAGE_KEY, state);
+      await storage.write(
+        DEFAULT_EXTENSION_ID,
+        DEFAULT_STORAGE_KEY,
+        manager.getState(),
+      );
+      return result;
     } catch (error) {
       logger.error(`[${DEFAULT_EXTENSION_ID}] Failed to persist task state`, {
         error: error instanceof Error ? error.message : String(error),
       });
+      manager.loadState(checkpoint);
+      throw error;
     }
   };
 
   const unsubscribeManager = manager.onStateChange((event) => {
-    void persistState(event.state);
     for (const listener of stateListeners) {
       try {
         listener(event.state);
@@ -401,50 +416,52 @@ async function createRuntime(
   });
 
   const handler: TaskToolHandler = {
-    addTask: ({ text, status }) => {
-      const task = manager.addTask(text, status);
+    addTask: async ({ text, status }) => {
+      const task = await mutate(() => manager.addTask(text, status));
       return { success: true, data: task };
     },
 
-    updateTaskStatus: ({ taskId, status, blockedReason }) => {
-      const task = manager.updateTaskStatus(taskId, status, blockedReason);
+    updateTaskStatus: async ({ taskId, status, blockedReason }) => {
+      const task = await mutate(() =>
+        manager.updateTaskStatus(taskId, status, blockedReason),
+      );
       if (!task) {
         return { success: false, error: `Task not found: ${taskId}` };
       }
       return { success: true, data: task };
     },
 
-    setActiveTask: ({ taskId }) => {
-      const task = manager.setActiveTask(taskId);
+    setActiveTask: async ({ taskId }) => {
+      const task = await mutate(() => manager.setActiveTask(taskId));
       if (!task) {
         return { success: false, error: `Task not found: ${taskId}` };
       }
       return { success: true, data: task };
     },
 
-    removeTask: ({ taskId }) => {
-      const removed = manager.removeTask(taskId);
+    removeTask: async ({ taskId }) => {
+      const removed = await mutate(() => manager.removeTask(taskId));
       if (!removed) {
         return { success: false, error: `Task not found: ${taskId}` };
       }
       return { success: true };
     },
 
-    completeActiveTask: () => {
-      const task = manager.completeActiveTask();
+    completeActiveTask: async () => {
+      const task = await mutate(() => manager.completeActiveTask());
       if (!task) {
         return { success: false, error: "No active task to complete" };
       }
       return { success: true, data: task };
     },
 
-    clearCompletedTasks: () => {
-      const count = manager.clearCompletedTasks();
+    clearCompletedTasks: async () => {
+      const count = await mutate(() => manager.clearCompletedTasks());
       return { success: true, data: { cleared: count } };
     },
 
-    clearAllTasks: () => {
-      const count = manager.clearAllTasks();
+    clearAllTasks: async () => {
+      const count = await mutate(() => manager.clearAllTasks());
       return { success: true, data: { cleared: count } };
     },
 
@@ -489,11 +506,11 @@ async function createRuntime(
                 : "default",
           checkable: true,
           checked: false,
-          onToggle: () => {
-            manager.updateTaskStatus(task.id, "done");
+          onToggle: async () => {
+            await mutate(() => manager.updateTaskStatus(task.id, "done"));
           },
-          onClick: () => {
-            manager.setActiveTask(task.id);
+          onClick: async () => {
+            await mutate(() => manager.setActiveTask(task.id));
           },
         })),
       });
@@ -509,8 +526,8 @@ async function createRuntime(
           status: "success",
           checkable: true,
           checked: true,
-          onToggle: () => {
-            manager.updateTaskStatus(task.id, "todo");
+          onToggle: async () => {
+            await mutate(() => manager.updateTaskStatus(task.id, "todo"));
           },
         })),
         collapsible: true,
@@ -519,8 +536,8 @@ async function createRuntime(
           {
             id: "clear-completed",
             label: "Clear all",
-            onClick: () => {
-              manager.clearCompletedTasks();
+            onClick: async () => {
+              await mutate(() => manager.clearCompletedTasks());
             },
           },
         ],
@@ -539,7 +556,14 @@ async function createRuntime(
     };
   };
 
-  const slotState = createSlotState(deriveSlotState(manager.getState()));
+  const slotState = createSlotState(
+    deriveSlotState(manager.getState()),
+    (error) => {
+      logger.error("Task slot listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
   const unsubscribeSlot = manager.onStateChange((event) => {
     slotState.replaceState(deriveSlotState(event.state));
   });

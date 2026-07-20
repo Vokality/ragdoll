@@ -35,7 +35,10 @@ function createGateway() {
 describe("ChatService", () => {
   it("owns hydration and the main-process conversation projection outside React", async () => {
     const testGateway = createGateway();
-    const service = new ChatService(testGateway.gateway);
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
 
     await service.start();
     expect(service.getSnapshot().settings).toEqual({

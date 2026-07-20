@@ -11,7 +11,7 @@ export type ChatSendResult =
   { success: true } | { success: false; error: string };
 
 export interface ChatGateway {
-  fetchSettings(): Promise<Partial<ChatSettings> | undefined>;
+  fetchSettings(): Promise<ChatSettings>;
   persistSettings(settings: Partial<ChatSettings>): Promise<void>;
   fetchConversation(): Promise<ChatMessage[]>;
   clearConversation(): Promise<void>;

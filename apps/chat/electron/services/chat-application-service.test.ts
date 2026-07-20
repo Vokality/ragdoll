@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type {
   ConversationEntry,
   EventTurnOutcome,
@@ -8,6 +8,12 @@ import { createInMemoryStorageRepository } from "../test-support/in-memory-stora
 import type { AgentRunner } from "./openai-service.js";
 import { ChatApplicationService } from "./chat-application-service.js";
 import { ConversationEventService } from "./conversation-event-service.js";
+
+const eventDependencies = {
+  createId: () => globalThis.crypto.randomUUID(),
+  now: Date.now,
+};
+const ignoreError = () => undefined;
 
 class StubAgentRunner implements AgentRunner {
   eventOutcome: EventTurnOutcome = { disposition: "silent" };
@@ -45,6 +51,7 @@ function createChat(agent = new StubAgentRunner()) {
     { getKey: async () => "api-key" },
     agent,
     (conversation) => projections.push(conversation),
+    ignoreError,
   );
   return { agent, chat, projections, storage };
 }
@@ -78,7 +85,7 @@ describe("ChatApplicationService", () => {
 
   it("completes an event turn silently while retaining its conversation entry", async () => {
     const { agent, chat, storage } = createChat();
-    const events = new ConversationEventService(storage);
+    const events = new ConversationEventService(storage, eventDependencies);
     await events.publish("pomodoro", {
       type: "timer.completed",
       payload: { completedPhase: "focus" },
@@ -98,7 +105,7 @@ describe("ChatApplicationService", () => {
 
   it("includes record-only events in the next user turn", async () => {
     const { agent, chat, storage } = createChat();
-    const events = new ConversationEventService(storage);
+    const events = new ConversationEventService(storage, eventDependencies);
     await events.publish("calendar", {
       type: "calendar.synchronized",
       payload: { changed: 3 },
@@ -118,7 +125,7 @@ describe("ChatApplicationService", () => {
       },
       { role: "user", content: "What changed?" },
     ]);
-    expect(storage.snapshot().pendingAgentTurns).toBeUndefined();
+    expect(storage.snapshot().pendingAgentTurns).toEqual([]);
   });
 
   it("persists and publishes an event-triggered assistant response", async () => {
@@ -128,7 +135,7 @@ describe("ChatApplicationService", () => {
       content: "Your focus session is complete.",
     };
     const { chat, projections, storage } = createChat(agent);
-    const events = new ConversationEventService(storage);
+    const events = new ConversationEventService(storage, eventDependencies);
     await events.publish("pomodoro", {
       type: "timer.completed",
       payload: { completedPhase: "focus" },
@@ -151,7 +158,7 @@ describe("ChatApplicationService", () => {
   });
 
   it("retains a pending event job when agent evaluation fails", async () => {
-    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    const reportedErrors: unknown[] = [];
     const agent = new StubAgentRunner();
     agent.eventError = new Error("model unavailable");
     const storage = createInMemoryStorageRepository();
@@ -160,8 +167,9 @@ describe("ChatApplicationService", () => {
       { getKey: async () => "api-key" },
       agent,
       () => {},
+      (error) => reportedErrors.push(error),
     );
-    const events = new ConversationEventService(storage);
+    const events = new ConversationEventService(storage, eventDependencies);
     const published = await events.publish("pomodoro", {
       type: "timer.completed",
       payload: { completedPhase: "focus" },
@@ -176,7 +184,7 @@ describe("ChatApplicationService", () => {
         createdAt: expect.any(Number),
       },
     ]);
-    errorLog.mockRestore();
+    expect(reportedErrors).toEqual([agent.eventError]);
   });
 
   it("serializes event turns behind an active user turn", async () => {
@@ -208,8 +216,9 @@ describe("ChatApplicationService", () => {
       { getKey: async () => "api-key" },
       agent,
       () => {},
+      ignoreError,
     );
-    const events = new ConversationEventService(storage);
+    const events = new ConversationEventService(storage, eventDependencies);
 
     const userTurn = chat.sendMessage("Start", {
       streamingText: () => {},

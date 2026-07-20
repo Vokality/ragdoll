@@ -10,6 +10,10 @@ import type {
 const host: ExtensionHostEnvironment = {
   capabilities: new Set(),
 };
+const registryDependencies = {
+  now: Date.now,
+  onListenerError: () => undefined,
+};
 
 function tool(name: string) {
   return {
@@ -30,7 +34,13 @@ function extension(
   contribution: ExtensionRuntimeContribution,
 ): RagdollExtension {
   return {
-    manifest: { id, name: id, version: "1.0.0" },
+    manifest: {
+      id,
+      name: id,
+      version: "1.0.0",
+      requiredCapabilities: [],
+      optionalCapabilities: [],
+    },
     activate: () => contribution,
   };
 }
@@ -38,7 +48,7 @@ function extension(
 describe("ExtensionRegistry lifecycle", () => {
   it("disposes a createExtension runtime exactly once", async () => {
     let disposeCount = 0;
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     const instance = createExtension({
       id: "lifecycle",
       name: "Lifecycle",
@@ -60,14 +70,20 @@ describe("ExtensionRegistry lifecycle", () => {
   it("cleans up an activated contribution when registration fails", async () => {
     let disposeCount = 0;
     let deactivateCount = 0;
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     await registry.register(
       extension("owner", { tools: [tool("sharedTool")] }),
       { host },
     );
 
     const conflicting: RagdollExtension = {
-      manifest: { id: "conflict", name: "Conflict", version: "1.0.0" },
+      manifest: {
+        id: "conflict",
+        name: "Conflict",
+        version: "1.0.0",
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
       activate: () => ({
         tools: [tool("sharedTool")],
         dispose: () => {
@@ -89,7 +105,7 @@ describe("ExtensionRegistry lifecycle", () => {
   });
 
   it("cleans every extension when one destroy hook fails", async () => {
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     await registry.register(
       extension("broken-cleanup", {
         tools: [tool("brokenTool")],
@@ -115,7 +131,7 @@ describe("ExtensionRegistry lifecycle", () => {
 
 describe("ExtensionRegistry capability integrity", () => {
   it("rejects duplicate capabilities within one contribution", async () => {
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     const duplicate = extension("duplicate", {
       tools: [tool("same"), tool("same")],
     });
@@ -128,7 +144,7 @@ describe("ExtensionRegistry capability integrity", () => {
   });
 
   it("rejects slot conflicts without overwriting the owner", async () => {
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     const state = {
       getState: () => ({
         badge: null,
@@ -139,7 +155,15 @@ describe("ExtensionRegistry capability integrity", () => {
     };
     await registry.register(
       extension("first", {
-        slots: [{ id: "shared.slot", label: "First", icon: "star", state }],
+        slots: [
+          {
+            id: "shared.slot",
+            label: "First",
+            icon: "star",
+            priority: 0,
+            state,
+          },
+        ],
       }),
       { host },
     );
@@ -147,7 +171,15 @@ describe("ExtensionRegistry capability integrity", () => {
     await expect(
       registry.register(
         extension("second", {
-          slots: [{ id: "shared.slot", label: "Second", icon: "star", state }],
+          slots: [
+            {
+              id: "shared.slot",
+              label: "Second",
+              icon: "star",
+              priority: 0,
+              state,
+            },
+          ],
         }),
         { host },
       ),
@@ -158,7 +190,7 @@ describe("ExtensionRegistry capability integrity", () => {
   });
 
   it("turns validator exceptions into failed validation and execution results", async () => {
-    const registry = createRegistry();
+    const registry = createRegistry(registryDependencies);
     await registry.register(
       extension("validator", {
         tools: [

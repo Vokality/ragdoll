@@ -4,6 +4,7 @@ import {
   type OAuthConfig,
   type OAuthState,
   type OAuthTokens,
+  type HostTimersCapability,
 } from "@vokality/ragdoll-extensions";
 import type {
   OAuthCallbackResult,
@@ -40,6 +41,8 @@ export interface OAuthManagerConfig {
     init?: RequestInit,
   ) => Promise<Response>;
   logger: ServiceLogger;
+  timers: HostTimersCapability;
+  now: () => number;
 }
 
 export interface OAuthManagerEventSink {
@@ -83,7 +86,7 @@ export class OAuthManager implements HostOAuthCapability {
     isAuthenticated: false,
   };
   private readonly listeners = new Set<OAuthStateListener>();
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshTimer: unknown | null = null;
   private refreshPromise: Promise<void> | null = null;
   private authorizationCompletion: Promise<void> | null = null;
   private pendingAuthorization: PendingAuthorization | null = null;
@@ -346,7 +349,7 @@ export class OAuthManager implements HostOAuthCapability {
       accessToken: response.access_token,
       refreshToken: response.refresh_token ?? previous?.refreshToken,
       expiresAt: response.expires_in
-        ? Date.now() + response.expires_in * 1000
+        ? this.config.now() + response.expires_in * 1000
         : undefined,
       scope: response.scope ?? previous?.scope,
       tokenType: response.token_type ?? previous?.tokenType,
@@ -360,7 +363,9 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   private isExpired(tokens: OAuthTokens, skewMs = 0): boolean {
-    return Boolean(tokens.expiresAt && Date.now() >= tokens.expiresAt - skewMs);
+    return Boolean(
+      tokens.expiresAt && this.config.now() >= tokens.expiresAt - skewMs,
+    );
   }
 
   private markConnected(): void {
@@ -397,9 +402,9 @@ export class OAuthManager implements HostOAuthCapability {
 
     const delay = Math.max(
       0,
-      this.tokens.expiresAt - Date.now() - SCHEDULED_REFRESH_LEAD_MS,
+      this.tokens.expiresAt - this.config.now() - SCHEDULED_REFRESH_LEAD_MS,
     );
-    this.refreshTimer = setTimeout(() => {
+    this.refreshTimer = this.config.timers.setTimeout(() => {
       void this.refreshAccessToken().catch((error) => {
         this.log("error", "Scheduled OAuth token refresh failed", error);
       });
@@ -408,7 +413,7 @@ export class OAuthManager implements HostOAuthCapability {
 
   private clearRefreshTimer(): void {
     if (!this.refreshTimer) return;
-    clearTimeout(this.refreshTimer);
+    this.config.timers.clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
   }
 
@@ -438,8 +443,4 @@ async function readOAuthError(response: Response): Promise<string> {
   } catch {
     return "provider returned a non-JSON error";
   }
-}
-
-export function createOAuthManager(config: OAuthManagerConfig): OAuthManager {
-  return new OAuthManager(config);
 }

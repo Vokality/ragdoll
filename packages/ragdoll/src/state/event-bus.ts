@@ -8,6 +8,8 @@ export class EventBus {
   private eventHistory: StateEvent[] = [];
   private maxHistorySize = 100;
 
+  constructor(private readonly onSubscriberError: (error: unknown) => void) {}
+
   /**
    * Subscribe to state change events
    */
@@ -33,7 +35,7 @@ export class EventBus {
       try {
         subscriber(event);
       } catch (error) {
-        console.error("Error in event subscriber:", error);
+        this.onSubscriberError(error);
       }
     }
   }

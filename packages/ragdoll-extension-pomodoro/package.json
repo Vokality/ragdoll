@@ -20,10 +20,10 @@
   ],
   "scripts": {
     "prebuild": "bun run clean",
-    "build": "bunx --bun --no-install tsc -p tsconfig.json",
+    "build": "bun run ../../scripts/run-typescript.ts -p tsconfig.json",
     "test": "bun test ./src",
-    "dev": "bunx --bun --no-install tsc -w -p tsconfig.json",
-    "typecheck": "bunx --bun --no-install tsc --noEmit -p tsconfig.json",
+    "dev": "bun run ../../scripts/run-typescript.ts -w -p tsconfig.json",
+    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit -p tsconfig.json",
     "clean": "bun run ../../scripts/clean.ts dist"
   },
   "dependencies": {
@@ -43,7 +43,8 @@
     ],
     "requiredCapabilities": [
       "conversationEvents",
-      "logger"
+      "logger",
+      "timers"
     ],
     "optionalCapabilities": [
       "notifications"

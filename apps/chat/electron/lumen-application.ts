@@ -19,8 +19,12 @@ import { ExtensionMessageBus } from "./services/extension-message-bus.js";
 import { ExtensionOperationsService } from "./services/extension-operations-service.js";
 import { ExternalNavigationService } from "./services/external-navigation-service.js";
 import { GitHubReleaseService } from "./services/github-release-service.js";
+import { createHostTimersCapability } from "./services/host-timers-capability.js";
 import { OAuthLoopbackService } from "./services/oauth-loopback-service.js";
-import { OpenAIAgentRunner } from "./services/openai-service.js";
+import {
+  createOpenAICompletionSessionFactory,
+  OpenAIAgentRunner,
+} from "./services/openai-service.js";
 import { RendererEventService } from "./services/renderer-event-service.js";
 import { WindowService } from "./services/window-service.js";
 
@@ -45,8 +49,15 @@ export class LumenApplication {
     disabledExtensions: string[],
   ) {
     this.storage = storage;
-    this.conversationEvents = new ConversationEventService(storage);
-    this.oauthRedirects = new OAuthLoopbackService();
+    this.conversationEvents = new ConversationEventService(storage, {
+      createId: () => globalThis.crypto.randomUUID(),
+      now: Date.now,
+    });
+    const timers = createHostTimersCapability();
+    this.oauthRedirects = new OAuthLoopbackService(
+      config.oauth.callbackTimeoutMs,
+      timers,
+    );
     const messageBus = new ExtensionMessageBus((name, args) =>
       this.rendererEvents.functionCall(name, args),
     );
@@ -58,6 +69,9 @@ export class LumenApplication {
       messageBus,
       conversationEvents: this.conversationEvents,
       logger: console,
+      timers,
+      request: fetch,
+      now: Date.now,
       hostData: new ExtensionHostDataRepository(storage, safeStorage),
       oauthRedirects: this.oauthRedirects,
       disabledExtensions,
@@ -89,8 +103,13 @@ export class LumenApplication {
     this.chat = new ChatApplicationService(
       this.storage,
       this.apiKeys,
-      new OpenAIAgentRunner(this.extensions, this.config.chat),
+      new OpenAIAgentRunner(
+        this.extensions,
+        this.config.chat,
+        createOpenAICompletionSessionFactory(),
+      ),
       (conversation) => this.rendererEvents.conversationChanged(conversation),
+      (error) => console.error("Failed to process extension event turn", error),
     );
     this.unsubscribeConversationEvents = this.conversationEvents.onTurnQueued(
       () => void this.chat.schedulePendingEventTurns(),
@@ -99,8 +118,8 @@ export class LumenApplication {
 
   static async create(config: MainProcessConfig): Promise<LumenApplication> {
     const storage = createStorageRepository(config.userDataPath);
-    const disabledExtensions =
-      (await storage.read()).settings?.disabledExtensions ?? [];
+    const disabledExtensions = (await storage.read()).settings
+      .disabledExtensions;
     const application = new LumenApplication(
       config,
       storage,
@@ -141,8 +160,11 @@ export class LumenApplication {
         this.config.extensionsRegistryPath,
         this.config.userExtensionsPath,
       ),
-      releases: new GitHubReleaseService(),
-      archives: new ExtensionArchiveService(),
+      releases: new GitHubReleaseService(fetch),
+      archives: new ExtensionArchiveService(fetch),
+      createId: () => globalThis.crypto.randomUUID(),
+      now: Date.now,
+      logger: console,
     });
     const extensionOperations = new ExtensionOperationsService(
       this.extensions,

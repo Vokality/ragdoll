@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ExtensionInfo,
   InstalledExtension,
@@ -16,6 +16,8 @@ export function useExtensionSettings(
   isOpen: boolean,
 ) {
   const [available, setAvailable] = useState<ExtensionInfo[]>([]);
+  const [builtIn, setBuiltIn] = useState<ExtensionInfo[]>([]);
+  const [configurable, setConfigurable] = useState<ExtensionInfo[]>([]);
   const [disabled, setDisabled] = useState<string[]>([]);
   const [installed, setInstalled] = useState<InstalledExtension[]>([]);
   const [updates, setUpdates] = useState<UpdateCheckResult[]>([]);
@@ -25,20 +27,29 @@ export function useExtensionSettings(
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [uninstallingId, setUninstallingId] = useState<string | null>(null);
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     try {
       const overview = await service.loadOverview();
+      if (generation !== refreshGeneration.current) return;
       setAvailable(overview.available);
+      setBuiltIn(overview.builtIn);
+      setConfigurable(overview.configurable);
       setDisabled(overview.disabled);
       setInstalled(overview.installed);
     } catch (error) {
+      if (generation !== refreshGeneration.current) return;
       setNotice({ tone: "error", text: getErrorMessage(error) });
     }
   }, [service]);
 
   useEffect(() => {
     if (isOpen) void refresh();
+    return () => {
+      refreshGeneration.current += 1;
+    };
   }, [isOpen, refresh]);
 
   const install = useCallback(async () => {
@@ -135,22 +146,6 @@ export function useExtensionSettings(
       }
     },
     [disabled, service],
-  );
-
-  const installedIds = useMemo(
-    () => new Set(installed.map(({ id }) => id)),
-    [installed],
-  );
-  const builtIn = useMemo(
-    () => available.filter(({ id }) => !installedIds.has(id)),
-    [available, installedIds],
-  );
-  const configurable = useMemo(
-    () =>
-      builtIn.filter(
-        ({ hasConfigSchema, hasOAuth }) => hasConfigSchema || hasOAuth,
-      ),
-    [builtIn],
   );
 
   return {

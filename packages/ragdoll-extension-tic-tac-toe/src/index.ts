@@ -20,12 +20,12 @@ import {
 import {
   createSlotState,
   type GridPanelCell,
+  type GridPanelResult,
   type PanelAction,
   type SlotState,
 } from "@vokality/ragdoll-extensions/slots";
 import {
-  createGameManager,
-  type GameManager,
+  GameManager,
   type GameSnapshot,
   type Mark,
   type Player,
@@ -44,7 +44,7 @@ export type {
   MoveResult,
   Player,
 } from "./game-manager.js";
-export { GameManager, createGameManager } from "./game-manager.js";
+export { GameManager } from "./game-manager.js";
 
 const DEFAULT_EXTENSION_ID = "tic-tac-toe";
 const REQUIRED_HOST_CAPABILITIES = ["conversationEvents", "logger"] as const;
@@ -220,19 +220,47 @@ function panelTitle(snapshot: GameSnapshot): string {
     case "idle":
       return "Tic-Tac-Toe";
     case "won":
-      return snapshot.winner === "user" ? "You win!" : "Agent wins!";
+      return "Tic-Tac-Toe";
     case "draw":
-      return "Draw";
+      return "Tic-Tac-Toe";
     case "in_progress":
       return snapshot.currentPlayer === "user" ? "Your turn" : "Agent's turn";
   }
+}
+
+function panelResult(snapshot: GameSnapshot): GridPanelResult | undefined {
+  if (snapshot.status === "draw") {
+    return {
+      title: "It's a draw",
+      message: "No more moves — nobody completed three in a row.",
+      status: "default",
+    };
+  }
+  if (snapshot.status !== "won") {
+    return undefined;
+  }
+  if (snapshot.winner === "user") {
+    return {
+      title: "You win!",
+      message: "You completed three in a row.",
+      status: "success",
+    };
+  }
+  return {
+    title: "You lose",
+    message: "The agent completed three in a row.",
+    status: "error",
+  };
 }
 
 function deriveSlotState(
   snapshot: GameSnapshot,
   manager: GameManager,
   publishUserOutcome: (state: GameSnapshot) => Promise<void>,
-  publish: (type: GameEventType, state: GameSnapshot) => Promise<void>,
+  publish: (
+    type: ConversationGameEventType,
+    state: GameSnapshot,
+  ) => Promise<void>,
 ): SlotState {
   const gameKey = snapshot.gameId || "idle";
   const cells: GridPanelCell[] = [];
@@ -275,7 +303,10 @@ function deriveSlotState(
       variant: "primary",
       onClick: async () => {
         const checkpoint = manager.getState();
-        const nextState = manager.start();
+        const nextState = manager.start({
+          userMark: "X",
+          firstPlayer: "user",
+        });
         await publishOrRollback(manager, checkpoint, nextState, () =>
           publish("game.started", nextState),
         );
@@ -312,12 +343,14 @@ function deriveSlotState(
       columns: 3,
       emptyMessage: "Start a game to play",
       cells,
+      result: panelResult(snapshot),
       actions,
     },
   };
 }
 
-type GameEventType = "game.move" | "game.started" | "game.reset" | "game.ended";
+type ConversationGameEventType =
+  "game.move" | "game.started" | "game.reset" | "game.ended";
 
 function isFinished(snapshot: GameSnapshot): boolean {
   return snapshot.status === "won" || snapshot.status === "draw";
@@ -338,8 +371,9 @@ async function publishOrRollback(
 }
 
 function eventDeduplicationKey(
-  type: GameEventType,
+  type: ConversationGameEventType,
   snapshot: GameSnapshot,
+  createId: () => string,
 ): string {
   switch (type) {
     case "game.move":
@@ -347,7 +381,7 @@ function eventDeduplicationKey(
     case "game.started":
       return `started:${snapshot.gameId}`;
     case "game.reset":
-      return `reset:${snapshot.moveIndex}:${Date.now()}`;
+      return `reset:${createId()}`;
     case "game.ended":
       return `ended:${snapshot.gameId}:${snapshot.status}:${snapshot.moveIndex}`;
   }
@@ -364,10 +398,18 @@ function createRuntime(
     );
   }
 
-  const manager = createGameManager();
+  const createId = () => globalThis.crypto.randomUUID();
+  const manager = new GameManager({
+    createId,
+    onListenerError: (error) => {
+      logger.error("Game event listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
 
   const publish = async (
-    type: GameEventType,
+    type: ConversationGameEventType,
     snapshot: GameSnapshot,
     turnPolicy: "record-only" | "start-turn" = "start-turn",
     requiredToolName?: string,
@@ -378,7 +420,7 @@ function createRuntime(
         payload: toEventPayload(snapshot),
         turnPolicy,
         requiredToolName,
-        deduplicationKey: eventDeduplicationKey(type, snapshot),
+        deduplicationKey: eventDeduplicationKey(type, snapshot, createId),
       });
     } catch (error) {
       logger.error("Failed to publish game event", {
@@ -399,6 +441,11 @@ function createRuntime(
 
   const slotState = createSlotState(
     deriveSlotState(manager.getState(), manager, publishUserOutcome, publish),
+    (error) => {
+      logger.error("Tic-tac-toe slot listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
   );
   const unsubscribeSlot = manager.onStateChange((event) => {
     slotState.replaceState(
@@ -409,7 +456,10 @@ function createRuntime(
   const handler: TicTacToeToolHandler = {
     start: ({ userMark, firstPlayer }) => ({
       success: true,
-      data: manager.start({ userMark, firstPlayer }),
+      data: manager.start({
+        userMark: userMark ?? "X",
+        firstPlayer: firstPlayer ?? "user",
+      }),
     }),
     place: async ({ row, col }) => {
       const checkpoint = manager.getState();

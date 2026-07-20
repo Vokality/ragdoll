@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   access,
   cp,
@@ -20,6 +19,7 @@ import type {
 import { InstalledExtensionRepository } from "../infrastructure/installed-extension-repository.js";
 import { ExtensionArchiveService } from "./extension-archive-service.js";
 import { GitHubReleaseService } from "./github-release-service.js";
+import type { ServiceLogger } from "./service-logger.js";
 
 export interface ExtensionInstallerConfig {
   extensionsPath: string;
@@ -29,6 +29,9 @@ export interface ExtensionInstallerConfig {
   >;
   releases: Pick<GitHubReleaseService, "resolve">;
   archives: Pick<ExtensionArchiveService, "downloadAndExtract">;
+  createId(): string;
+  now(): number;
+  logger: ServiceLogger;
 }
 
 export interface PreparedExtensionUpdate {
@@ -75,7 +78,7 @@ export class ExtensionInstaller {
           `Extension directory already exists for '${metadata.id}'`,
         );
       }
-      const backupPath = `${finalPath}.backup-${randomUUID()}`;
+      const backupPath = `${finalPath}.backup-${this.config.createId()}`;
       if (existing) await rename(finalPath, backupPath);
 
       try {
@@ -87,7 +90,7 @@ export class ExtensionInstaller {
           description: metadata.description ?? manifest.description ?? "",
           path: finalPath,
           repoUrl: release.repoUrl,
-          installedAt: new Date().toISOString(),
+          installedAt: new Date(this.config.now()).toISOString(),
         });
       } catch (error) {
         await rm(finalPath, { recursive: true, force: true });
@@ -110,11 +113,14 @@ export class ExtensionInstaller {
     } finally {
       if (temporaryPath) {
         await rm(temporaryPath, { recursive: true, force: true }).catch(
-          (error) =>
-            console.error(
+          (error) => {
+            this.config.logger.error(
               "Failed to remove extension install directory",
-              error,
-            ),
+              {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            );
+          },
         );
       }
     }
@@ -123,7 +129,7 @@ export class ExtensionInstaller {
   async uninstall(extensionId: string): Promise<OperationResult> {
     const extension = await this.config.repository.get(extensionId);
     if (!extension) return { success: false, error: "Extension not found" };
-    const backupPath = `${extension.path}.uninstall-${randomUUID()}`;
+    const backupPath = `${extension.path}.uninstall-${this.config.createId()}`;
     await rename(extension.path, backupPath);
     try {
       await this.config.repository.delete(extensionId);

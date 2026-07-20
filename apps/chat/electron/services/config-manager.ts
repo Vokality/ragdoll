@@ -286,13 +286,3 @@ export class ConfigManager implements HostConfigCapability {
     this.listeners.clear();
   }
 }
-
-// =============================================================================
-// Factory Function
-// =============================================================================
-
-export function createConfigManager(
-  config: ConfigManagerConfig,
-): ConfigManager {
-  return new ConfigManager(config);
-}

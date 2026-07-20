@@ -18,6 +18,7 @@ import {
   type ExtensionHostCapability,
   type NotificationCallback,
   type ExtensionManifest,
+  type HostTimersCapability,
   type ConfigSchema,
   type ConfigValues,
   type ConversationEventInput,
@@ -35,8 +36,8 @@ import {
   type LoadResult,
   wrapExtensionWithPackageManifest,
 } from "@vokality/ragdoll-extensions/loader";
-import { OAuthManager, createOAuthManager } from "./oauth-manager.js";
-import { ConfigManager, createConfigManager } from "./config-manager.js";
+import { OAuthManager } from "./oauth-manager.js";
+import { ConfigManager } from "./config-manager.js";
 import type { ExtensionStorage } from "../infrastructure/extension-storage.js";
 import type { ExtensionMessageBus } from "./extension-message-bus.js";
 import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
@@ -73,6 +74,9 @@ export interface ExtensionManagerConfig {
   messageBus: ExtensionMessageBus;
   conversationEvents: ExtensionConversationEventPublisher;
   logger: ServiceLogger;
+  timers: HostTimersCapability;
+  request: typeof fetch;
+  now(): number;
 }
 
 export interface ExtensionManagerEventSink {
@@ -113,7 +117,13 @@ export class ExtensionManager {
   constructor(config: ExtensionManagerConfig) {
     this.config = config;
     this.disabledExtensions = new Set(config.disabledExtensions);
-    this.registry = createRegistry();
+    this.registry = createRegistry({
+      now: config.now,
+      onListenerError: (error) =>
+        config.logger.error("Extension registry listener failed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    });
 
     // Use getHostEnvironment to provide extension-specific capabilities
     this.loader = createLoader(this.registry, {
@@ -144,8 +154,8 @@ export class ExtensionManager {
     const packageInfo = this.packageInfoCache.get(extensionId);
 
     const requestedCapabilities = new Set<ExtensionHostCapability>([
-      ...(manifest.requiredCapabilities ?? []),
-      ...(manifest.optionalCapabilities ?? []),
+      ...manifest.requiredCapabilities,
+      ...manifest.optionalCapabilities,
     ]);
     const capabilities = new Set<ExtensionHostCapability>();
 
@@ -191,8 +201,12 @@ export class ExtensionManager {
     const ipc = requestedCapabilities.has("ipc")
       ? this.createIpcCapability(extensionId)
       : undefined;
+    const timers = requestedCapabilities.has("timers")
+      ? this.config.timers
+      : undefined;
     if (storage) capabilities.add("storage");
     if (ipc) capabilities.add("ipc");
+    if (timers) capabilities.add("timers");
     if (logger) capabilities.add("logger");
     const conversationEvents = canPublishConversationEvents
       ? {
@@ -222,6 +236,7 @@ export class ExtensionManager {
       conversationEvents,
       logger,
       ipc,
+      timers,
       oauth,
       config,
     };
@@ -258,7 +273,7 @@ export class ExtensionManager {
       configSchema,
     );
 
-    const manager = createOAuthManager({
+    const manager = new OAuthManager({
       oauthConfig,
       extensionId,
       getClientId: () => {
@@ -276,8 +291,10 @@ export class ExtensionManager {
         connected: () => this.config.events.oauthConnected(extensionId),
         failed: (error) => this.config.events.oauthFailed(extensionId, error),
       },
-      fetch: globalThis.fetch,
+      fetch: this.config.request,
       logger: this.config.logger,
+      timers: this.config.timers,
+      now: this.config.now,
     });
 
     this.oauthManagers.set(extensionId, manager);
@@ -324,7 +341,7 @@ export class ExtensionManager {
     const existingManager = this.configManagers.get(extensionId);
     if (existingManager) return existingManager;
 
-    const manager = createConfigManager({
+    const manager = new ConfigManager({
       extensionId,
       schema,
       loadValues: (): Promise<ConfigValues | null> =>
@@ -529,8 +546,8 @@ export class ExtensionManager {
       }
 
       if (!this.isConfigured(info)) {
-        console.info(
-          `[ExtensionManager] Skipping ${info.extensionId}: not configured`,
+        this.config.logger.info(
+          `Skipping extension '${info.extensionId}': not configured`,
         );
         continue;
       }
@@ -847,7 +864,7 @@ export class ExtensionManager {
       slotId: slot.id,
       label: slot.label,
       icon: slot.icon,
-      priority: slot.priority ?? 0,
+      priority: slot.priority,
     }));
   }
 

@@ -16,6 +16,7 @@ import { ExtensionMessageBus } from "./extension-message-bus.js";
 import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
 import type { ExtensionHostDataStore } from "../infrastructure/extension-host-data-repository.js";
 import type { OAuthRedirectService } from "./oauth-loopback-service.js";
+import { createHostTimersCapability } from "./host-timers-capability.js";
 
 const host: ExtensionHostEnvironment = { capabilities: new Set() };
 
@@ -92,6 +93,9 @@ function createManager(
       warn: () => undefined,
       error: () => undefined,
     },
+    timers: createHostTimersCapability(),
+    request: fetch,
+    now: Date.now,
     hostData: hostDataStore,
     oauthRedirects,
     disabledExtensions: [],
@@ -113,11 +117,14 @@ describe("ExtensionManager slot integration", () => {
     });
     await manager.initialize();
 
-    const slotState = createSlotState({
-      badge: null,
-      visible: true,
-      panel: { type: "list", title: "Dynamic", items: [] },
-    });
+    const slotState = createSlotState(
+      {
+        badge: null,
+        visible: true,
+        panel: { type: "list", title: "Dynamic", items: [] },
+      },
+      () => undefined,
+    );
     const extension = createExtension({
       id: "dynamic-slot",
       name: "Dynamic Slot",
@@ -127,6 +134,7 @@ describe("ExtensionManager slot integration", () => {
           id: "dynamic-slot.main",
           label: "Dynamic",
           icon: "star",
+          priority: 0,
           state: slotState,
         },
       ],
@@ -148,53 +156,56 @@ describe("ExtensionManager slot integration", () => {
     const manager = createManager();
     await manager.initialize();
 
-    const slotState = createSlotState({
-      badge: null,
-      visible: true,
-      panel: {
-        type: "list",
-        title: "Actions",
-        actions: [
-          {
-            id: "panel",
-            label: "Panel",
-            onClick: () => {
-              calls.push("panel");
+    const slotState = createSlotState(
+      {
+        badge: null,
+        visible: true,
+        panel: {
+          type: "list",
+          title: "Actions",
+          actions: [
+            {
+              id: "panel",
+              label: "Panel",
+              onClick: () => {
+                calls.push("panel");
+              },
             },
-          },
-        ],
-        items: [
-          {
-            id: "root-item",
-            label: "Root item",
-            onClick: () => calls.push("root-click"),
-          },
-        ],
-        sections: [
-          {
-            id: "section",
-            title: "Section",
-            actions: [
-              {
-                id: "section",
-                label: "Section",
-                onClick: () => {
-                  calls.push("section");
+          ],
+          items: [
+            {
+              id: "root-item",
+              label: "Root item",
+              onClick: () => calls.push("root-click"),
+            },
+          ],
+          sections: [
+            {
+              id: "section",
+              title: "Section",
+              actions: [
+                {
+                  id: "section",
+                  label: "Section",
+                  onClick: () => {
+                    calls.push("section");
+                  },
                 },
-              },
-            ],
-            items: [
-              {
-                id: "section-item",
-                label: "Section item",
-                onClick: () => calls.push("section-click"),
-                onToggle: () => calls.push("section-toggle"),
-              },
-            ],
-          },
-        ],
+              ],
+              items: [
+                {
+                  id: "section-item",
+                  label: "Section item",
+                  onClick: () => calls.push("section-click"),
+                  onToggle: () => calls.push("section-toggle"),
+                },
+              ],
+            },
+          ],
+        },
       },
-    });
+      () => undefined,
+    );
     await manager.getRegistry().register(
       createExtension({
         id: "actions",
@@ -205,6 +216,7 @@ describe("ExtensionManager slot integration", () => {
             id: "actions.main",
             label: "Actions",
             icon: "star",
+            priority: 0,
             state: slotState,
           },
         ],
@@ -269,49 +281,52 @@ describe("ExtensionManager slot integration", () => {
     const manager = createManager();
     await manager.initialize();
 
-    const slotState = createSlotState({
-      badge: null,
-      visible: true,
-      panel: {
-        type: "grid",
-        title: "Board",
-        columns: 3,
-        cells: [
-          {
-            id: "0-0",
-            label: "X",
-            disabled: true,
-            onClick: () => {
-              calls.push("disabled-cell");
+    const slotState = createSlotState(
+      {
+        badge: null,
+        visible: true,
+        panel: {
+          type: "grid",
+          title: "Board",
+          columns: 3,
+          cells: [
+            {
+              id: "0-0",
+              label: "X",
+              disabled: true,
+              onClick: () => {
+                calls.push("disabled-cell");
+              },
             },
-          },
-          {
-            id: "0-1",
-            label: "",
-            onClick: () => {
-              calls.push("cell");
+            {
+              id: "0-1",
+              label: "",
+              onClick: () => {
+                calls.push("cell");
+              },
             },
-          },
-        ],
-        actions: [
-          {
-            id: "new",
-            label: "New",
-            onClick: () => {
-              calls.push("panel");
+          ],
+          actions: [
+            {
+              id: "new",
+              label: "New",
+              onClick: () => {
+                calls.push("panel");
+              },
             },
-          },
-          {
-            id: "disabled",
-            label: "Disabled",
-            disabled: true,
-            onClick: () => {
-              calls.push("disabled-panel");
+            {
+              id: "disabled",
+              label: "Disabled",
+              disabled: true,
+              onClick: () => {
+                calls.push("disabled-panel");
+              },
             },
-          },
-        ],
+          ],
+        },
       },
-    });
+      () => undefined,
+    );
     const extension = createExtension({
       id: "actions",
       name: "Actions",
@@ -321,6 +336,7 @@ describe("ExtensionManager slot integration", () => {
           id: "actions.main",
           label: "Actions",
           icon: "grid",
+          priority: 0,
           state: slotState,
         },
       ],

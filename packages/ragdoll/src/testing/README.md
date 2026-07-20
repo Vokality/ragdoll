@@ -18,7 +18,13 @@ import { CharacterController } from "@vokality/ragdoll";
 
 describe("character update loop", () => {
   it("can be stepped deterministically", () => {
-    const controller = new CharacterController();
+    const controller = new CharacterController({
+      themeId: "default",
+      variantId: "human",
+      onEventSubscriberError: (error) => {
+        throw error;
+      },
+    });
     const clock = new MockClock();
 
     // Run the controller update at a fixed cadence
@@ -59,7 +65,10 @@ describe("StateManager", () => {
 
   it("should load head pose snapshots", () => {
     const pose = new HeadPoseBuilder().lookingLeft(20).lookingUp(10).build();
-    const manager = new StateManager(new CharacterStateBuilder().build());
+    const manager = new StateManager(
+      new CharacterStateBuilder().build(),
+      new SpyEventBus(),
+    );
 
     manager.setHeadPose(pose);
 

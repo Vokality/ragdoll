@@ -79,10 +79,7 @@ export class ExtensionOperationsService {
     try {
       await this.manager.setDisabledExtensions(extensionIds);
       await this.storage.update((draft) => {
-        draft.settings = {
-          ...draft.settings,
-          disabledExtensions: extensionIds,
-        };
+        draft.settings.disabledExtensions = extensionIds;
       });
       return { success: true };
     } catch (error) {

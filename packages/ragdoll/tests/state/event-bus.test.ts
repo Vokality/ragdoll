@@ -5,7 +5,7 @@ describe("EventBus", () => {
   let eventBus: EventBus;
 
   beforeEach(() => {
-    eventBus = new EventBus();
+    eventBus = new EventBus(() => undefined);
   });
 
   describe("subscribe/unsubscribe", () => {
@@ -14,7 +14,11 @@ describe("EventBus", () => {
       const unsubscribe = eventBus.subscribe(() => {
         called = true;
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(called).toBe(true);
       unsubscribe();
     });
@@ -25,7 +29,11 @@ describe("EventBus", () => {
         called = true;
       });
       unsubscribe();
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(called).toBe(false);
     });
 
@@ -37,7 +45,11 @@ describe("EventBus", () => {
       eventBus.subscribe(() => {
         callCount++;
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(callCount).toBe(2);
     });
 
@@ -58,7 +70,11 @@ describe("EventBus", () => {
       eventBus.subscribe((event) => {
         events.push(event);
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(events.length).toBe(2);
     });
 
@@ -67,7 +83,11 @@ describe("EventBus", () => {
       eventBus.subscribe((event) => {
         events.push(event);
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
       expect(events.length).toBe(2);
       expect(events[0].type).toBe("moodChanged");
@@ -77,7 +97,11 @@ describe("EventBus", () => {
 
   describe("event history tracking", () => {
     it("should track event history", () => {
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       const history = eventBus.getHistory();
       expect(history.length).toBe(1);
       expect(history[0]).toMatchObject({
@@ -90,7 +114,11 @@ describe("EventBus", () => {
     it("should limit history to max size", () => {
       // Emit more than maxHistorySize (100) events
       for (let i = 0; i < 150; i++) {
-        eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+        eventBus.emit({
+          type: "moodChanged",
+          mood: "smile",
+          previousMood: "neutral",
+        });
       }
       const history = eventBus.getHistory();
       expect(history.length).toBeLessThanOrEqual(100);
@@ -99,7 +127,11 @@ describe("EventBus", () => {
     it("should maintain recent events when limit exceeded", () => {
       // Emit events
       for (let i = 0; i < 50; i++) {
-        eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+        eventBus.emit({
+          type: "moodChanged",
+          mood: "smile",
+          previousMood: "neutral",
+        });
       }
       eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
       const history = eventBus.getHistory();
@@ -108,7 +140,11 @@ describe("EventBus", () => {
     });
 
     it("should return readonly history", () => {
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       const history = eventBus.getHistory();
       // History is returned as a copy, so mutations won't affect the original
       // But we can't test readonly in JavaScript, so we just verify it's an array
@@ -118,14 +154,22 @@ describe("EventBus", () => {
 
   describe("history clearing", () => {
     it("should clear event history", () => {
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       eventBus.clearHistory();
       const history = eventBus.getHistory();
       expect(history.length).toBe(0);
     });
 
     it("should continue emitting after clearing history", () => {
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       eventBus.clearHistory();
       eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
       const history = eventBus.getHistory();
@@ -148,7 +192,11 @@ describe("EventBus", () => {
       });
       // Should not throw
       expect(() => {
-        eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+        eventBus.emit({
+          type: "moodChanged",
+          mood: "smile",
+          previousMood: "neutral",
+        });
       }).not.toThrow();
       expect(called).toBe(true);
     });
@@ -163,7 +211,11 @@ describe("EventBus", () => {
       eventBus.subscribe(() => {
         otherCalled = true;
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(errorThrown).toBe(true);
       expect(otherCalled).toBe(true);
     });
@@ -181,7 +233,11 @@ describe("EventBus", () => {
       eventBus.subscribe(() => {
         calls.push(3);
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       expect(calls.length).toBe(3);
       expect(calls).toContain(1);
       expect(calls).toContain(2);
@@ -195,7 +251,11 @@ describe("EventBus", () => {
           newSubscriberCalled = true;
         });
       });
-      eventBus.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
+      eventBus.emit({
+        type: "moodChanged",
+        mood: "smile",
+        previousMood: "neutral",
+      });
       // Implementation may call new subscribers immediately or on next emission
       // Just verify the subscriber was added
       eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
@@ -203,4 +263,3 @@ describe("EventBus", () => {
     });
   });
 });
-

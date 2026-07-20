@@ -8,13 +8,21 @@ import {
   parseExtensionPackageJson,
 } from "@vokality/ragdoll-extensions/loader";
 import packageJson from "../package.json" with { type: "json" };
-import { createGameManager } from "./game-manager.js";
+import { GameManager } from "./game-manager.js";
+
+const createGameManager = () =>
+  new GameManager({
+    createId: () => globalThis.crypto.randomUUID(),
+    onListenerError: () => undefined,
+  });
+const startGame = (manager: GameManager) =>
+  manager.start({ userMark: "X", firstPlayer: "user" });
 import { createExtension } from "./index.js";
 
 describe("GameManager", () => {
   it("tracks turns, legalMoves, and wins", () => {
     const manager = createGameManager();
-    const started = manager.start();
+    const started = startGame(manager);
     expect(started.status).toBe("in_progress");
     expect(started.currentPlayer).toBe("user");
     expect(started.legalMoves).toEqual([]);
@@ -41,7 +49,7 @@ describe("GameManager", () => {
 
   it("does not roll a failed transition back over newer game state", () => {
     const manager = createGameManager();
-    const checkpoint = manager.start();
+    const checkpoint = startGame(manager);
     const userMove = manager.placeUserMark(0, 0);
     if (!userMove.ok) throw new Error("expected user move");
     const agentMove = manager.placeAgentMark(1, 1);
@@ -53,7 +61,7 @@ describe("GameManager", () => {
 
   it("classifies illegal agent moves without changing the turn", () => {
     const manager = createGameManager();
-    manager.start();
+    startGame(manager);
     const userMove = manager.placeUserMark(0, 0);
     if (!userMove.ok) throw new Error("expected user move");
 
@@ -167,6 +175,107 @@ describe("Tic-tac-toe slot board reset", () => {
       { id: "new-game", disabled: undefined },
       { id: "reset", disabled: false },
     ]);
+
+    await runtime.dispose?.();
+  });
+
+  it("replaces a completed board with win, loss, and draw results", async () => {
+    const host: ExtensionHostEnvironment = {
+      capabilities: new Set(["conversationEvents", "logger"]),
+      conversationEvents: {
+        publish: async () => ({ eventId: "event-1" }),
+      },
+      logger: {
+        debug: () => undefined,
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
+    };
+    const runtime = await createExtension().activate(host, {
+      instanceId: "tic-tac-toe-results",
+      createdAt: Date.now(),
+    });
+    const start = runtime.tools?.find(
+      (tool) => tool.definition.function.name === "tic_tac_toe_start",
+    );
+    const place = runtime.tools?.find(
+      (tool) => tool.definition.function.name === "tic_tac_toe_place",
+    );
+    const slot = runtime.slots?.[0];
+    if (!start || !place || !slot) throw new Error("game runtime missing");
+
+    const clickUserCell = async (row: number, col: number): Promise<void> => {
+      const panel = slot.state.getState().panel;
+      if (panel.type !== "grid") throw new Error("expected grid");
+      const cell = panel.cells[row * 3 + col];
+      if (!cell?.onClick) throw new Error("expected clickable cell");
+      await cell.onClick();
+    };
+    const placeAgentMark = async (row: number, col: number): Promise<void> => {
+      const result = await place.handler(
+        { row, col },
+        { extensionId: "tic-tac-toe" },
+      );
+      if (!result.success) throw new Error(result.error ?? "agent move failed");
+    };
+
+    await start.handler({}, { extensionId: "tic-tac-toe" });
+    await clickUserCell(0, 0);
+    await placeAgentMark(1, 0);
+    await clickUserCell(0, 1);
+    await placeAgentMark(1, 1);
+    await clickUserCell(0, 2);
+
+    const winPanel = slot.state.getState().panel;
+    if (winPanel.type !== "grid") throw new Error("expected grid");
+    expect(winPanel.result).toEqual({
+      title: "You win!",
+      message: "You completed three in a row.",
+      status: "success",
+    });
+    expect(winPanel.actions?.map(({ id }) => id)).toEqual([
+      "new-game",
+      "reset",
+    ]);
+
+    await winPanel.actions?.find(({ id }) => id === "new-game")?.onClick();
+    expect(
+      (slot.state.getState().panel as typeof winPanel).result,
+    ).toBeUndefined();
+    await clickUserCell(0, 0);
+    await placeAgentMark(1, 0);
+    await clickUserCell(0, 1);
+    await placeAgentMark(1, 1);
+    await clickUserCell(2, 2);
+    await placeAgentMark(1, 2);
+
+    const lossPanel = slot.state.getState().panel;
+    if (lossPanel.type !== "grid") throw new Error("expected grid");
+    expect(lossPanel.result).toEqual({
+      title: "You lose",
+      message: "The agent completed three in a row.",
+      status: "error",
+    });
+
+    await lossPanel.actions?.find(({ id }) => id === "new-game")?.onClick();
+    await clickUserCell(0, 0);
+    await placeAgentMark(0, 1);
+    await clickUserCell(0, 2);
+    await placeAgentMark(1, 1);
+    await clickUserCell(1, 0);
+    await placeAgentMark(1, 2);
+    await clickUserCell(2, 1);
+    await placeAgentMark(2, 0);
+    await clickUserCell(2, 2);
+
+    const drawPanel = slot.state.getState().panel;
+    if (drawPanel.type !== "grid") throw new Error("expected grid");
+    expect(drawPanel.result).toEqual({
+      title: "It's a draw",
+      message: "No more moves — nobody completed three in a row.",
+      status: "default",
+    });
 
     await runtime.dispose?.();
   });

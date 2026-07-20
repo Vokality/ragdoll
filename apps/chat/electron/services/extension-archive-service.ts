@@ -3,7 +3,7 @@ import { extract } from "tar";
 
 export class ExtensionArchiveService {
   private static readonly maxArchiveBytes = 50 * 1024 * 1024;
-  constructor(private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly request: typeof fetch) {}
 
   async downloadAndExtract(
     downloadUrl: string,

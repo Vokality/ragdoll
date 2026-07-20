@@ -1,16 +1,18 @@
 import type {
   StorageData,
+  StorageInput,
   StorageRepository,
 } from "../infrastructure/storage-repository.js";
+import { storageSchema } from "../infrastructure/storage-repository.js";
 
 export interface InMemoryStorageRepository extends StorageRepository {
   snapshot(): StorageData;
 }
 
 export function createInMemoryStorageRepository(
-  initial: StorageData = {},
+  initial: StorageInput = {},
 ): InMemoryStorageRepository {
-  let data = structuredClone(initial);
+  let data = storageSchema.parse(initial);
 
   return {
     filePath: "in-memory",

@@ -15,10 +15,18 @@ export interface ExtensionConversationEventPublisher {
   ): Promise<PublishedConversationEvent>;
 }
 
+export interface ConversationEventDependencies {
+  createId(): string;
+  now(): number;
+}
+
 export class ConversationEventService implements ExtensionConversationEventPublisher {
   private readonly turnQueuedListeners = new Set<() => void>();
 
-  constructor(private readonly storage: StorageRepository) {}
+  constructor(
+    private readonly storage: StorageRepository,
+    private readonly dependencies: ConversationEventDependencies,
+  ) {}
 
   onTurnQueued(listener: () => void): () => void {
     this.turnQueuedListeners.add(listener);
@@ -37,7 +45,7 @@ export class ConversationEventService implements ExtensionConversationEventPubli
     let turnQueued = false;
 
     await this.storage.update((draft) => {
-      const conversation = (draft.conversation ??= []);
+      const conversation = draft.conversation;
       const duplicate = validated.deduplicationKey
         ? conversation.find(
             (entry): entry is ExtensionConversationEvent =>
@@ -53,7 +61,7 @@ export class ConversationEventService implements ExtensionConversationEventPubli
         return;
       }
 
-      eventId = globalThis.crypto.randomUUID();
+      eventId = this.dependencies.createId();
       const event: ExtensionConversationEvent = {
         kind: "extension-event",
         id: eventId,
@@ -63,12 +71,12 @@ export class ConversationEventService implements ExtensionConversationEventPubli
         turnPolicy: validated.turnPolicy,
         requiredToolName: validated.requiredToolName,
         deduplicationKey: validated.deduplicationKey,
-        occurredAt: Date.now(),
+        occurredAt: this.dependencies.now(),
       };
       conversation.push(event);
 
       if (event.turnPolicy === "start-turn") {
-        (draft.pendingAgentTurns ??= []).push({
+        draft.pendingAgentTurns.push({
           triggerEventId: event.id,
           createdAt: event.occurredAt,
         });

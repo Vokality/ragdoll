@@ -38,6 +38,9 @@ export interface MainProcessConfig {
     maxToolRounds: number;
     systemPrompt: string;
   };
+  oauth: {
+    callbackTimeoutMs: number;
+  };
   window: {
     width: number;
     height: number;
@@ -66,6 +69,9 @@ export function createMainProcessConfig(
       maxCompletionTokens: 140,
       maxToolRounds: 8,
       systemPrompt: SYSTEM_PROMPT,
+    },
+    oauth: {
+      callbackTimeoutMs: 5 * 60 * 1000,
     },
     window: {
       width: 480,

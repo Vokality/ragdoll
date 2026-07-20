@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 import type { IpcRegistrar } from "./registrar.js";
-import { CHARACTER_THEME_IDS, CHARACTER_VARIANT_IDS } from "../electron-api.js";
+import {
+  CHARACTER_THEME_IDS,
+  CHARACTER_VARIANT_IDS,
+  IPC_CHANNELS,
+} from "../electron-api.js";
 
 const settingsUpdateSchema = z
   .object({
@@ -14,8 +18,11 @@ export function registerSettingsIpc(
   ipc: IpcRegistrar,
   storage: StorageRepository,
 ): void {
-  ipc.handle("settings:get", async () => (await storage.read()).settings ?? {});
-  ipc.handle("settings:set", async (_event, update: unknown) => {
+  ipc.handle(IPC_CHANNELS.settings.get, async () => {
+    const { theme, variant } = (await storage.read()).settings;
+    return { theme, variant };
+  });
+  ipc.handle(IPC_CHANNELS.settings.set, async (_event, update: unknown) => {
     const settings = settingsUpdateSchema.parse(update);
     await storage.update((draft) => {
       draft.settings = { ...draft.settings, ...settings };

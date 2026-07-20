@@ -23,7 +23,7 @@ interface GitHubRepository {
 }
 
 export class GitHubReleaseService {
-  constructor(private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly request: typeof fetch) {}
 
   async resolve(sourceUrl: string): Promise<ExtensionRelease> {
     const direct = this.parseDirectDownloadUrl(sourceUrl);

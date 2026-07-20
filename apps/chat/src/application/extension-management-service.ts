@@ -14,14 +14,19 @@ import type { ConfigSchema } from "@vokality/ragdoll-extensions";
 
 export interface ExtensionOverview {
   available: ExtensionInfo[];
+  builtIn: ExtensionInfo[];
+  configurable: ExtensionInfo[];
   disabled: string[];
   installed: InstalledExtension[];
 }
 
 export interface ExtensionConfiguration {
-  schema: ConfigSchema | null;
+  schema: ConfigSchema;
   status: ExtensionConfigStatus;
+  values: Record<string, ExtensionConfigValue>;
 }
+
+export type ExtensionConfigValue = string | number | boolean | undefined;
 
 export type ExtensionManagementGateway = Pick<
   ElectronAPI,
@@ -52,7 +57,12 @@ export class ExtensionManagementService {
       this.api.getDisabledExtensions(),
       this.api.getUserInstalledExtensions(),
     ]);
-    return { available, disabled, installed };
+    const installedIds = new Set(installed.map(({ id }) => id));
+    const builtIn = available.filter(({ id }) => !installedIds.has(id));
+    const configurable = builtIn.filter(
+      ({ hasConfigSchema, hasOAuth }) => hasConfigSchema || hasOAuth,
+    );
+    return { available, builtIn, configurable, disabled, installed };
   }
 
   install(repoUrl: string): Promise<InstallResult> {
@@ -83,10 +93,14 @@ export class ExtensionManagementService {
       this.api.getConfigSchema(extensionId),
       this.api.getConfigStatus(extensionId),
     ]);
-    if (!status) {
+    if (!schema || !status) {
       throw new Error(`Configuration is unavailable for ${extensionId}`);
     }
-    return { schema, status };
+    return {
+      schema,
+      status,
+      values: this.getEditableValues(schema, status),
+    };
   }
 
   getOAuthState(extensionId: string): Promise<OAuthState | null> {
@@ -103,12 +117,15 @@ export class ExtensionManagementService {
 
   async saveConfiguration(
     extensionId: string,
-    values: Record<string, string | number | boolean>,
+    values: Record<string, ExtensionConfigValue>,
   ): Promise<{
     configuration: ExtensionConfiguration;
     oauth: OAuthState | null;
   }> {
-    const result = await this.api.setConfigValues(extensionId, values);
+    const result = await this.api.setConfigValues(
+      extensionId,
+      this.getPersistedValues(values),
+    );
     if (!result.success) throw new Error(result.error);
 
     const [configuration, oauth] = await Promise.all([
@@ -118,11 +135,42 @@ export class ExtensionManagementService {
     return { configuration, oauth };
   }
 
-  startOAuth(extensionId: string): Promise<OperationResult> {
-    return this.api.startOAuthFlow(extensionId);
+  async startOAuth(extensionId: string): Promise<void> {
+    const result = await this.api.startOAuthFlow(extensionId);
+    if (!result.success) throw new Error(result.error);
   }
 
-  disconnectOAuth(extensionId: string): Promise<OperationResult> {
-    return this.api.disconnectOAuth(extensionId);
+  async disconnectOAuth(extensionId: string): Promise<void> {
+    const result = await this.api.disconnectOAuth(extensionId);
+    if (!result.success) throw new Error(result.error);
+  }
+
+  private getEditableValues(
+    schema: ConfigSchema,
+    status: ExtensionConfigStatus,
+  ): Record<string, ExtensionConfigValue> {
+    const values: Record<string, ExtensionConfigValue> = {};
+    for (const [key, value] of Object.entries(status.values)) {
+      const field = schema[key];
+      if (field && "secret" in field && field.secret) continue;
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        values[key] = value;
+      }
+    }
+    return values;
+  }
+
+  private getPersistedValues(
+    values: Record<string, ExtensionConfigValue>,
+  ): Record<string, string | number | boolean> {
+    const persisted: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(values)) {
+      if (value !== "" && value !== undefined) persisted[key] = value;
+    }
+    return persisted;
   }
 }

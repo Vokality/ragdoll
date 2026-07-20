@@ -36,7 +36,10 @@ export class ExtensionSlotService {
   private loadRevision = 0;
   private startPromise: Promise<void> | null = null;
 
-  constructor(private readonly api: ExtensionSlotGateway) {}
+  constructor(
+    private readonly api: ExtensionSlotGateway,
+    private readonly reportError: (error: unknown) => void,
+  ) {}
 
   readonly getSnapshot = (): ExtensionUISlot[] => this.slots;
 
@@ -59,7 +62,12 @@ export class ExtensionSlotService {
     this.unsubscribeFromSlotChanges = this.api.onExtensionSlotsChanged(() => {
       void this.reload(generation);
     });
-    this.startPromise = this.load(generation, ++this.loadRevision);
+    this.startPromise = this.load(generation, ++this.loadRevision).catch(
+      (error: unknown) => {
+        if (generation === this.generation) this.stop();
+        this.reportError(error);
+      },
+    );
     return this.startPromise;
   }
 
@@ -100,7 +108,10 @@ export class ExtensionSlotService {
     for (const [slot, state] of states) {
       this.stores.set(
         slot.slotId,
-        createSlotState(this.attachActionHandlers(slot.slotId, state)),
+        createSlotState(
+          this.attachActionHandlers(slot.slotId, state),
+          this.reportError,
+        ),
       );
     }
     this.slots = metadata.map((slot) => ({
@@ -117,7 +128,7 @@ export class ExtensionSlotService {
     try {
       await this.load(generation, ++this.loadRevision);
     } catch (error) {
-      console.error("Failed to refresh extension slots", error);
+      this.reportError(error);
     }
   }
 
@@ -208,6 +219,6 @@ export class ExtensionSlotService {
       .then((result) => {
         if (!result.success) throw new Error(result.error);
       })
-      .catch((error) => console.error("Extension slot action failed", error));
+      .catch(this.reportError);
   }
 }

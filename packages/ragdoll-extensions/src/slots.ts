@@ -11,11 +11,14 @@
  * // In Electron main process or extension code
  * import { createSlotState } from "@vokality/ragdoll-extensions/slots";
  *
- * const slotState = createSlotState({
- *   badge: 0,
- *   visible: true,
- *   panel: { type: "list", title: "Tasks", sections: [] },
- * });
+ * const slotState = createSlotState(
+ *   {
+ *     badge: 0,
+ *     visible: true,
+ *     panel: { type: "list", title: "Tasks", sections: [] },
+ *   },
+ *   reportError,
+ * );
  * ```
  */
 
@@ -141,6 +144,16 @@ export interface GridPanelCell {
   onClick?: () => void | Promise<void>;
 }
 
+/** Terminal state displayed in place of a completed grid */
+export interface GridPanelResult {
+  /** Primary result text */
+  title: string;
+  /** Supporting result text */
+  message?: string;
+  /** Semantic result styling */
+  status: "success" | "error" | "default";
+}
+
 /**
  * Configuration for a grid-based panel (React-free version)
  */
@@ -154,6 +167,8 @@ export interface GridPanelConfig {
   columns: number;
   /** Grid cells in row-major order */
   cells: GridPanelCell[];
+  /** Terminal state shown in place of the grid */
+  result?: GridPanelResult;
   /** Panel-level actions (shown in header or footer) */
   actions?: PanelAction[];
 }
@@ -201,7 +216,7 @@ export interface ExtensionSlot {
   /** Host-provided icon identifier. */
   icon: PresetIconName;
   /** Ordering priority (higher values are shown first). */
-  priority?: number;
+  priority: number;
   /** Observable slot state. */
   state: SlotStateStore;
 }
@@ -350,6 +365,7 @@ export interface MutableSlotStateStore extends SlotStateStore {
  */
 export function createSlotState(
   initialState: SlotState,
+  onListenerError: (error: unknown) => void,
 ): MutableSlotStateStore {
   let state: SlotState = { ...initialState };
   const listeners = new Set<SlotStateCallback>();
@@ -359,7 +375,7 @@ export function createSlotState(
       try {
         listener();
       } catch (error) {
-        console.error("[SlotState] Error in listener:", error);
+        onListenerError(error);
       }
     }
   };

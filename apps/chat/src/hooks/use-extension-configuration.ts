@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConfigSchema } from "@vokality/ragdoll-extensions";
 import type {
   ExtensionConfigStatus,
   OAuthState,
 } from "../../electron/electron-api";
-import type { ExtensionManagementService } from "../application/extension-management-service";
-
-type ConfigValue = string | number | boolean | undefined;
+import type {
+  ExtensionConfigValue,
+  ExtensionManagementService,
+} from "../application/extension-management-service";
 
 export interface ExtensionConfigurationOptions {
   extensionId: string;
@@ -24,44 +25,41 @@ export function useExtensionConfiguration(
   const [status, setStatus] = useState<ExtensionConfigStatus | null>(null);
   const [schema, setSchema] = useState<ConfigSchema | null>(null);
   const [oauth, setOauth] = useState<OAuthState | null>(null);
-  const [values, setValues] = useState<Record<string, ConfigValue>>({});
+  const [values, setValues] = useState<Record<string, ExtensionConfigValue>>(
+    {},
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadVersion = useRef(0);
 
   const loadOAuth = useCallback(async () => {
     setOauth(await service.getOAuthState(extensionId));
   }, [extensionId, service]);
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
+    setError(null);
     try {
-      const [configuration] = await Promise.all([
+      const [configuration, nextOAuth] = await Promise.all([
         hasConfig ? service.loadConfiguration(extensionId) : null,
-        hasOAuth ? loadOAuth() : undefined,
+        hasOAuth ? service.getOAuthState(extensionId) : null,
       ]);
-      if (!configuration) return;
-
-      setSchema(configuration.schema);
-      setStatus(configuration.status);
-      const loadedValues: Record<string, ConfigValue> = {};
-      for (const [key, value] of Object.entries(configuration.status.values)) {
-        const field = configuration.schema?.[key];
-        if (field && "secret" in field && field.secret) continue;
-        if (
-          typeof value === "string" ||
-          typeof value === "number" ||
-          typeof value === "boolean"
-        ) {
-          loadedValues[key] = value;
-        }
-      }
-      setValues(loadedValues);
+      if (version !== loadVersion.current) return;
+      setSchema(configuration?.schema ?? null);
+      setStatus(configuration?.status ?? null);
+      setValues(configuration?.values ?? {});
+      setOauth(nextOAuth);
     } catch (loadError) {
+      if (version !== loadVersion.current) return;
       setError(getErrorMessage(loadError));
     }
-  }, [extensionId, hasConfig, hasOAuth, loadOAuth, service]);
+  }, [extensionId, hasConfig, hasOAuth, service]);
 
   useEffect(() => {
     if (isOpen) void load();
+    return () => {
+      loadVersion.current += 1;
+    };
   }, [isOpen, load]);
 
   useEffect(() => {
@@ -80,23 +78,24 @@ export function useExtensionConfiguration(
     };
   }, [extensionId, hasOAuth, isOpen, loadOAuth, service]);
 
-  const changeValue = useCallback((key: string, value: ConfigValue) => {
-    setValues((current) => ({ ...current, [key]: value }));
-    setError(null);
-  }, []);
+  const changeValue = useCallback(
+    (key: string, value: ExtensionConfigValue) => {
+      setValues((current) => ({ ...current, [key]: value }));
+      setError(null);
+    },
+    [],
+  );
 
   const save = useCallback(async () => {
     if (!schema) return;
     setSaving(true);
     setError(null);
     try {
-      const nextValues: Record<string, string | number | boolean> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value !== "" && value !== undefined) nextValues[key] = value;
-      }
       const { configuration, oauth: nextOAuth } =
-        await service.saveConfiguration(extensionId, nextValues);
+        await service.saveConfiguration(extensionId, values);
+      setSchema(configuration.schema);
       setStatus(configuration.status);
+      setValues(configuration.values);
       setOauth(nextOAuth);
       if (configuration.status.isConfigured) onConfigured?.();
     } catch (saveError) {
@@ -112,8 +111,7 @@ export function useExtensionConfiguration(
       current ? { ...current, status: "connecting" } : current,
     );
     try {
-      const result = await service.startOAuth(extensionId);
-      if (!result.success) throw new Error(result.error);
+      await service.startOAuth(extensionId);
     } catch (connectError) {
       setError(getErrorMessage(connectError));
       await loadOAuth();
@@ -122,8 +120,7 @@ export function useExtensionConfiguration(
 
   const disconnect = useCallback(async () => {
     try {
-      const result = await service.disconnectOAuth(extensionId);
-      if (!result.success) throw new Error(result.error);
+      await service.disconnectOAuth(extensionId);
       await loadOAuth();
     } catch (disconnectError) {
       setError(getErrorMessage(disconnectError));

@@ -9,9 +9,7 @@ export function useExtensionSlots(service: ExtensionSlotService) {
   );
 
   useEffect(() => {
-    void service.start().catch((error) => {
-      console.error("Failed to initialize extension slots", error);
-    });
+    void service.start();
     return () => service.stop();
   }, [service]);
 

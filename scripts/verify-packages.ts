@@ -172,7 +172,10 @@ for (const [factory, packageJson] of factories) {
   }
 }
 
-const registry = createRegistry();
+const registry = createRegistry({
+  now: Date.now,
+  onListenerError: (error) => { throw error; },
+});
 const weather = createWeather({ defaultUnits: "fahrenheit" });
 await registry.register(weather, { host: { capabilities: new Set() } });
 const result = await registry.executeTool("getWeather", { location: "Paris" });

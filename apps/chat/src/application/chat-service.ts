@@ -1,7 +1,6 @@
 import type { ChatMessage } from "../domain/chat";
 import { getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
-import { DEFAULT_SETTINGS, mergeSettings } from "../domain/settings";
 import type { ChatGateway } from "./ports/chat-gateway";
 import type {
   CharacterThemeId,
@@ -16,24 +15,27 @@ export interface ChatSnapshot {
   error: string | null;
 }
 
-const INITIAL_SNAPSHOT: ChatSnapshot = {
-  settings: DEFAULT_SETTINGS,
-  visibleMessages: [],
-  isStreaming: false,
-  isLoading: false,
-  error: null,
-};
-
 export class ChatService {
   private messages: ChatMessage[] = [];
   private streamingContent = "";
   private conversationVersion = 0;
-  private snapshot = INITIAL_SNAPSHOT;
+  private snapshot: ChatSnapshot;
   private readonly listeners = new Set<() => void>();
   private unsubscribeStreaming: (() => void) | null = null;
   private startPromise: Promise<void> | null = null;
 
-  constructor(private readonly gateway: ChatGateway) {}
+  constructor(
+    private readonly gateway: ChatGateway,
+    initialSettings: ChatSettings,
+  ) {
+    this.snapshot = {
+      settings: initialSettings,
+      visibleMessages: [],
+      isStreaming: false,
+      isLoading: false,
+      error: null,
+    };
+  }
 
   readonly getSnapshot = (): ChatSnapshot => this.snapshot;
 
@@ -164,7 +166,7 @@ export class ChatService {
     if (this.conversationVersion === conversationVersion) {
       this.messages = messages;
     }
-    this.publish({ settings: mergeSettings(settings) });
+    this.publish({ settings });
   }
 
   private finishStream(): void {

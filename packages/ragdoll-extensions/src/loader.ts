@@ -215,16 +215,16 @@ export function wrapExtensionWithPackageManifest(
     | "optionalCapabilities"
   >,
 ): RagdollExtension {
-  const runtimeRequired = extension.manifest.requiredCapabilities ?? [];
-  const packageRequired = packageMetadata.requiredCapabilities ?? [];
+  const runtimeRequired = extension.manifest.requiredCapabilities;
+  const packageRequired = packageMetadata.requiredCapabilities;
   assertMatchingHostCapabilities(
     extension.manifest.id,
     "required",
     runtimeRequired,
     packageRequired,
   );
-  const runtimeOptional = extension.manifest.optionalCapabilities ?? [];
-  const packageOptional = packageMetadata.optionalCapabilities ?? [];
+  const runtimeOptional = extension.manifest.optionalCapabilities;
+  const packageOptional = packageMetadata.optionalCapabilities;
   assertMatchingHostCapabilities(
     extension.manifest.id,
     "optional",
@@ -306,11 +306,9 @@ export interface ExtensionLoaderConfig {
   continueOnError?: boolean;
 
   /**
-   * Default options to pass when registering extensions (aside from host/config).
+   * Default options to pass when registering extensions (aside from host).
    */
-  registerOptions?: Omit<RegisterOptions, "host" | "config"> & {
-    config?: Record<string, unknown>;
-  };
+  registerOptions?: Omit<RegisterOptions, "host">;
 
   /**
    * Static host environment to provide to every extension.
@@ -354,9 +352,7 @@ type NormalizedLoaderConfig = {
   pathExists: (path: string) => Promise<boolean>;
   importModule: (modulePath: string) => Promise<unknown>;
   continueOnError: boolean;
-  registerOptions: Omit<RegisterOptions, "host" | "config"> & {
-    config?: Record<string, unknown>;
-  };
+  registerOptions: Omit<RegisterOptions, "host">;
   hostEnvironment?: ExtensionHostEnvironment;
   getHostEnvironment?: (
     manifest: ExtensionManifest,
@@ -612,7 +608,6 @@ export class ExtensionLoader {
       await this.registry.register(finalExtension, {
         ...baseOptions,
         host,
-        config: config ?? baseOptions.config,
       });
 
       const contribution = this.registry.getContributionMetadata(extensionId);

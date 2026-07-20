@@ -8,7 +8,7 @@ interface Message {
 
 interface ConversationBubblesProps {
   messages: Message[];
-  isStreaming?: boolean;
+  isStreaming: boolean;
 }
 
 const {

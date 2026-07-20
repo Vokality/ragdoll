@@ -8,7 +8,11 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { CHARACTER_THEME_IDS, CHARACTER_VARIANT_IDS } from "../electron-api.js";
+import {
+  CHARACTER_THEME_IDS,
+  CHARACTER_VARIANT_IDS,
+  DEFAULT_CHARACTER_SETTINGS,
+} from "../electron-api.js";
 import {
   conversationEntrySchema,
   pendingAgentTurnSchema,
@@ -32,19 +36,24 @@ export const storageSchema = z
     apiKeyEncrypted: z.string().optional(),
     settings: z
       .object({
-        theme: z.enum(CHARACTER_THEME_IDS).optional(),
-        variant: z.enum(CHARACTER_VARIANT_IDS).optional(),
-        disabledExtensions: z.array(z.string()).optional(),
+        theme: z
+          .enum(CHARACTER_THEME_IDS)
+          .default(DEFAULT_CHARACTER_SETTINGS.theme),
+        variant: z
+          .enum(CHARACTER_VARIANT_IDS)
+          .default(DEFAULT_CHARACTER_SETTINGS.variant),
+        disabledExtensions: z.array(z.string()).default([]),
       })
       .strict()
-      .optional(),
-    conversation: z.array(conversationEntrySchema).optional(),
-    pendingAgentTurns: z.array(pendingAgentTurnSchema).optional(),
-    extensionHost: z.record(z.string(), extensionHostDataSchema).optional(),
+      .prefault({}),
+    conversation: z.array(conversationEntrySchema).default([]),
+    pendingAgentTurns: z.array(pendingAgentTurnSchema).default([]),
+    extensionHost: z.record(z.string(), extensionHostDataSchema).default({}),
   })
   .strict();
 
 export type StorageData = z.infer<typeof storageSchema>;
+export type StorageInput = z.input<typeof storageSchema>;
 
 export interface StorageRepository {
   readonly filePath: string;
@@ -69,7 +78,7 @@ export function createStorageRepository(
         JSON.parse(await readFile(storageFile, "utf8")),
       );
     } catch (error) {
-      if (isMissingFile(error)) return {};
+      if (isMissingFile(error)) return storageSchema.parse({});
       throw error;
     }
   };

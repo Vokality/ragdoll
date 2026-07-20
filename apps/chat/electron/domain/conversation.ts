@@ -13,7 +13,7 @@ export const conversationEventInputSchema = z
       .string()
       .min(1)
       .max(100)
-      .regex(/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/),
+      .regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/),
     payload: z.record(z.string(), z.json()),
     turnPolicy: z.enum(["record-only", "start-turn"]),
     requiredToolName: z

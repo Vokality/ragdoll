@@ -2,10 +2,15 @@ import { describe, expect, it } from "bun:test";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { ConversationEventService } from "./conversation-event-service.js";
 
+const dependencies = {
+  createId: () => globalThis.crypto.randomUUID(),
+  now: Date.now,
+};
+
 describe("ConversationEventService", () => {
   it("records an internal event without scheduling a turn", async () => {
     const storage = createInMemoryStorageRepository();
-    const service = new ConversationEventService(storage);
+    const service = new ConversationEventService(storage, dependencies);
     let queued = 0;
     service.onTurnQueued(() => {
       queued += 1;
@@ -18,13 +23,13 @@ describe("ConversationEventService", () => {
     });
 
     expect(storage.snapshot().conversation).toHaveLength(1);
-    expect(storage.snapshot().pendingAgentTurns).toBeUndefined();
+    expect(storage.snapshot().pendingAgentTurns).toEqual([]);
     expect(queued).toBe(0);
   });
 
   it("commits a start-turn event and its job before notifying listeners", async () => {
     const storage = createInMemoryStorageRepository();
-    const service = new ConversationEventService(storage);
+    const service = new ConversationEventService(storage, dependencies);
     let persistedJobCount = 0;
     service.onTurnQueued(() => {
       persistedJobCount = storage.snapshot().pendingAgentTurns?.length ?? 0;
@@ -55,7 +60,7 @@ describe("ConversationEventService", () => {
 
   it("deduplicates events within their source extension", async () => {
     const storage = createInMemoryStorageRepository();
-    const service = new ConversationEventService(storage);
+    const service = new ConversationEventService(storage, dependencies);
     const event = {
       type: "timer.completed",
       payload: { completedPhase: "break" },
@@ -73,7 +78,7 @@ describe("ConversationEventService", () => {
 
   it("rejects a required tool on an event that does not start a turn", async () => {
     const storage = createInMemoryStorageRepository();
-    const service = new ConversationEventService(storage);
+    const service = new ConversationEventService(storage, dependencies);
 
     await expect(
       service.publish("calendar", {
@@ -83,6 +88,20 @@ describe("ConversationEventService", () => {
         requiredToolName: "calendar_acknowledge",
       }),
     ).rejects.toThrow("requiredToolName requires turnPolicy 'start-turn'");
-    expect(storage.snapshot().conversation).toBeUndefined();
+    expect(storage.snapshot().conversation).toEqual([]);
+  });
+
+  it("rejects event names outside the documented domain.event convention", async () => {
+    const storage = createInMemoryStorageRepository();
+    const service = new ConversationEventService(storage, dependencies);
+
+    await expect(
+      service.publish("calendar", {
+        type: "calendar:synchronized",
+        payload: {},
+        turnPolicy: "record-only",
+      }),
+    ).rejects.toThrow();
+    expect(storage.snapshot().conversation).toEqual([]);
   });
 });

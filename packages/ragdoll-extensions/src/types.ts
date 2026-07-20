@@ -140,8 +140,6 @@ export interface ExtensionContext {
   instanceId: string;
   /** Timestamp when this instance was created */
   createdAt: number;
-  /** Configuration passed during registration */
-  config?: Record<string, unknown>;
 }
 
 /**
@@ -157,9 +155,9 @@ export interface ExtensionManifest {
   /** Optional description */
   description?: string;
   /** Capabilities that must be provided by the host environment */
-  requiredCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+  requiredCapabilities: ReadonlyArray<ExtensionHostCapability>;
   /** Capabilities used when available without preventing activation */
-  optionalCapabilities?: ReadonlyArray<ExtensionHostCapability>;
+  optionalCapabilities: ReadonlyArray<ExtensionHostCapability>;
 }
 
 /**
@@ -242,8 +240,6 @@ export interface RagdollExtension {
 export interface RegisterOptions {
   /** Host environment surface provided to the extension */
   host: ExtensionHostEnvironment;
-  /** Configuration passed to the extension */
-  config?: Record<string, unknown>;
   /** Whether to replace an existing extension */
   replace?: boolean;
 }

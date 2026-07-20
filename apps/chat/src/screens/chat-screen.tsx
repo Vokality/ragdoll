@@ -21,6 +21,7 @@ interface ChatScreenProps {
   characterCommands: CharacterCommandService;
   extensionSlots: ExtensionSlotService;
   extensions: ExtensionManagementService;
+  reportError: (error: unknown) => void;
 }
 
 export function ChatScreen({
@@ -29,6 +30,7 @@ export function ChatScreen({
   characterCommands,
   extensionSlots: extensionSlotService,
   extensions,
+  reportError,
 }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(
     null,
@@ -153,9 +155,14 @@ export function ChatScreen({
         themeId={settings.theme}
         variantId={settings.variant}
         onControllerReady={handleControllerReady}
+        onEventSubscriberError={reportError}
       />
 
-      <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+      <ChatInput
+        onSend={handleSendMessage}
+        disabled={isLoading}
+        placeholder="Type your message..."
+      />
 
       <SettingsModal
         service={extensions}

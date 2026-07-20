@@ -55,6 +55,12 @@ export interface GameEvent {
 }
 
 export type GameEventCallback = (event: GameEvent) => void;
+export type GameListenerErrorHandler = (error: unknown) => void;
+
+export interface GameManagerDependencies {
+  createId(): string;
+  onListenerError: GameListenerErrorHandler;
+}
 
 const WIN_LINES: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
   [
@@ -161,6 +167,8 @@ export class GameManager {
   private state: GameSnapshot = idleSnapshot();
   private readonly listeners = new Set<GameEventCallback>();
 
+  constructor(private readonly dependencies: GameManagerDependencies) {}
+
   getState(): GameSnapshot {
     return cloneSnapshot(this.state);
   }
@@ -170,14 +178,14 @@ export class GameManager {
     return () => this.listeners.delete(callback);
   }
 
-  start(options: { userMark?: Mark; firstPlayer?: Player } = {}): GameSnapshot {
-    const userMark = options.userMark ?? "X";
+  start(options: { userMark: Mark; firstPlayer: Player }): GameSnapshot {
+    const userMark = options.userMark;
     const agentMark: Mark = userMark === "X" ? "O" : "X";
-    const firstPlayer = options.firstPlayer ?? "user";
+    const firstPlayer = options.firstPlayer;
     const board = emptyBoard();
 
     this.state = {
-      gameId: crypto.randomUUID(),
+      gameId: this.dependencies.createId(),
       board,
       userMark,
       agentMark,
@@ -312,12 +320,8 @@ export class GameManager {
       try {
         listener(event);
       } catch (error) {
-        console.error("[GameManager] Error in listener:", error);
+        this.dependencies.onListenerError(error);
       }
     }
   }
-}
-
-export function createGameManager(): GameManager {
-  return new GameManager();
 }

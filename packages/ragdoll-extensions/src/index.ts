@@ -10,7 +10,10 @@
  * // In a host process
  * import { createRegistry } from "@vokality/ragdoll-extensions";
  *
- * const registry = createRegistry();
+ * const registry = createRegistry({
+ *   now: Date.now,
+ *   onListenerError: console.error,
+ * });
  * await registry.register(extension, { host });
  * ```
  */
@@ -125,6 +128,7 @@ export type {
   ListPanelConfig,
   GridPanelCell,
   GridPanelConfig,
+  GridPanelResult,
   PanelConfig,
   SlotState,
   SlotStateCallback,

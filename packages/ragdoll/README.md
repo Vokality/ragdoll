@@ -6,8 +6,6 @@ An animated character framework with facial expressions, head poses, and themes.
 
 ```bash
 bun add @vokality/ragdoll
-# or
-bun add @vokality/ragdoll
 ```
 
 ## Quick Start
@@ -23,7 +21,9 @@ function App() {
   return (
     <RagdollCharacter
       onControllerReady={setController}
+      onEventSubscriberError={console.error}
       theme={getDefaultTheme()}
+      variant="human"
     />
   );
 }
@@ -56,8 +56,9 @@ The main React component that renders the animated character.
 ```tsx
 <RagdollCharacter
   onControllerReady={(ctrl) => setController(ctrl)}
-  theme={theme} // Optional: RagdollTheme object
-  destroyOnUnmount // Optional: defaults to true, set false if you manage controller lifecycle yourself
+  onEventSubscriberError={console.error}
+  theme={theme}
+  variant="human"
 />
 ```
 

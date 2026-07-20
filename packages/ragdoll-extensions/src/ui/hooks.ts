@@ -179,6 +179,7 @@ export function useVisibleSlots(slots: ExtensionUISlot[]): ExtensionUISlot[] {
   const versionRef = useRef(0);
   // Cached result
   const cacheRef = useRef<ExtensionUISlot[]>([]);
+  const cachedSlotsRef = useRef<ExtensionUISlot[] | null>(null);
   // Version when cache was last computed
   const cachedVersionRef = useRef(-1);
 
@@ -202,12 +203,16 @@ export function useVisibleSlots(slots: ExtensionUISlot[]): ExtensionUISlot[] {
   // Get snapshot with stable reference
   const getSnapshot = useCallback((): ExtensionUISlot[] => {
     // Only recompute if version changed
-    if (versionRef.current !== cachedVersionRef.current) {
+    if (
+      slots !== cachedSlotsRef.current ||
+      versionRef.current !== cachedVersionRef.current
+    ) {
+      cachedSlotsRef.current = slots;
       cachedVersionRef.current = versionRef.current;
 
       const visible = slots
         .filter((slot) => slot.state.getState().visible)
-        .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+        .sort((a, b) => b.priority - a.priority);
 
       // Only update cache reference if the result actually changed
       const cacheValid =

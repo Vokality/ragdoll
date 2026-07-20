@@ -1,9 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { OAuthLoopbackService } from "./oauth-loopback-service.js";
+import { createHostTimersCapability } from "./host-timers-capability.js";
 
 describe("OAuthLoopbackService", () => {
   it("honors a provider-declared fixed loopback port", async () => {
-    const service = new OAuthLoopbackService(1_000);
+    const service = new OAuthLoopbackService(
+      1_000,
+      createHostTimersCapability(),
+    );
     const session = await service.createSession("spotify", 43821);
     const redirect = new URL(session.redirectUri);
 
@@ -18,7 +22,10 @@ describe("OAuthLoopbackService", () => {
   });
 
   it("binds only to loopback and accepts one extension-specific callback", async () => {
-    const service = new OAuthLoopbackService(1_000);
+    const service = new OAuthLoopbackService(
+      1_000,
+      createHostTimersCapability(),
+    );
     const session = await service.createSession("spotify");
     const redirect = new URL(session.redirectUri);
 

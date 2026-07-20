@@ -2,10 +2,11 @@ import { describe, expect, it } from "bun:test";
 import type { ConfigSchema } from "@vokality/ragdoll-extensions";
 import type { EncryptionService } from "./encryption-service.js";
 import { ExtensionHostDataRepository } from "./extension-host-data-repository.js";
-import type { StorageData, StorageRepository } from "./storage-repository.js";
+import type { StorageRepository } from "./storage-repository.js";
+import { storageSchema } from "./storage-repository.js";
 
 function createStorage(): StorageRepository {
-  let data: StorageData = {};
+  let data = storageSchema.parse({});
   return {
     filePath: "/virtual/chat-storage.json",
     read: async () => structuredClone(data),

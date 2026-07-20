@@ -38,7 +38,7 @@ export class ExtensionHostDataRepository implements ExtensionHostDataStore {
     extensionId: string,
     schema: ConfigSchema,
   ): Promise<ConfigValues | null> {
-    const stored = (await this.storage.read()).extensionHost?.[extensionId];
+    const stored = (await this.storage.read()).extensionHost[extensionId];
     if (!stored?.configValues && !stored?.configSecretsEncrypted) return null;
 
     const publicValues = configValuesSchema.parse(stored.configValues ?? {});
@@ -81,7 +81,7 @@ export class ExtensionHostDataRepository implements ExtensionHostDataStore {
         ? this.encrypt(JSON.stringify(secretValues))
         : undefined;
     await this.storage.update((draft) => {
-      const extensionHost = (draft.extensionHost ??= {});
+      const extensionHost = draft.extensionHost;
       extensionHost[extensionId] = {
         ...extensionHost[extensionId],
         configValues: publicValues,
@@ -91,7 +91,7 @@ export class ExtensionHostDataRepository implements ExtensionHostDataStore {
   }
 
   async loadOAuthTokens(extensionId: string): Promise<OAuthTokens | null> {
-    const encrypted = (await this.storage.read()).extensionHost?.[extensionId]
+    const encrypted = (await this.storage.read()).extensionHost[extensionId]
       ?.oauthTokensEncrypted;
     if (!encrypted) return null;
     return OAuthTokensSchema.parse(JSON.parse(this.decrypt(encrypted)));
@@ -105,7 +105,7 @@ export class ExtensionHostDataRepository implements ExtensionHostDataStore {
       JSON.stringify(OAuthTokensSchema.parse(tokens)),
     );
     await this.storage.update((draft) => {
-      const extensionHost = (draft.extensionHost ??= {});
+      const extensionHost = draft.extensionHost;
       extensionHost[extensionId] = {
         ...extensionHost[extensionId],
         oauthTokensEncrypted: encrypted,
@@ -115,7 +115,7 @@ export class ExtensionHostDataRepository implements ExtensionHostDataStore {
 
   async clearOAuthTokens(extensionId: string): Promise<void> {
     await this.storage.update((draft) => {
-      const data = draft.extensionHost?.[extensionId];
+      const data = draft.extensionHost[extensionId];
       if (data) delete data.oauthTokensEncrypted;
     });
   }

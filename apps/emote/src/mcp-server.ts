@@ -20,17 +20,9 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import * as net from "net";
-import * as path from "path";
-import * as os from "os";
+import { EMOTE_SOCKET_PATH } from "./ipc-path";
 import { VALID_ACTIONS, VALID_MOODS, VALID_THEMES, VALID_TONES } from "./types";
 import type { ActionId, ThemeId } from "./types";
-
-// Socket-based IPC - must match the extension
-const IPC_DIR = path.join(os.tmpdir(), "ragdoll-vscode");
-const SOCKET_PATH =
-  os.platform() === "win32"
-    ? "\\\\.\\pipe\\ragdoll-emote"
-    : path.join(IPC_DIR, "emote.sock");
 
 const SOCKET_TIMEOUT_MS = 3000;
 
@@ -48,7 +40,7 @@ type CommandPayload =
       pitchDegrees?: number;
       duration?: number;
     }
-  | { type: "setSpeechBubble"; text: string | null; tone?: ToneId }
+  | { type: "setSpeechBubble"; text: string | null; tone: ToneId }
   | { type: "setTheme"; themeId: ThemeId };
 
 function log(
@@ -170,7 +162,7 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
       }
     });
 
-    socket.connect(SOCKET_PATH);
+    socket.connect(EMOTE_SOCKET_PATH);
   });
 }
 
@@ -195,7 +187,7 @@ async function getHealthReport(): Promise<{
       socket.destroy();
       resolve({
         status: "error",
-        socketPath: SOCKET_PATH,
+        socketPath: EMOTE_SOCKET_PATH,
         connected: false,
         message: "Connection timeout",
       });
@@ -206,7 +198,7 @@ async function getHealthReport(): Promise<{
       socket.destroy();
       resolve({
         status: "ok",
-        socketPath: SOCKET_PATH,
+        socketPath: EMOTE_SOCKET_PATH,
         connected: true,
       });
     });
@@ -220,13 +212,13 @@ async function getHealthReport(): Promise<{
           : error.message;
       resolve({
         status: "error",
-        socketPath: SOCKET_PATH,
+        socketPath: EMOTE_SOCKET_PATH,
         connected: false,
         message,
       });
     });
 
-    socket.connect(SOCKET_PATH);
+    socket.connect(EMOTE_SOCKET_PATH);
   });
 }
 
@@ -418,7 +410,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await sendCommand({
           type: "setSpeechBubble",
           text: (args as { text?: string | null }).text ?? null,
-          tone: (args as { tone?: ToneId }).tone,
+          tone: (args as { tone?: ToneId }).tone ?? "default",
         });
         {
           const text = (args as { text?: string }).text;
@@ -463,7 +455,9 @@ const transport = new StdioServerTransport();
 server
   .connect(transport)
   .then(() => {
-    log("info", "Emote MCP Server running", { socketPath: SOCKET_PATH });
+    log("info", "Emote MCP Server running", {
+      socketPath: EMOTE_SOCKET_PATH,
+    });
   })
   .catch((error) => {
     log("error", "Failed to start Emote MCP Server", { error: String(error) });

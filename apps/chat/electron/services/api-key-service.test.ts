@@ -1,12 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import type {
-  StorageData,
-  StorageRepository,
-} from "../infrastructure/storage-repository.js";
+import type { StorageRepository } from "../infrastructure/storage-repository.js";
+import { storageSchema } from "../infrastructure/storage-repository.js";
 import { ApiKeyService, type EncryptionService } from "./api-key-service.js";
 
 function createStorage(): StorageRepository {
-  let data: StorageData = {};
+  let data = storageSchema.parse({});
   return {
     filePath: "/virtual/chat-storage.json",
     read: async () => structuredClone(data),
