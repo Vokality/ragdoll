@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties } from "react";
-import { chatUiTheme } from "../styles/chat-ui-theme";
+import { useEffect, useRef, type CSSProperties, type UIEvent } from "react";
 
 interface Message {
   role: "user" | "assistant";
@@ -11,173 +10,112 @@ interface ConversationBubblesProps {
   isStreaming: boolean;
 }
 
-const {
-  bubble: {
-    text: bubbleTextColor,
-    border: bubbleBorderColor,
-    assistantBackground,
-    userBackground,
-  },
-} = chatUiTheme;
+/** How close to the bottom (px) still counts as "following the stream". */
+const PIN_THRESHOLD = 80;
 
 export function ConversationBubbles({
   messages,
   isStreaming,
 }: ConversationBubblesProps) {
-  const [slideUpTrigger, setSlideUpTrigger] = useState(0);
-  const prevMessagesRef = useRef<Message[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Messages present on first render (a restored conversation) get a gentle
+  // staggered entrance; everything after animates individually on arrival.
+  const initialCountRef = useRef<number | null>(null);
+  if (initialCountRef.current === null) {
+    initialCountRef.current = messages.length;
+  }
+  const initialCount = initialCountRef.current;
 
-  // Detect new messages and trigger animations
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the user is at (or near) the bottom. Starts pinned.
+  const pinnedRef = useRef(true);
+
+  const lastMessage = messages[messages.length - 1];
+  const lastContent = lastMessage?.content ?? "";
+
+  // Follow new content only while the user hasn't scrolled up to read;
+  // their own new message always snaps the view back down.
   useEffect(() => {
-    const prevLength = prevMessagesRef.current.length;
-    const currentLength = messages.length;
-
-    if (currentLength > prevLength) {
-      // New message(s) added - trigger slide up animation for all messages
-      setSlideUpTrigger((prev) => prev + 1);
-      prevMessagesRef.current = messages;
-    } else if (currentLength < prevLength) {
-      // Messages were removed (e.g., conversation cleared)
-      prevMessagesRef.current = messages;
-    } else {
-      // Same length - might be streaming update to last message
-      prevMessagesRef.current = messages;
+    const container = scrollRef.current;
+    if (!container) return;
+    if (pinnedRef.current || lastMessage?.role === "user") {
+      pinnedRef.current = true;
+      container.scrollTop = container.scrollHeight;
     }
-  }, [messages]);
+  }, [messages.length, lastContent, isStreaming, lastMessage?.role]);
 
-  if (messages.length === 0) return null;
-
-  // Helper to get bubble colors based on role
-  const getBubbleColors = (role: "user" | "assistant") => {
-    if (role === "assistant") {
-      return {
-        textColor: bubbleTextColor,
-        borderColor: bubbleBorderColor,
-        backgroundColor: assistantBackground,
-      };
-    }
-
-    return {
-      textColor: bubbleTextColor,
-      borderColor: bubbleBorderColor,
-      backgroundColor: userBackground,
-    };
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    pinnedRef.current = scrollHeight - scrollTop - clientHeight < PIN_THRESHOLD;
   };
 
-  return (
-    <>
-      <style>{`
-        @keyframes bubbleSlideIn {
-          from {
-            opacity: 0;
-            transform: translateY(30px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        @keyframes bubbleSlideInLast {
-          from {
-            opacity: 0;
-            transform: translateY(30px) scale(1);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        @keyframes bubbleSlideInOlder {
-          from {
-            opacity: 0;
-            transform: translateY(30px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        @keyframes cursorBlink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `}</style>
-      <div ref={containerRef} style={styles.container}>
-        {messages.map((message, index) => {
-          const colors = getBubbleColors(message.role);
-          const isLastMessage = index === messages.length - 1;
+  const awaitingReply =
+    isStreaming && (!lastMessage || lastMessage.role === "user");
 
-          // Animation - all messages animate when slideUpTrigger changes
-          const animation =
-            slideUpTrigger > 0
-              ? isLastMessage
-                ? "bubbleSlideInLast 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
-                : "bubbleSlideInOlder 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
-              : "none";
+  if (messages.length === 0 && !awaitingReply) return null;
+
+  return (
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      style={styles.scroller}
+      aria-live="polite"
+    >
+      <div style={styles.list}>
+        {messages.map((message, index) => {
+          const isLastMessage = index === messages.length - 1;
+          const staggerDelay =
+            index < initialCount ? `${Math.min(index * 60, 300)}ms` : undefined;
 
           return (
             <div
-              key={`${message.role}-${index}-${slideUpTrigger}`}
-              style={{
-                ...styles.bubble,
-                borderColor: colors.borderColor,
-                backgroundColor: colors.backgroundColor,
-                animation: animation,
-                opacity: 1,
-                transform: "scale(1)",
-              }}
+              key={index}
+              className={`bubble ${
+                message.role === "user" ? "bubble-user" : "bubble-assistant"
+              }`}
+              style={
+                staggerDelay ? { animationDelay: staggerDelay } : undefined
+              }
             >
-              <div style={{ ...styles.content, color: colors.textColor }}>
-                {message.content}
-                {isStreaming &&
-                  isLastMessage &&
-                  message.role === "assistant" && (
-                    <span style={styles.cursor}>▌</span>
-                  )}
-              </div>
+              {message.content}
+              {isStreaming &&
+                isLastMessage &&
+                message.role === "assistant" && (
+                  <span className="stream-cursor" aria-hidden="true">
+                    ▌
+                  </span>
+                )}
             </div>
           );
         })}
+
+        {awaitingReply && (
+          <div className="bubble bubble-assistant" aria-label="Lumen is typing">
+            <span className="typing-dots">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 
 const styles: Record<string, CSSProperties> = {
-  container: {
+  scroller: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    maxWidth: "440px",
+    overflowY: "auto",
+    marginTop: "8px",
+    padding: "4px 12px 16px",
+  },
+  list: {
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
-    gap: "12px",
+    gap: "10px",
     width: "100%",
-    maxWidth: "400px",
-    marginTop: "8px",
-    minHeight: "auto",
-  },
-  bubble: {
-    maxWidth: "320px",
-    minWidth: "120px",
-    padding: "14px 18px 12px",
-    fontFamily: "var(--font-mono)",
-    fontSize: "13px",
-    lineHeight: "1.5",
-    letterSpacing: "0.3px",
-    border: "1px solid",
-    borderRadius: "var(--radius-md)",
-    pointerEvents: "none",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-    width: "100%",
-    boxSizing: "border-box" as const,
-  },
-  content: {
-    wordBreak: "break-word",
-  },
-  cursor: {
-    animation: "cursorBlink 1s infinite",
-    marginLeft: "1px",
-    opacity: 0.8,
   },
 };

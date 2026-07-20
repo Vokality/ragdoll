@@ -7,6 +7,9 @@ import type {
   CharacterVariantId,
 } from "../../electron/electron-api";
 
+/** How much history the conversation view keeps scrollable. */
+const VISIBLE_MESSAGE_LIMIT = 100;
+
 export interface ChatSnapshot {
   settings: ChatSettings;
   visibleMessages: ChatMessage[];
@@ -100,6 +103,15 @@ export class ChatService {
     return result;
   };
 
+  readonly stopStreaming = async (): Promise<void> => {
+    if (!this.snapshot.isLoading) return;
+    try {
+      await this.gateway.cancelMessage();
+    } catch (error) {
+      this.reportError(error);
+    }
+  };
+
   readonly changeTheme = async (theme: CharacterThemeId): Promise<boolean> => {
     try {
       await this.gateway.persistSettings({ theme });
@@ -183,6 +195,7 @@ export class ChatService {
         (update.isStreaming ?? this.snapshot.isStreaming)
           ? this.streamingContent
           : null,
+        VISIBLE_MESSAGE_LIMIT,
       ),
     };
     for (const listener of this.listeners) listener();

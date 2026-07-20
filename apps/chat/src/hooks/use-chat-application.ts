@@ -16,6 +16,7 @@ export function useChatApplication(service: ChatService) {
   const actions = useMemo(
     () => ({
       sendMessage: service.sendMessage,
+      stopStreaming: service.stopStreaming,
       changeTheme: service.changeTheme,
       changeVariant: service.changeVariant,
       clearConversation: service.clearConversation,

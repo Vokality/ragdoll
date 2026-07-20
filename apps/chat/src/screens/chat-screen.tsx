@@ -4,6 +4,7 @@ import { SlotBar } from "@vokality/ragdoll-extensions/ui";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
+import { SuggestionChips } from "../components/suggestion-chips";
 import { useChatApplication } from "../hooks/use-chat-application";
 import { useExtensionSlots } from "../hooks/use-extension-slots";
 import type { ChatService } from "../application/chat-service";
@@ -36,6 +37,7 @@ export function ChatScreen({
     null,
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   const {
     settings,
@@ -45,6 +47,7 @@ export function ChatScreen({
     error,
     actions: {
       sendMessage: sendChatMessage,
+      stopStreaming,
       changeTheme,
       changeVariant,
       clearConversation,
@@ -69,8 +72,10 @@ export function ChatScreen({
   }, []);
 
   const handleSendMessage = useCallback(
-    async (message: string) => {
-      if (isLoading) return;
+    async (message: string): Promise<boolean> => {
+      if (isLoading) return false;
+
+      setDismissedError(null);
 
       if (controller) {
         controller.setMood("thinking", 0.3);
@@ -81,9 +86,22 @@ export function ChatScreen({
       if (!result.success && controller) {
         controller.setMood("sad", 0.3);
       }
+      return result.success;
     },
     [controller, isLoading, sendChatMessage],
   );
+
+  // Cmd/Ctrl+, opens settings — the platform convention for preferences.
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+        event.preventDefault();
+        setIsSettingsOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   const handleThemeChange = useCallback(
     async (theme: CharacterThemeId) => {
@@ -111,35 +129,45 @@ export function ChatScreen({
     if (await clearApiKey()) onLogout();
   }, [clearApiKey, onLogout]);
 
+  const visibleError = error && error !== dismissedError ? error : null;
+
   return (
     <div style={styles.container}>
+      <div className="app-atmosphere" />
       <div style={styles.dragRegion} className="drag-region" />
 
       <header style={styles.header}>
         <button
+          type="button"
           onClick={() => setIsSettingsOpen(true)}
-          style={styles.settingsButton}
-          className="no-drag"
+          className="icon-btn spin-hover no-drag"
+          aria-label="Open settings"
+          title="Settings"
         >
           <SettingsIcon />
         </button>
 
-        <div style={styles.status}>
-          <span
-            style={{
-              ...styles.statusDot,
-              backgroundColor: isLoading ? "var(--warning)" : "var(--success)",
-            }}
-          />
-          <span style={styles.statusText}>
-            {isLoading ? "Thinking..." : "Ready"}
-          </span>
+        <div
+          className={`status-pill${isLoading ? " busy" : ""}`}
+          role="status"
+        >
+          <span className={`status-dot${isLoading ? " busy" : ""}`} />
+          <span className="label">{isLoading ? "Thinking…" : "Ready"}</span>
         </div>
       </header>
 
-      {error && (
-        <div style={styles.error} role="alert">
-          {error}
+      {visibleError && (
+        <div className="banner-error" role="alert">
+          <AlertIcon />
+          <span style={styles.errorText}>{visibleError}</span>
+          <button
+            type="button"
+            className="dismiss"
+            onClick={() => setDismissedError(visibleError)}
+            aria-label="Dismiss error"
+          >
+            <CloseIcon />
+          </button>
         </div>
       )}
 
@@ -158,10 +186,15 @@ export function ChatScreen({
         onEventSubscriberError={reportError}
       />
 
+      {visibleMessages.length === 0 && !isLoading && (
+        <SuggestionChips onPick={(prompt) => void handleSendMessage(prompt)} />
+      )}
+
       <ChatInput
         onSend={handleSendMessage}
-        disabled={isLoading}
-        placeholder="Type your message..."
+        onStop={() => void stopStreaming()}
+        isBusy={isLoading}
+        placeholder="Message Lumen…"
       />
 
       <SettingsModal
@@ -188,9 +221,45 @@ function SettingsIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }
@@ -217,47 +286,17 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 16px",
-    borderBottom: "1px solid var(--border)",
-    background: "var(--bg-secondary)",
+    borderBottom: "1px solid var(--border-light)",
     paddingTop: "40px", // Account for drag region on macOS
+    position: "relative",
+    zIndex: 1,
   },
-  settingsButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "36px",
-    height: "36px",
-    color: "var(--text-muted)",
-    borderRadius: "var(--radius-md)",
-    cursor: "pointer",
-    transition:
-      "color var(--transition-fast), background var(--transition-fast)",
+  errorText: {
+    flex: 1,
+    minWidth: 0,
   },
-  status: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    padding: "6px 12px",
-    background: "var(--bg-glass)",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid var(--border)",
-  },
-  error: {
-    padding: "8px 16px",
-    color: "var(--error)",
-    background: "var(--error-dim)",
-    fontSize: "13px",
-  },
-  statusDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "50%",
-  },
-  statusText: {
-    fontSize: "12px",
-    fontWeight: "500",
-    color: "var(--text-muted)",
-  },
+  // No z-index here: the SlotBar's bottom sheet is position:fixed and must
+  // stack in the root context so it covers the composer and character.
   extensionDock: {
     display: "flex",
     justifyContent: "flex-end",

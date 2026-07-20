@@ -29,6 +29,7 @@ export interface AgentRunner {
     apiKey: string,
     conversation: readonly ConversationEntry[],
     onStreamingText: (text: string) => void,
+    signal?: AbortSignal,
   ): Promise<string>;
   runEventTurn(
     apiKey: string,
@@ -60,6 +61,7 @@ export interface AgentCompletionRequest {
   tools: ChatCompletionTool[];
   toolChoice: ChatCompletionToolChoiceOption;
   onStreamingText?: (text: string) => void;
+  signal?: AbortSignal;
 }
 
 export interface AgentCompletionSession {
@@ -224,15 +226,18 @@ class OpenAICompletionSession implements AgentCompletionSession {
   }
 
   async complete(request: AgentCompletionRequest): Promise<CompletionRound> {
-    const stream = await this.client.chat.completions.create({
-      model: this.config.model,
-      messages: request.messages,
-      ...(request.tools.length > 0
-        ? { tools: request.tools, tool_choice: request.toolChoice }
-        : {}),
-      stream: true,
-      max_completion_tokens: this.config.maxCompletionTokens,
-    });
+    const stream = await this.client.chat.completions.create(
+      {
+        model: this.config.model,
+        messages: request.messages,
+        ...(request.tools.length > 0
+          ? { tools: request.tools, tool_choice: request.toolChoice }
+          : {}),
+        stream: true,
+        max_completion_tokens: this.config.maxCompletionTokens,
+      },
+      { signal: request.signal },
+    );
     const toolCalls = new Map<number, PendingToolCall>();
     let finishReason: string | null = null;
     let content = "";
@@ -282,6 +287,7 @@ export class OpenAIAgentRunner implements AgentRunner {
     apiKey: string,
     conversation: readonly ConversationEntry[],
     onStreamingText: (text: string) => void,
+    signal?: AbortSignal,
   ): Promise<string> {
     const completionSession = this.completionSessions.create(
       apiKey,
@@ -306,6 +312,7 @@ export class OpenAIAgentRunner implements AgentRunner {
             }
           : "auto",
         onStreamingText,
+        signal,
       });
       response += completion.content;
 

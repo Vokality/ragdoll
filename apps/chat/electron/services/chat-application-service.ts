@@ -25,6 +25,7 @@ export interface ApiKeyProvider {
 export class ChatApplicationService {
   private turnQueue = Promise.resolve();
   private pendingEventRun: Promise<void> | null = null;
+  private activeUserTurn: AbortController | null = null;
 
   constructor(
     private readonly storage: StorageRepository,
@@ -57,6 +58,9 @@ export class ChatApplicationService {
     }
 
     return this.enqueueTurn(async () => {
+      const abort = new AbortController();
+      this.activeUserTurn = abort;
+      let streamed = "";
       try {
         const data = await this.storage.update((draft) => {
           draft.conversation.push({ role: "user", content });
@@ -66,19 +70,41 @@ export class ChatApplicationService {
         const response = await this.agent.runUserTurn(
           await this.apiKeys.getKey(),
           data.conversation,
-          (text) => events.streamingText(text),
+          (text) => {
+            streamed += text;
+            events.streamingText(text);
+          },
+          abort.signal,
         );
         const completed = await this.appendAssistantResponse(response);
         events.streamEnded();
         this.publishConversation(completed);
         return { success: true };
       } catch (error) {
+        // A user-initiated stop is not a failure: keep whatever text
+        // already streamed as the assistant message.
+        if (abort.signal.aborted) {
+          const partial = streamed.trim();
+          const conversation = partial
+            ? await this.appendAssistantResponse(partial)
+            : (await this.storage.read()).conversation;
+          events.streamEnded();
+          this.publishConversation(conversation);
+          return { success: true };
+        }
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),
         };
+      } finally {
+        if (this.activeUserTurn === abort) this.activeUserTurn = null;
       }
     });
+  }
+
+  cancelActiveTurn(): OperationResult {
+    this.activeUserTurn?.abort();
+    return { success: true };
   }
 
   schedulePendingEventTurns(): Promise<void> {

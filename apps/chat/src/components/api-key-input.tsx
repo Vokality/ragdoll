@@ -21,7 +21,11 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
-      <div style={styles.inputWrapper}>
+      <div
+        key={error ?? "ok"}
+        className={error ? "animate-shake" : undefined}
+        style={styles.inputWrapper}
+      >
         <input
           type={showKey ? "text" : "password"}
           value={key}
@@ -38,13 +42,24 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
           type="button"
           onClick={() => setShowKey(!showKey)}
           style={styles.toggleButton}
+          aria-label={showKey ? "Hide API key" : "Show API key"}
           tabIndex={-1}
         >
           {showKey ? <EyeOffIcon /> : <EyeIcon />}
         </button>
       </div>
 
-      {error && <p style={styles.error}>{error}</p>}
+      {error && (
+        <p className="animate-fadeIn" role="alert" style={styles.error}>
+          {error}
+        </p>
+      )}
+
+      {!error && key.length > 0 && !isValid && (
+        <p className="animate-fadeIn" style={styles.hint} role="status">
+          OpenAI API keys start with “sk-”. Paste the full key to continue.
+        </p>
+      )}
 
       <p style={styles.hint}>
         Your key is encrypted and stored locally on your device.
@@ -58,8 +73,8 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
       >
         {isLoading ? (
           <>
-            <span style={styles.buttonSpinner} />
-            Validating...
+            <span className="spinner-sm" />
+            Validating…
           </>
         ) : (
           <>
@@ -164,13 +179,5 @@ const styles: Record<string, CSSProperties> = {
   submitButton: {
     marginTop: "8px",
     width: "100%",
-  },
-  buttonSpinner: {
-    width: "16px",
-    height: "16px",
-    border: "2px solid transparent",
-    borderTopColor: "currentColor",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
   },
 };

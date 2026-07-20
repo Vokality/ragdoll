@@ -43,6 +43,9 @@ export function CharacterView({
 
   return (
     <div style={styles.container}>
+      {/* Ambient glow that breathes behind the character */}
+      <div className="ambient-glow" style={styles.glow} />
+
       {/* Character */}
       <div style={styles.characterWrapper}>
         <RagdollCharacter
@@ -61,14 +64,22 @@ export function CharacterView({
 }
 
 const styles: Record<string, CSSProperties> = {
+  // The character stays pinned; ConversationBubbles scrolls in the
+  // remaining space.
   container: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     flex: 1,
+    minHeight: 0,
     position: "relative",
-    padding: "20px 20px 20px",
-    overflow: "auto",
+    padding: "20px 20px 0",
+    overflow: "hidden",
+  },
+  glow: {
+    top: "170px",
+    width: "420px",
+    height: "420px",
   },
   characterWrapper: {
     width: "300px",
@@ -77,5 +88,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    position: "relative",
+    zIndex: 1,
   },
 };

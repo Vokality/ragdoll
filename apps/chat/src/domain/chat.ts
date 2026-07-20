@@ -6,16 +6,6 @@ export interface ChatMessage {
 }
 
 /**
- * Append a new message to the existing conversation history.
- */
-export function appendMessage(
-  messages: ChatMessage[],
-  message: ChatMessage,
-): ChatMessage[] {
-  return [...messages, message];
-}
-
-/**
  * Compute the subset of messages that should be visible in the UI.
  * Includes the current streaming assistant response if provided.
  */

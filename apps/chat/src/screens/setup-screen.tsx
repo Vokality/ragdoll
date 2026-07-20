@@ -73,11 +73,12 @@ export function SetupScreen({
       {/* Drag region for window */}
       <div style={styles.dragRegion} className="drag-region" />
 
-      {/* Ambient background effect */}
-      <div style={styles.ambientGlow} />
+      {/* Ambient background effects */}
+      <div className="app-atmosphere" />
+      <div className="ambient-glow" />
 
       {/* Character */}
-      <div style={styles.characterContainer}>
+      <div style={styles.characterContainer} className="enter-1">
         <RagdollCharacter
           onControllerReady={handleControllerReady}
           onEventSubscriberError={reportError}
@@ -87,7 +88,7 @@ export function SetupScreen({
       </div>
 
       {/* Setup card */}
-      <div style={styles.card} className="card animate-slideUp">
+      <div style={styles.card} className="card enter-2">
         <h1 style={styles.title}>Meet Lumen</h1>
         <p style={styles.subtitle}>
           Your expressive assistant. Enter your OpenAI API key to get started.
@@ -102,9 +103,10 @@ export function SetupScreen({
 
       {/* Help link */}
       <button
+        type="button"
         onClick={handleOpenPlatform}
         style={styles.helpLink}
-        className="no-drag"
+        className="btn-ghost no-drag enter-3"
       >
         <KeyIcon />
         Get an API key from platform.openai.com
@@ -166,18 +168,6 @@ const styles: Record<string, CSSProperties> = {
     right: 0,
     height: "32px",
   },
-  ambientGlow: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "600px",
-    height: "600px",
-    background:
-      "radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)",
-    pointerEvents: "none",
-    opacity: 0.5,
-  },
   characterContainer: {
     width: "280px",
     height: "320px",
@@ -198,6 +188,7 @@ const styles: Record<string, CSSProperties> = {
   title: {
     fontSize: "22px",
     fontWeight: "600",
+    letterSpacing: "-0.02em",
     color: "var(--text-primary)",
     margin: "0 0 8px 0",
     textAlign: "center",
@@ -209,19 +200,8 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
   helpLink: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
     marginTop: "24px",
-    padding: "12px 16px",
-    color: "var(--text-dim)",
     fontSize: "13px",
-    background: "var(--bg-glass)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius-md)",
-    cursor: "pointer",
-    transition:
-      "color var(--transition-fast), border-color var(--transition-fast)",
     position: "relative",
     zIndex: 1,
   },

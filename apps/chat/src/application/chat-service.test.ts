@@ -5,8 +5,12 @@ import { ChatService } from "./chat-service";
 function createGateway() {
   let streamingHandlers: StreamingHandlers | null = null;
   let sentMessage = "";
+  let cancelCount = 0;
 
   const gateway: ChatGateway = {
+    cancelMessage: async () => {
+      cancelCount += 1;
+    },
     fetchSettings: async () => ({ theme: "robot", variant: "einstein" }),
     persistSettings: async () => undefined,
     fetchConversation: async () => [{ role: "assistant", content: "Hello" }],
@@ -29,6 +33,7 @@ function createGateway() {
     gateway,
     getStreamingHandlers: () => streamingHandlers,
     getSentMessage: () => sentMessage,
+    getCancelCount: () => cancelCount,
   };
 }
 
@@ -71,5 +76,24 @@ describe("ChatService", () => {
     });
     service.stop();
     expect(testGateway.getStreamingHandlers()).toBeNull();
+  });
+
+  it("forwards stopStreaming to the gateway only while a turn is in flight", async () => {
+    const testGateway = createGateway();
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    await service.start();
+
+    await service.stopStreaming();
+    expect(testGateway.getCancelCount()).toBe(0);
+
+    void service.sendMessage("Hi");
+    expect(service.getSnapshot().isLoading).toBe(true);
+    await service.stopStreaming();
+    expect(testGateway.getCancelCount()).toBe(1);
+
+    service.stop();
   });
 });

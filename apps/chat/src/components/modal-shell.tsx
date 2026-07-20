@@ -1,4 +1,9 @@
-import type { CSSProperties, ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 interface ModalShellProps {
   title: string;
@@ -7,35 +12,49 @@ interface ModalShellProps {
   children: ReactNode;
 }
 
+/**
+ * Native <dialog>-based modal: focus trapping, Escape handling, focus
+ * restoration, and the backdrop all come from the platform.
+ */
 export function ModalShell({
   title,
   maxWidth,
   onClose,
   children,
 }: ModalShellProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    // Light dismiss (backdrop click) via the platform; React's typings
+    // don't include the `closedby` attribute yet.
+    dialog.setAttribute("closedby", "any");
+    if (!dialog.open) dialog.showModal();
+  }, []);
+
   return (
-    <>
-      <div style={styles.backdrop} onClick={onClose} aria-hidden="true" />
-      <div
-        style={{ ...styles.modal, maxWidth }}
-        className="card animate-fadeIn"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <div style={styles.header}>
-          <h2 style={styles.title}>{title}</h2>
-          <button
-            onClick={onClose}
-            style={styles.closeButton}
-            aria-label={`Close ${title}`}
-          >
-            <CloseIcon />
-          </button>
-        </div>
-        <div style={styles.content}>{children}</div>
+    <dialog
+      ref={dialogRef}
+      className="modal-card card"
+      style={{ maxWidth }}
+      aria-label={title}
+      onClose={onClose}
+    >
+      <div style={styles.header}>
+        <h2 style={styles.title}>{title}</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="icon-btn"
+          style={styles.closeButton}
+          aria-label={`Close ${title}`}
+        >
+          <CloseIcon />
+        </button>
       </div>
-    </>
+      <div className="modal-body">{children}</div>
+    </dialog>
   );
 }
 
@@ -57,51 +76,23 @@ function CloseIcon() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0, 0, 0, 0.6)",
-    backdropFilter: "blur(4px)",
-    zIndex: 1000,
-  },
-  modal: {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: "calc(100% - 48px)",
-    maxHeight: "calc(100vh - 96px)",
-    overflow: "auto",
-    zIndex: 1001,
-  },
   header: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     padding: "20px 24px",
     borderBottom: "1px solid var(--border)",
+    flexShrink: 0,
   },
   title: {
-    fontSize: "18px",
+    fontSize: "17px",
     fontWeight: "600",
+    letterSpacing: "-0.01em",
     color: "var(--text-primary)",
     margin: 0,
   },
   closeButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
     width: "32px",
     height: "32px",
-    color: "var(--text-muted)",
-    borderRadius: "var(--radius-sm)",
-    cursor: "pointer",
-    background: "transparent",
-    border: "none",
-    transition:
-      "color var(--transition-fast), background var(--transition-fast)",
-  },
-  content: {
-    padding: "20px 24px 24px",
   },
 };

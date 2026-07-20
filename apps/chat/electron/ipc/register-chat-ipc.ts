@@ -20,4 +20,5 @@ export function registerChatIpc(
       streamEnded: () => event.sender.send(IPC_CHANNELS.chat.streamEnd),
     }),
   );
+  ipc.handle(IPC_CHANNELS.chat.cancelMessage, () => chat.cancelActiveTurn());
 }

@@ -1,10 +1,29 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 export function LoadingScreen() {
+  // Avoid a flash of spinner on fast startups: render nothing briefly,
+  // then ease the orb in.
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 150);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible) {
+    return <div style={styles.container} />;
+  }
+
   return (
-    <div style={styles.container}>
-      <div style={styles.spinner} />
-      <p style={styles.text}>Loading...</p>
+    <div style={styles.container} role="status" aria-label="Loading Lumen">
+      <div className="app-atmosphere" />
+      <div className="loading-orb enter-1" />
+      <p className="enter-2" style={styles.wordmark}>
+        Lumen
+      </p>
+      <p className="enter-3" style={styles.text}>
+        Waking up…
+      </p>
     </div>
   );
 }
@@ -18,18 +37,21 @@ const styles: Record<string, CSSProperties> = {
     height: "100%",
     width: "100%",
     background: "var(--bg-primary)",
-    gap: "16px",
+    gap: "20px",
+    position: "relative",
   },
-  spinner: {
-    width: "32px",
-    height: "32px",
-    border: "3px solid var(--border)",
-    borderTopColor: "var(--accent)",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
+  wordmark: {
+    fontSize: "17px",
+    fontWeight: 600,
+    letterSpacing: "0.32em",
+    textTransform: "uppercase",
+    color: "var(--text-primary)",
+    marginLeft: "0.32em", // visually recenter tracked-out text
+    position: "relative",
   },
   text: {
-    color: "var(--text-muted)",
-    fontSize: "14px",
+    color: "var(--text-dim)",
+    fontSize: "13px",
+    position: "relative",
   },
 };

@@ -91,6 +91,7 @@ export const IPC_CHANNELS = {
   },
   chat: {
     sendMessage: "chat:send-message",
+    cancelMessage: "chat:cancel-message",
     getConversation: "chat:get-conversation",
     clearConversation: "chat:clear-conversation",
     streamingText: "chat:streaming-text",
@@ -175,6 +176,7 @@ export interface ElectronAPI {
   openExternal(url: string): Promise<OperationResult>;
 
   sendMessage(message: string): Promise<OperationResult>;
+  cancelMessage(): Promise<OperationResult>;
   getConversation(): Promise<ChatMessageDto[]>;
   clearConversation(): Promise<OperationResult>;
   onStreamingText(callback: (text: string) => void): () => void;

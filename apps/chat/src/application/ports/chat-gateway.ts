@@ -16,6 +16,7 @@ export interface ChatGateway {
   fetchConversation(): Promise<ChatMessage[]>;
   clearConversation(): Promise<void>;
   sendMessage(message: string): Promise<ChatSendResult>;
+  cancelMessage(): Promise<void>;
   subscribeToStreaming(handlers: StreamingHandlers): () => void;
   onFunctionCall(
     callback: (name: string, args: Record<string, unknown>) => void,

@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import type { ConfigField } from "@vokality/ragdoll-extensions";
 import type { OAuthState } from "../../electron/electron-api";
 import type { ExtensionManagementService } from "../application/extension-management-service";
@@ -36,6 +36,7 @@ export function ExtensionConfigModal({
 
   if (!isOpen) return null;
 
+  const missingFields = new Set(configuration.status?.missingFields ?? []);
   const isConfigComplete = !hasConfig || configuration.status?.isConfigured;
   const isOAuthComplete = !hasOAuth || configuration.oauth?.isAuthenticated;
   const isFullyConfigured = isConfigComplete && isOAuthComplete;
@@ -64,17 +65,19 @@ export function ExtensionConfigModal({
                 field={field}
                 value={configuration.values[key]}
                 onChange={(value) => configuration.changeValue(key, value)}
-                isMissing={configuration.status?.missingFields.includes(key)}
+                isMissing={missingFields.has(key)}
               />
             ))}
           </div>
           <button
+            type="button"
             onClick={() => void configuration.save()}
             disabled={configuration.saving}
             className="btn-primary"
             style={styles.saveButton}
           >
-            {configuration.saving ? "Saving..." : "Save Configuration"}
+            {configuration.saving && <span className="spinner-sm" />}
+            {configuration.saving ? "Saving…" : "Save Configuration"}
           </button>
         </section>
       )}
@@ -133,11 +136,14 @@ function ConfigFieldInput({
   onChange,
   isMissing,
 }: ConfigFieldInputProps) {
+  const inputId = useId();
+
   const renderInput = () => {
     switch (field.type) {
       case "string":
         return (
           <input
+            id={inputId}
             type={field.secret ? "password" : "text"}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
@@ -156,6 +162,7 @@ function ConfigFieldInput({
       case "number":
         return (
           <input
+            id={inputId}
             type="number"
             value={typeof value === "number" ? value : ""}
             onChange={(e) =>
@@ -181,27 +188,20 @@ function ConfigFieldInput({
       case "boolean":
         return (
           <button
+            type="button"
             onClick={() => onChange(value !== true)}
-            style={{
-              ...styles.toggle,
-              ...(value === true ? styles.toggleOn : styles.toggleOff),
-            }}
+            className={`switch${value === true ? " on" : ""}`}
             aria-pressed={value === true}
+            aria-label={field.label}
           >
-            <span
-              style={{
-                ...styles.toggleKnob,
-                ...(value === true
-                  ? styles.toggleKnobOn
-                  : styles.toggleKnobOff),
-              }}
-            />
+            <span className="switch-knob" />
           </button>
         );
 
       case "select":
         return (
           <select
+            id={inputId}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
             style={{
@@ -226,7 +226,7 @@ function ConfigFieldInput({
   return (
     <div style={styles.fieldRow}>
       <div style={styles.fieldHeader}>
-        <label style={styles.fieldLabel}>
+        <label htmlFor={inputId} style={styles.fieldLabel}>
           {field.label}
           {field.required && <span style={styles.required}>*</span>}
         </label>
@@ -288,6 +288,7 @@ function OAuthStatusCard({
       <div style={styles.oauthActions}>
         {state?.isAuthenticated ? (
           <button
+            type="button"
             onClick={onDisconnect}
             className="btn-secondary"
             style={styles.oauthButton}
@@ -296,6 +297,7 @@ function OAuthStatusCard({
           </button>
         ) : (
           <button
+            type="button"
             onClick={onConnect}
             disabled={isConnecting}
             className="btn-primary"
@@ -443,38 +445,6 @@ const styles: Record<string, CSSProperties> = {
     outline: "none",
     cursor: "pointer",
     boxSizing: "border-box",
-  },
-  toggle: {
-    position: "relative",
-    width: "44px",
-    height: "24px",
-    borderRadius: "12px",
-    border: "none",
-    cursor: "pointer",
-    transition: "background var(--transition-fast)",
-    flexShrink: 0,
-  },
-  toggleOn: {
-    background: "var(--accent)",
-  },
-  toggleOff: {
-    background: "var(--border)",
-  },
-  toggleKnob: {
-    position: "absolute",
-    top: "2px",
-    width: "20px",
-    height: "20px",
-    borderRadius: "50%",
-    background: "white",
-    transition: "left var(--transition-fast)",
-    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-  },
-  toggleKnobOn: {
-    left: "22px",
-  },
-  toggleKnobOff: {
-    left: "2px",
   },
   saveButton: {
     width: "100%",

@@ -187,6 +187,93 @@ describe("ChatApplicationService", () => {
     expect(reportedErrors).toEqual([agent.eventError]);
   });
 
+  it("keeps partial streamed text when the user cancels mid-turn", async () => {
+    let releaseTurn: () => void = () => {};
+    const turnGate = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    const agent: AgentRunner = {
+      runUserTurn: async (_apiKey, _conversation, onStreamingText, signal) => {
+        onStreamingText("Partial ");
+        onStreamingText("answer");
+        await turnGate;
+        if (signal?.aborted) throw new Error("Request was aborted.");
+        return "never reached";
+      },
+      runEventTurn: async () => ({ disposition: "silent" }),
+    };
+    const storage = createInMemoryStorageRepository();
+    const projections: Array<Array<{ role: string; content: string }>> = [];
+    const chat = new ChatApplicationService(
+      storage,
+      { getKey: async () => "api-key" },
+      agent,
+      (conversation) => projections.push(conversation),
+      ignoreError,
+    );
+
+    let streamEnded = 0;
+    const turn = chat.sendMessage("Hi", {
+      streamingText: () => {},
+      streamEnded: () => {
+        streamEnded += 1;
+      },
+    });
+    await Bun.sleep(0);
+    chat.cancelActiveTurn();
+    releaseTurn();
+
+    expect(await turn).toEqual({ success: true });
+    expect(streamEnded).toBe(1);
+    expect(storage.snapshot().conversation).toEqual([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Partial answer" },
+    ]);
+    expect(projections.at(-1)).toEqual([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Partial answer" },
+    ]);
+  });
+
+  it("cancels cleanly when nothing has streamed yet", async () => {
+    let releaseTurn: () => void = () => {};
+    const turnGate = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    const agent: AgentRunner = {
+      runUserTurn: async () => {
+        await turnGate;
+        throw new Error("Request was aborted.");
+      },
+      runEventTurn: async () => ({ disposition: "silent" }),
+    };
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      { getKey: async () => "api-key" },
+      agent,
+      () => {},
+      ignoreError,
+    );
+
+    let streamEnded = 0;
+    const turn = chat.sendMessage("Hi", {
+      streamingText: () => {},
+      streamEnded: () => {
+        streamEnded += 1;
+      },
+    });
+    await Bun.sleep(0);
+    chat.cancelActiveTurn();
+    releaseTurn();
+
+    expect(await turn).toEqual({ success: true });
+    expect(streamEnded).toBe(1);
+    expect(storage.snapshot().conversation).toEqual([
+      { role: "user", content: "Hi" },
+    ]);
+  });
+
   it("serializes event turns behind an active user turn", async () => {
     let releaseUserTurn: () => void = () => {};
     let markUserTurnStarted: () => void = () => {};

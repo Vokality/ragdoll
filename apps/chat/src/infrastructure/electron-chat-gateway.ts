@@ -8,7 +8,9 @@ import type { ElectronAPI } from "../../electron/electron-api";
 
 async function requireSuccess(
   operation: ReturnType<
-    ElectronAPI["clearApiKey" | "clearConversation" | "setSettings"]
+    ElectronAPI[
+      "clearApiKey" | "clearConversation" | "setSettings" | "cancelMessage"
+    ]
   >,
 ): Promise<void> {
   const result = await operation;
@@ -32,6 +34,9 @@ export function createElectronChatGateway(api: ElectronAPI): ChatGateway {
     },
     async sendMessage(message) {
       return api.sendMessage(message);
+    },
+    async cancelMessage() {
+      await requireSuccess(api.cancelMessage());
     },
     subscribeToStreaming({
       onText,

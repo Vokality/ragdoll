@@ -101,6 +101,19 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
     onClose();
   }, [onClose]);
 
+  // Close on Escape while the sheet is open, matching modal behavior.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        handleClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, handleClose]);
+
   // Don't render if fully hidden
   if (animationState === "hidden") {
     return null;
@@ -121,6 +134,9 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
       {/* Sheet */}
       <div
         className={`slot-panel-sheet ${panel.type === "grid" ? "slot-panel-sheet-grid" : ""} ${isExiting ? "exiting" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={panel.title}
       >
         {/* Handle */}
         <div style={styles.handleWrapper}>

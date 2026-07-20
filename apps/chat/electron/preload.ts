@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Chat
   sendMessage: (message: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.chat.sendMessage, message),
+  cancelMessage: () => ipcRenderer.invoke(IPC_CHANNELS.chat.cancelMessage),
   getConversation: () => ipcRenderer.invoke(IPC_CHANNELS.chat.getConversation),
   clearConversation: () =>
     ipcRenderer.invoke(IPC_CHANNELS.chat.clearConversation),
