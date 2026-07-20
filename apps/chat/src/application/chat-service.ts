@@ -59,6 +59,7 @@ export class ChatService {
       onConversationChanged: (conversation) => {
         this.conversationVersion += 1;
         this.messages = conversation;
+        this.dropStreamingContentIfPersisted();
         this.publish();
       },
     });
@@ -182,8 +183,27 @@ export class ChatService {
   }
 
   private finishStream(): void {
-    this.streamingContent = "";
+    // Keep the streamed text on screen: the persisted conversation arrives
+    // in a separate event, and clearing here would blank the bubble for a
+    // frame and replay its entrance animation.
+    this.dropStreamingContentIfPersisted();
     this.publish({ isLoading: false, isStreaming: false });
+  }
+
+  /**
+   * Once the persisted conversation contains the streamed reply, the
+   * synthetic streaming bubble is redundant — drop it so the two never
+   * render together and the handoff is invisible.
+   */
+  private dropStreamingContentIfPersisted(): void {
+    const last = this.messages.at(-1);
+    if (
+      this.streamingContent &&
+      last?.role === "assistant" &&
+      last.content === this.streamingContent.trim()
+    ) {
+      this.streamingContent = "";
+    }
   }
 
   private publish(update: Partial<ChatSnapshot> = {}): void {
@@ -192,9 +212,7 @@ export class ChatService {
       ...update,
       visibleMessages: getVisibleMessages(
         this.messages,
-        (update.isStreaming ?? this.snapshot.isStreaming)
-          ? this.streamingContent
-          : null,
+        this.streamingContent || null,
         VISIBLE_MESSAGE_LIMIT,
       ),
     };

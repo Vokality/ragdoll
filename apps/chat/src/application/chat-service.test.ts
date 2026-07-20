@@ -78,6 +78,44 @@ describe("ChatService", () => {
     expect(testGateway.getStreamingHandlers()).toBeNull();
   });
 
+  it("hands off the streamed reply without a blank frame or duplicate", async () => {
+    const testGateway = createGateway();
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    await service.start();
+    testGateway.getStreamingHandlers()?.onConversationChanged([]);
+
+    await service.sendMessage("Hi");
+    testGateway
+      .getStreamingHandlers()
+      ?.onConversationChanged([{ role: "user", content: "Hi" }]);
+    testGateway.getStreamingHandlers()?.onText("Hello back");
+
+    // Stream end arrives before the persisted conversation: the streamed
+    // text must stay visible instead of blanking for a frame.
+    testGateway.getStreamingHandlers()?.onStreamEnd();
+    expect(service.getSnapshot().visibleMessages.at(-1)).toEqual({
+      role: "assistant",
+      content: "Hello back",
+    });
+
+    // Once persisted, the reply renders exactly once.
+    testGateway.getStreamingHandlers()?.onConversationChanged([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Hello back" },
+    ]);
+    const assistantMessages = service
+      .getSnapshot()
+      .visibleMessages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toEqual([
+      { role: "assistant", content: "Hello back" },
+    ]);
+
+    service.stop();
+  });
+
   it("forwards stopStreaming to the gateway only while a turn is in flight", async () => {
     const testGateway = createGateway();
     const service = new ChatService(testGateway.gateway, {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type UIEvent } from "react";
+import { useSmoothText } from "../hooks/use-smooth-text";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,6 +33,17 @@ export function ConversationBubbles({
   const lastMessage = messages[messages.length - 1];
   const lastContent = lastMessage?.content ?? "";
 
+  // Reveal the newest assistant reply at a steady pace instead of
+  // network-paced bursts; it keeps draining after the stream closes.
+  const liveAssistant = lastMessage?.role === "assistant" ? lastMessage : null;
+  const smoothedContent = useSmoothText(
+    liveAssistant?.content ?? "",
+    messages.length,
+    isStreaming && liveAssistant !== null,
+  );
+  const isRevealing =
+    liveAssistant !== null && smoothedContent.length < liveAssistant.content.length;
+
   // Follow new content only while the user hasn't scrolled up to read;
   // their own new message always snaps the view back down.
   useEffect(() => {
@@ -39,9 +51,10 @@ export function ConversationBubbles({
     if (!container) return;
     if (pinnedRef.current || lastMessage?.role === "user") {
       pinnedRef.current = true;
-      container.scrollTop = container.scrollHeight;
+      const bottom = container.scrollHeight - container.clientHeight;
+      if (container.scrollTop < bottom) container.scrollTop = bottom;
     }
-  }, [messages.length, lastContent, isStreaming, lastMessage?.role]);
+  }, [messages.length, lastContent, smoothedContent, isStreaming, lastMessage?.role]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
@@ -62,7 +75,8 @@ export function ConversationBubbles({
     >
       <div style={styles.list}>
         {messages.map((message, index) => {
-          const isLastMessage = index === messages.length - 1;
+          const isRevealTarget =
+            index === messages.length - 1 && message.role === "assistant";
           const staggerDelay =
             index < initialCount ? `${Math.min(index * 60, 300)}ms` : undefined;
 
@@ -76,14 +90,21 @@ export function ConversationBubbles({
                 staggerDelay ? { animationDelay: staggerDelay } : undefined
               }
             >
-              {message.content}
-              {isStreaming &&
-                isLastMessage &&
-                message.role === "assistant" && (
-                  <span className="stream-cursor" aria-hidden="true">
-                    ▌
+              {isRevealTarget ? (
+                <>
+                  {/* Screen readers get the real text as it arrives; the
+                      per-frame typewriter is visual-only. */}
+                  <span aria-hidden="true">
+                    {smoothedContent}
+                    {(isStreaming || isRevealing) && (
+                      <span className="stream-cursor">▌</span>
+                    )}
                   </span>
-                )}
+                  <span className="sr-only">{message.content}</span>
+                </>
+              ) : (
+                message.content
+              )}
             </div>
           );
         })}
