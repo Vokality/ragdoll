@@ -42,13 +42,39 @@ export interface ReviewQueueEntry {
   cardId: string;
 }
 
+export interface ReviewAttemptRecord {
+  attemptId: string;
+  deckId: string;
+  cardId: string;
+  front: string;
+  expectedAnswer: string;
+  submittedAnswer: string;
+  correct: boolean;
+  rating?: Rating;
+}
+
+export interface ReviewSummary {
+  sessionId: string;
+  reason: "completed" | "ended";
+  startedAt: number;
+  endedAt: number;
+  total: number;
+  correct: number;
+  incorrect: number;
+  ratings: Record<Rating, number>;
+  attempts: ReviewAttemptRecord[];
+}
+
 export interface ReviewSession {
+  sessionId: string | null;
+  startedAt: number | null;
   queue: ReviewQueueEntry[];
   currentIndex: number;
   attemptId: string | null;
   phase: ReviewPhase;
   result: ReviewResult | null;
   submittedAnswer: string | null;
+  attempts: ReviewAttemptRecord[];
 }
 
 export interface FlashCardViewState {
@@ -70,6 +96,7 @@ export interface FlashCardEvent {
   type: FlashCardEventType;
   state: FlashCardViewState;
   timestamp: number;
+  summary?: ReviewSummary;
 }
 
 export type FlashCardEventCallback = (event: FlashCardEvent) => void;
@@ -93,13 +120,26 @@ export const EMPTY_DURABLE_STATE: DurableFlashCardState = {
 
 function createIdleSession(): ReviewSession {
   return {
+    sessionId: null,
+    startedAt: null,
     queue: [],
     currentIndex: 0,
     attemptId: null,
     phase: "front",
     result: null,
     submittedAnswer: null,
+    attempts: [],
   };
+}
+
+function cloneAttempts(
+  attempts: readonly ReviewAttemptRecord[],
+): ReviewAttemptRecord[] {
+  return attempts.map((attempt) => ({ ...attempt }));
+}
+
+function emptyRatings(): Record<Rating, number> {
+  return { again: 0, hard: 0, easy: 0 };
 }
 
 function normalizeAnswer(value: string): string {
@@ -171,6 +211,7 @@ export class FlashCardManager {
     this.session = {
       ...session,
       queue: session.queue.map((entry) => ({ ...entry })),
+      attempts: cloneAttempts(session.attempts),
     };
     this.pending = pending;
     this.emit("state:changed");
@@ -192,6 +233,7 @@ export class FlashCardManager {
       session: {
         ...this.session,
         queue: this.session.queue.map((entry) => ({ ...entry })),
+        attempts: cloneAttempts(this.session.attempts),
       },
       pending: this.pending,
     };
@@ -301,21 +343,30 @@ export class FlashCardManager {
       throw new Error("No cards are due for review");
     }
 
+    const startedAt = now;
     this.session = {
+      sessionId: this.dependencies.createId(),
+      startedAt,
       queue: due,
       currentIndex: 0,
       attemptId: this.dependencies.createId(),
       phase: "front",
       result: null,
       submittedAnswer: null,
+      attempts: [],
     };
     this.emit("review:started");
     return this.getState().session;
   }
 
-  endReview(): void {
+  endReview(): ReviewSummary | null {
+    if (!this.session.sessionId) {
+      return null;
+    }
+    const summary = this.buildSummary("ended");
     this.session = createIdleSession();
-    this.emit("review:ended");
+    this.emit("review:ended", summary);
+    return summary;
   }
 
   submitAnswer(attemptId: string, answer: string): ReviewResult {
@@ -323,7 +374,8 @@ export class FlashCardManager {
       throw new Error("Stale or invalid answer submission");
     }
     const card = this.getCurrentCard();
-    if (!card) throw new Error("No active card");
+    const entry = this.session.queue[this.session.currentIndex];
+    if (!card || !entry) throw new Error("No active card");
 
     const correct =
       normalizeAnswer(answer) === normalizeAnswer(card.back);
@@ -341,17 +393,28 @@ export class FlashCardManager {
           correct: false,
         };
 
+    const attempt: ReviewAttemptRecord = {
+      attemptId,
+      deckId: entry.deckId,
+      cardId: entry.cardId,
+      front: card.front,
+      expectedAnswer: card.back,
+      submittedAnswer: answer,
+      correct,
+    };
+
     this.session = {
       ...this.session,
       phase: "revealed",
       result,
       submittedAnswer: answer,
+      attempts: [...this.session.attempts, attempt],
     };
     this.emit("answer:submitted");
     return result;
   }
 
-  rateCard(attemptId: string, rating: Rating): void {
+  rateCard(attemptId: string, rating: Rating): ReviewSummary | null {
     if (
       this.session.phase !== "revealed" ||
       this.session.attemptId !== attemptId
@@ -385,6 +448,10 @@ export class FlashCardManager {
       })),
     };
 
+    const attempts = this.session.attempts.map((attempt) =>
+      attempt.attemptId === attemptId ? { ...attempt, rating } : attempt,
+    );
+
     let queue = this.session.queue;
     if (rating === "again") {
       queue = [...queue, { ...entry }];
@@ -392,20 +459,56 @@ export class FlashCardManager {
 
     const nextIndex = this.session.currentIndex + 1;
     if (nextIndex >= queue.length) {
+      this.session = {
+        ...this.session,
+        attempts,
+      };
+      const summary = this.buildSummary("completed");
       this.session = createIdleSession();
       this.emit("card:rated");
-      return;
+      this.emit("review:ended", summary);
+      return summary;
     }
 
     this.session = {
+      sessionId: this.session.sessionId,
+      startedAt: this.session.startedAt,
       queue,
       currentIndex: nextIndex,
       attemptId: this.dependencies.createId(),
       phase: "front",
       result: null,
       submittedAnswer: null,
+      attempts,
     };
     this.emit("card:rated");
+    return null;
+  }
+
+  private buildSummary(reason: "completed" | "ended"): ReviewSummary {
+    const sessionId = this.session.sessionId;
+    const startedAt = this.session.startedAt;
+    if (!sessionId || startedAt === null) {
+      throw new Error("Cannot summarize an idle review session");
+    }
+    const attempts = cloneAttempts(this.session.attempts);
+    const ratings = emptyRatings();
+    let correct = 0;
+    for (const attempt of attempts) {
+      if (attempt.correct) correct += 1;
+      if (attempt.rating) ratings[attempt.rating] += 1;
+    }
+    return {
+      sessionId,
+      reason,
+      startedAt,
+      endedAt: this.dependencies.now(),
+      total: attempts.length,
+      correct,
+      incorrect: attempts.length - correct,
+      ratings,
+      attempts,
+    };
   }
 
   onStateChange(listener: FlashCardEventCallback): () => void {
@@ -417,11 +520,12 @@ export class FlashCardManager {
     this.listeners.clear();
   }
 
-  private emit(type: FlashCardEventType): void {
+  private emit(type: FlashCardEventType, summary?: ReviewSummary): void {
     const event: FlashCardEvent = {
       type,
       state: this.getState(),
       timestamp: this.dependencies.now(),
+      ...(summary ? { summary } : {}),
     };
     for (const listener of this.listeners) {
       try {

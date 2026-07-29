@@ -42,7 +42,8 @@
     ],
     "requiredCapabilities": [
       "storage",
-      "logger"
+      "logger",
+      "conversationEvents"
     ],
     "optionalCapabilities": [],
     "entry": "./dist/index.js",

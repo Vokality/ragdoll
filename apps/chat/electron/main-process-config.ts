@@ -66,7 +66,9 @@ export function createMainProcessConfig(
     developmentServerUrl: "http://localhost:5173",
     chat: {
       model: "gpt-5.4-mini",
-      maxCompletionTokens: 140,
+      // Speech-bubble text stays short via the system prompt; tool rounds
+      // (e.g. addDeck + several addCard calls) need headroom beyond 140.
+      maxCompletionTokens: 2048,
       maxToolRounds: 8,
       systemPrompt: SYSTEM_PROMPT,
     },

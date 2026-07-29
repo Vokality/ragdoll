@@ -14,8 +14,10 @@ import type {
   ExtensionHostEnvironment,
   ExtensionRuntimeContribution,
   ExtensionTool,
+  HostConversationEventsCapability,
   HostLoggerCapability,
   HostStorageCapability,
+  JsonObject,
   ToolResult,
   ValidationResult,
 } from "@vokality/ragdoll-extensions";
@@ -32,6 +34,7 @@ import {
   isDurableFlashCardState,
   type DurableFlashCardState,
   type Rating,
+  type ReviewSummary,
 } from "./flash-card-manager.js";
 
 export {
@@ -48,16 +51,23 @@ export type {
   FlashCardViewState,
   FlashDeck,
   Rating,
+  ReviewAttemptRecord,
   ReviewPhase,
   ReviewQueueEntry,
   ReviewResult,
   ReviewSession,
+  ReviewSummary,
 } from "./flash-card-manager.js";
 
 const DEFAULT_EXTENSION_ID = "flash-cards";
 const DEFAULT_STORAGE_KEY = "state";
-const REQUIRED_HOST_CAPABILITIES = ["storage", "logger"] as const;
+const REQUIRED_HOST_CAPABILITIES = [
+  "storage",
+  "logger",
+  "conversationEvents",
+] as const;
 const ANSWER_MAX_LENGTH = 2000;
+const MAX_PUBLISHED_ATTEMPTS = 10;
 
 export interface AddDeckArgs {
   name: string;
@@ -237,11 +247,51 @@ function ratingActionId(attemptId: string, rating: Rating): string {
 function requireHostCapabilities(host: ExtensionHostEnvironment): {
   storage: HostStorageCapability;
   logger: HostLoggerCapability;
+  conversationEvents: HostConversationEventsCapability;
 } {
-  if (!host.storage || !host.logger) {
-    throw new Error("Flash cards requires host storage and logger capabilities");
+  if (!host.storage || !host.logger || !host.conversationEvents) {
+    throw new Error(
+      "Flash cards requires host storage, logger, and conversationEvents capabilities",
+    );
   }
-  return { storage: host.storage, logger: host.logger };
+  return {
+    storage: host.storage,
+    logger: host.logger,
+    conversationEvents: host.conversationEvents,
+  };
+}
+
+function toReviewEventPayload(summary: ReviewSummary): JsonObject {
+  // Prefer incorrect attempts for coaching; keep the event small so it
+  // does not flood later model turns.
+  const ranked = [...summary.attempts].sort(
+    (left, right) => Number(left.correct) - Number(right.correct),
+  );
+  const publishedAttempts = ranked.slice(0, MAX_PUBLISHED_ATTEMPTS);
+  return {
+    sessionId: summary.sessionId,
+    reason: summary.reason,
+    startedAt: summary.startedAt,
+    endedAt: summary.endedAt,
+    total: summary.total,
+    correct: summary.correct,
+    incorrect: summary.incorrect,
+    ratings: { ...summary.ratings },
+    attempts: publishedAttempts.map((attempt) => ({
+      attemptId: attempt.attemptId,
+      deckId: attempt.deckId,
+      cardId: attempt.cardId,
+      front: attempt.front,
+      expectedAnswer: attempt.expectedAnswer,
+      submittedAnswer: attempt.submittedAnswer,
+      correct: attempt.correct,
+      ...(attempt.rating ? { rating: attempt.rating } : {}),
+    })),
+    omittedAttempts: Math.max(
+      0,
+      summary.attempts.length - publishedAttempts.length,
+    ),
+  };
 }
 
 async function loadDurableState(
@@ -263,6 +313,10 @@ async function loadDurableState(
 function deriveSlotState(
   manager: FlashCardManager,
   enqueue: <T>(operation: () => Promise<T> | T) => Promise<T>,
+  publishReviewCompleted: (
+    summary: ReviewSummary,
+    turnPolicy: "record-only" | "start-turn",
+  ) => Promise<void>,
 ): SlotState {
   const state = manager.getState();
   const now = Date.now();
@@ -276,7 +330,7 @@ function deriveSlotState(
     return {
       badge: dueCount || null,
       visible: true,
-      panel: deriveReviewPanel(manager, enqueue),
+      panel: deriveReviewPanel(manager, enqueue, publishReviewCompleted),
     };
   }
 
@@ -320,6 +374,10 @@ function deriveSlotState(
 function deriveReviewPanel(
   manager: FlashCardManager,
   enqueue: <T>(operation: () => Promise<T> | T) => Promise<T>,
+  publishReviewCompleted: (
+    summary: ReviewSummary,
+    turnPolicy: "record-only" | "start-turn",
+  ) => Promise<void>,
 ): CardsPanelConfig {
   const state = manager.getState();
   const session = state.session;
@@ -361,9 +419,10 @@ function deriveReviewPanel(
           variant: "secondary",
           disabled: state.pending,
           onClick: async () => {
-            await enqueue(async () => {
-              manager.endReview();
-            });
+            const summary = await enqueue(() => manager.endReview());
+            if (summary) {
+              await publishReviewCompleted(summary, "start-turn");
+            }
           },
         },
       ],
@@ -386,9 +445,10 @@ function deriveReviewPanel(
     variant,
     disabled: state.pending,
     onClick: async () => {
-      await enqueue(async () => {
-        manager.rateCard(attemptId, rating);
-      });
+      const summary = await enqueue(() => manager.rateCard(attemptId, rating));
+      if (summary) {
+        await publishReviewCompleted(summary, "start-turn");
+      }
     },
   });
 
@@ -421,7 +481,7 @@ function deriveReviewPanel(
 async function createRuntime(
   host: ExtensionHostEnvironment,
 ): Promise<ExtensionRuntimeContribution> {
-  const { storage, logger } = requireHostCapabilities(host);
+  const { storage, logger, conversationEvents } = requireHostCapabilities(host);
   const startingState = await loadDurableState(storage, logger);
 
   const manager = new FlashCardManager(startingState, {
@@ -479,14 +539,37 @@ async function createRuntime(
     return run;
   };
 
-  const slotState = createSlotState(deriveSlotState(manager, enqueue), (error) => {
-    logger.error("Flash card slot listener failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  });
+  const publishReviewCompleted = async (
+    summary: ReviewSummary,
+    turnPolicy: "record-only" | "start-turn",
+  ): Promise<void> => {
+    try {
+      await conversationEvents.publish({
+        type: "review.completed",
+        payload: toReviewEventPayload(summary),
+        turnPolicy,
+        deduplicationKey: `${summary.reason}:${summary.sessionId}:${summary.endedAt}`,
+      });
+    } catch (error) {
+      logger.error("Failed to publish flash card review summary", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const slotState = createSlotState(
+    deriveSlotState(manager, enqueue, publishReviewCompleted),
+    (error) => {
+      logger.error("Flash card slot listener failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
 
   const unsubscribeSlot = manager.onStateChange(() => {
-    slotState.replaceState(deriveSlotState(manager, enqueue));
+    slotState.replaceState(
+      deriveSlotState(manager, enqueue, publishReviewCompleted),
+    );
   });
 
   const handler: FlashCardToolHandler = {
@@ -544,10 +627,12 @@ async function createRuntime(
       };
     },
     endReview: async () => {
-      await enqueue(() => {
-        manager.endReview();
-      });
-      return { success: true };
+      const summary = await enqueue(() => manager.endReview());
+      if (summary) {
+        // Agent is already mid-turn; keep history without nesting another turn.
+        await publishReviewCompleted(summary, "record-only");
+      }
+      return { success: true, data: summary };
     },
   };
 

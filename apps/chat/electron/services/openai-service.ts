@@ -440,6 +440,11 @@ export class OpenAIAgentRunner implements AgentRunner {
   }
 
   private assertFinishedWithoutTools(completion: CompletionRound): void {
+    if (completion.finishReason === "length") {
+      throw new Error(
+        "The model response was truncated before it finished. Try a smaller request.",
+      );
+    }
     if (completion.finishReason === "tool_calls") {
       throw new Error("The model ended with an empty tool call");
     }
@@ -449,6 +454,11 @@ export class OpenAIAgentRunner implements AgentRunner {
     round: number,
     completion: CompletionRound,
   ): void {
+    if (completion.finishReason === "length") {
+      throw new Error(
+        "The model response was truncated before tool calls finished. Try a smaller request.",
+      );
+    }
     if (completion.toolCalls.length === 0) {
       throw new Error("The model did not return a required tool call");
     }
