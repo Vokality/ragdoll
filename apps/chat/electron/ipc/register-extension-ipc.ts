@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { IPC_CHANNELS, type OperationResult } from "../electron-api.js";
+import {
+  IPC_CHANNELS,
+  SLOT_ANSWER_MAX_LENGTH,
+  type OperationResult,
+} from "../electron-api.js";
 import type { ExtensionManager } from "../services/extension-manager.js";
 import type { ExtensionOperationsService } from "../services/extension-operations-service.js";
 import type { IpcRegistrar } from "./registrar.js";
@@ -8,12 +12,23 @@ const idSchema = z.string().min(1);
 const idsSchema = z.array(idSchema);
 const configValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 const configValuesSchema = z.record(z.string(), configValueSchema);
-const slotActionSchema = z.enum([
+const voidSlotActionSchema = z.enum([
   "panel-action",
   "section-action",
   "item-click",
   "item-toggle",
   "cell-click",
+]);
+const slotActionRequestSchema = z.discriminatedUnion("actionType", [
+  z.object({
+    actionType: voidSlotActionSchema,
+    actionId: idSchema,
+  }),
+  z.object({
+    actionType: z.literal("answer-submit"),
+    actionId: idSchema,
+    payload: z.string().min(1).max(SLOT_ANSWER_MAX_LENGTH),
+  }),
 ]);
 
 async function operation(
@@ -53,11 +68,10 @@ export function registerExtensionIpc(
   );
   ipc.handle(
     IPC_CHANNELS.extensions.executeSlotAction,
-    (_event, slotId: unknown, actionType: unknown, actionId: unknown) =>
+    (_event, slotId: unknown, request: unknown) =>
       manager.executeSlotAction(
         idSchema.parse(slotId),
-        slotActionSchema.parse(actionType),
-        idSchema.parse(actionId),
+        slotActionRequestSchema.parse(request),
       ),
   );
 

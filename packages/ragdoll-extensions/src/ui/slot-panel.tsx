@@ -10,6 +10,7 @@ import {
   useCallback,
   useRef,
   type CSSProperties,
+  type FormEvent,
 } from "react";
 import { useSlotState } from "./hooks.js";
 import type {
@@ -17,6 +18,8 @@ import type {
   PanelConfig,
   ListPanelConfig,
   GridPanelConfig,
+  CardsPanelConfig,
+  CardsPanelResult,
   GridPanelCell,
   GridPanelResult,
   ListPanelItem,
@@ -133,7 +136,7 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
 
       {/* Sheet */}
       <div
-        className={`slot-panel-sheet ${panel.type === "grid" ? "slot-panel-sheet-grid" : ""} ${isExiting ? "exiting" : ""}`}
+        className={`slot-panel-sheet ${panel.type === "grid" ? "slot-panel-sheet-grid" : ""} ${panel.type === "cards" ? "slot-panel-sheet-cards" : ""} ${isExiting ? "exiting" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={panel.title}
@@ -145,11 +148,190 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
 
         {panel.type === "list" ? (
           <ListPanel config={panel} onClose={handleClose} />
-        ) : (
+        ) : panel.type === "grid" ? (
           <GridPanel config={panel} onClose={handleClose} />
+        ) : (
+          <CardsPanel config={panel} onClose={handleClose} />
         )}
       </div>
     </>
+  );
+}
+
+// =============================================================================
+// Cards Panel Renderer
+// =============================================================================
+
+interface CardsPanelProps {
+  config: CardsPanelConfig;
+  onClose: () => void;
+}
+
+function CardsPanel({ config, onClose }: CardsPanelProps) {
+  const { title, progress, card, actions } = config;
+  const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState(false);
+  const attemptId = card.attemptId;
+
+  useEffect(() => {
+    setDraft("");
+    setPending(false);
+  }, [attemptId]);
+
+  const canSubmit =
+    card.face === "front" &&
+    typeof config.onSubmitAnswer === "function" &&
+    config.answerInput?.disabled !== true &&
+    !pending;
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canSubmit || !config.onSubmitAnswer) return;
+    const answer = draft.trim();
+    if (!answer) return;
+    setPending(true);
+    try {
+      await config.onSubmitAnswer(answer);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const progressRatio =
+    progress.total > 0
+      ? Math.min(1, Math.max(0, progress.current / progress.total))
+      : 0;
+
+  return (
+    <>
+      <div style={styles.header}>
+        <h2 style={styles.title}>{title}</h2>
+        <button
+          onClick={onClose}
+          style={styles.closeButton}
+          className="slot-panel-close"
+          aria-label="Close"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+
+      <div style={styles.cardsContent}>
+        <div style={styles.cardsProgress}>
+          <div style={styles.cardsProgressMeta}>
+            <span style={styles.cardsProgressLabel}>
+              {progress.label ?? "Progress"}
+            </span>
+            <span style={styles.cardsProgressCount}>
+              {progress.current}/{progress.total}
+            </span>
+          </div>
+          <div
+            style={styles.cardsProgressTrack}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.current}
+            aria-label={progress.label ?? "Review progress"}
+          >
+            <div
+              style={{
+                ...styles.cardsProgressFill,
+                width: `${progressRatio * 100}%`,
+              }}
+            />
+          </div>
+        </div>
+
+        <div
+          key={attemptId}
+          className={`slot-panel-flip-scene ${card.face === "back" ? "flipped" : ""}`}
+          style={styles.flipScene}
+        >
+          <div className="slot-panel-flip-card" style={styles.flipCard}>
+            <div
+              className="slot-panel-flip-face slot-panel-flip-front"
+              style={styles.flipFace}
+              aria-hidden={card.face !== "front"}
+            >
+              <p style={styles.cardFaceText}>{card.front}</p>
+            </div>
+            <div
+              className="slot-panel-flip-face slot-panel-flip-back"
+              style={{ ...styles.flipFace, ...styles.flipFaceBack }}
+              aria-hidden={card.face !== "back"}
+            >
+              <p style={styles.cardFaceText}>{card.back}</p>
+            </div>
+          </div>
+        </div>
+
+        {card.face === "back" && config.result ? (
+          <CardsResultBanner result={config.result} />
+        ) : null}
+
+        {card.face === "front" && config.answerInput ? (
+          <form style={styles.answerForm} onSubmit={handleSubmit}>
+            <input
+              type="text"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={config.answerInput.placeholder ?? "Type your answer"}
+              maxLength={config.answerInput.maxLength}
+              disabled={!canSubmit}
+              style={styles.answerInput}
+              className="slot-panel-answer-input"
+              aria-label="Answer"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={!canSubmit || draft.trim().length === 0}
+              style={{
+                ...styles.actionButton,
+                ...getActionVariantStyle("primary"),
+                flex: "0 0 auto",
+              }}
+              className="slot-panel-action"
+            >
+              {config.answerInput.submitLabel ?? "Check"}
+            </button>
+          </form>
+        ) : null}
+
+        {actions && actions.length > 0 && (
+          <div style={{ ...styles.actions, ...styles.cardsActions }}>
+            {actions.map((action) => (
+              <ActionButton
+                key={action.id}
+                action={action}
+                forceDisabled={pending}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface CardsResultBannerProps {
+  result: CardsPanelResult;
+}
+
+function CardsResultBanner({ result }: CardsResultBannerProps) {
+  return (
+    <div
+      className={`slot-panel-cards-result slot-panel-cards-result-${result.status}`}
+      style={styles.cardsResult}
+      role="status"
+      aria-live="polite"
+    >
+      <strong style={styles.cardsResultTitle}>{result.title}</strong>
+      {result.message ? (
+        <span style={styles.cardsResultMessage}>{result.message}</span>
+      ) : null}
+    </div>
   );
 }
 
@@ -474,15 +656,28 @@ function PanelItem({ item, index }: PanelItemProps) {
 
 interface ActionButtonProps {
   action: PanelAction;
+  forceDisabled?: boolean;
 }
 
-function ActionButton({ action }: ActionButtonProps) {
+function ActionButton({ action, forceDisabled = false }: ActionButtonProps) {
+  const [pending, setPending] = useState(false);
   const variantStyle = getActionVariantStyle(action.variant);
+  const disabled = action.disabled === true || forceDisabled || pending;
+
+  const handleClick = async () => {
+    if (disabled) return;
+    setPending(true);
+    try {
+      await action.onClick();
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <button
-      onClick={action.onClick}
-      disabled={action.disabled}
+      onClick={handleClick}
+      disabled={disabled}
       style={{ ...styles.actionButton, ...variantStyle }}
       className="slot-panel-action"
     >
@@ -697,6 +892,64 @@ const panelStyles = `
     height: min(70vh, 500px);
   }
 
+  .slot-panel-sheet-cards {
+    height: min(70vh, 560px);
+  }
+
+  .slot-panel-flip-scene {
+    perspective: 1200px;
+  }
+
+  .slot-panel-flip-card {
+    position: relative;
+    width: 100%;
+    min-height: 160px;
+    transform-style: preserve-3d;
+    transition: transform 400ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .slot-panel-flip-scene.flipped .slot-panel-flip-card {
+    transform: rotateY(180deg);
+  }
+
+  .slot-panel-flip-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+    background: var(--bg-glass, rgba(30, 41, 59, 0.9));
+    padding: 24px;
+  }
+
+  .slot-panel-flip-back {
+    transform: rotateY(180deg);
+  }
+
+  .slot-panel-answer-input:focus {
+    outline: none;
+    border-color: var(--accent, #5a9bc4);
+  }
+
+  .slot-panel-cards-result-success {
+    border-color: var(--success, #4ade80);
+    background: var(--success-dim, rgba(74, 222, 128, 0.12));
+  }
+
+  .slot-panel-cards-result-error {
+    border-color: var(--error, #f87171);
+    background: var(--error-dim, rgba(248, 113, 113, 0.12));
+  }
+
+  .slot-panel-cards-result-default {
+    border-color: var(--border, rgba(148, 163, 184, 0.35));
+    background: var(--bg-glass, rgba(30, 41, 59, 0.8));
+  }
+
   .slot-panel-item {
     animation: slotPanelItemFadeIn 200ms ease-out backwards;
   }
@@ -777,6 +1030,10 @@ const panelStyles = `
   @media (prefers-reduced-motion: reduce) {
     .slot-panel-grid-result {
       animation: none;
+    }
+
+    .slot-panel-flip-card {
+      transition: none;
     }
   }
 `;
@@ -1042,6 +1299,103 @@ const styles: Record<string, CSSProperties> = {
   gridActions: {
     flexShrink: 0,
     marginTop: "16px",
+  },
+  cardsContent: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    overflow: "auto",
+    padding: "16px 20px 24px",
+  },
+  cardsProgress: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  cardsProgressMeta: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cardsProgressLabel: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "var(--text-dim, #64748b)",
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+  },
+  cardsProgressCount: {
+    fontSize: "12px",
+    color: "var(--text-muted, #94a3b8)",
+  },
+  cardsProgressTrack: {
+    height: "6px",
+    borderRadius: "999px",
+    backgroundColor: "var(--bg-tertiary, #334155)",
+    overflow: "hidden",
+  },
+  cardsProgressFill: {
+    height: "100%",
+    borderRadius: "999px",
+    backgroundColor: "var(--accent, #5a9bc4)",
+    transition: "width 200ms ease",
+  },
+  flipScene: {
+    width: "100%",
+    minHeight: "160px",
+  },
+  flipCard: {
+    width: "100%",
+    minHeight: "160px",
+  },
+  flipFace: {
+    minHeight: "160px",
+  },
+  flipFaceBack: {},
+  cardFaceText: {
+    margin: 0,
+    fontSize: "22px",
+    fontWeight: "600",
+    lineHeight: 1.35,
+    textAlign: "center",
+    color: "var(--text-primary, #f1f5f9)",
+    wordBreak: "break-word",
+  },
+  answerForm: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+  },
+  answerInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: "12px 14px",
+    borderRadius: "var(--radius-md, 10px)",
+    border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
+    backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
+    color: "var(--text-primary, #f1f5f9)",
+    fontSize: "14px",
+  },
+  cardsResult: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    padding: "12px 14px",
+    borderRadius: "var(--radius-md, 10px)",
+    border: "1px solid",
+  },
+  cardsResultTitle: {
+    fontSize: "14px",
+    color: "var(--text-primary, #f1f5f9)",
+  },
+  cardsResultMessage: {
+    fontSize: "12px",
+    color: "var(--text-muted, #94a3b8)",
+  },
+  cardsActions: {
+    marginTop: "auto",
   },
   actionButton: {
     flex: 1,

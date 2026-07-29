@@ -44,6 +44,10 @@ import type { ExtensionConversationEventPublisher } from "./conversation-event-s
 import type { ExtensionHostDataStore } from "../infrastructure/extension-host-data-repository.js";
 import type { OAuthRedirectService } from "./oauth-loopback-service.js";
 import type { ServiceLogger } from "./service-logger.js";
+import {
+  SLOT_ANSWER_MAX_LENGTH,
+  type SlotActionRequest,
+} from "../electron-api.js";
 
 // =============================================================================
 // Types
@@ -874,11 +878,7 @@ export class ExtensionManager {
     return serializeSlotState(slotEntry.slot.state.getState());
   }
 
-  async executeSlotAction(
-    slotId: string,
-    actionType: string,
-    actionId: string,
-  ) {
+  async executeSlotAction(slotId: string, request: SlotActionRequest) {
     const slotEntry = this.registry.getSlot(slotId);
     if (!slotEntry) {
       return { success: false, error: `Slot not found: ${slotId}` };
@@ -886,6 +886,41 @@ export class ExtensionManager {
 
     try {
       const panel = slotEntry.slot.state.getState().panel;
+      const { actionType, actionId } = request;
+
+      if (actionType === "answer-submit") {
+        if (panel.type !== "cards" || panel.card.face !== "front") {
+          return {
+            success: false,
+            error: `Action not found: ${actionType}:${actionId}`,
+          };
+        }
+        const answerInput = panel.answerInput;
+        if (
+          !answerInput ||
+          answerInput.id !== actionId ||
+          answerInput.id !== panel.card.attemptId ||
+          answerInput.disabled === true ||
+          typeof panel.onSubmitAnswer !== "function"
+        ) {
+          return {
+            success: false,
+            error: `Action not found: ${actionType}:${actionId}`,
+          };
+        }
+        const maxLength = Math.min(
+          answerInput.maxLength ?? SLOT_ANSWER_MAX_LENGTH,
+          SLOT_ANSWER_MAX_LENGTH,
+        );
+        if (request.payload.length > maxLength) {
+          return {
+            success: false,
+            error: `Answer exceeds max length (${maxLength})`,
+          };
+        }
+        await panel.onSubmitAnswer(request.payload);
+        return { success: true };
+      }
 
       if (actionType === "panel-action") {
         const action = panel.actions?.find(
@@ -911,6 +946,13 @@ export class ExtensionManager {
             return { success: true };
           }
         }
+        return {
+          success: false,
+          error: `Action not found: ${actionType}:${actionId}`,
+        };
+      }
+
+      if (panel.type === "cards") {
         return {
           success: false,
           error: `Action not found: ${actionType}:${actionId}`,

@@ -173,10 +173,88 @@ export interface GridPanelConfig {
   actions?: PanelAction[];
 }
 
+/** Progress indicator for a cards study panel */
+export interface CardsPanelProgress {
+  /** 1-based index of the current card */
+  current: number;
+  /** Total cards in the session (must be > 0) */
+  total: number;
+  /** Optional progress label */
+  label?: string;
+}
+
+/** Result banner shown after an answer is graded */
+export interface CardsPanelResult {
+  /** Primary result text */
+  title: string;
+  /** Supporting result text */
+  message?: string;
+  /** Semantic result styling */
+  status: "success" | "error" | "default";
+}
+
+/** Shared card content for front and revealed phases */
+export interface CardsPanelCardBase {
+  /** Stable card identity in the deck */
+  id: string;
+  /** Opaque identity for this presentation attempt */
+  attemptId: string;
+  /** Prompt / front text */
+  front: string;
+  /** Answer / back text (always required for study cards) */
+  back: string;
+}
+
+/** Typed answer field shown while the card face is front */
+export interface CardsAnswerInput {
+  /** Must equal `card.attemptId` so stale submits can be rejected */
+  id: string;
+  /** Input placeholder */
+  placeholder?: string;
+  /** Submit button label */
+  submitLabel?: string;
+  /** Whether the input/submit controls are disabled */
+  disabled?: boolean;
+  /** Max answer length; must be <= IPC max (2000) */
+  maxLength?: number;
+}
+
+/** Cards panel before the learner submits an answer */
+export interface CardsPanelFront {
+  type: "cards";
+  title: string;
+  progress: CardsPanelProgress;
+  card: CardsPanelCardBase & { face: "front" };
+  answerInput: CardsAnswerInput;
+  result?: never;
+  actions?: PanelAction[];
+  onSubmitAnswer?: (answer: string) => void | Promise<void>;
+}
+
+/** Cards panel after grading, with the back face revealed */
+export interface CardsPanelRevealed {
+  type: "cards";
+  title: string;
+  progress: CardsPanelProgress;
+  card: CardsPanelCardBase & { face: "back" };
+  answerInput?: never;
+  result: CardsPanelResult;
+  actions: PanelAction[];
+  onSubmitAnswer?: never;
+}
+
+/**
+ * Configuration for a flash-card study panel (React-free version).
+ *
+ * Front and revealed phases are distinct so impossible combinations
+ * (submit while revealed, missing back, etc.) cannot be expressed cleanly.
+ */
+export type CardsPanelConfig = CardsPanelFront | CardsPanelRevealed;
+
 /**
  * Union of panel configuration types (React-free version)
  */
-export type PanelConfig = ListPanelConfig | GridPanelConfig;
+export type PanelConfig = ListPanelConfig | GridPanelConfig | CardsPanelConfig;
 
 /**
  * Dynamic state exposed by a slot
@@ -266,9 +344,20 @@ export type SerializedGridPanelConfig = Omit<
   actions?: SerializedPanelAction[];
 };
 
+/** Cards panel data with executable callbacks removed. */
+export type SerializedCardsPanelConfig = Omit<
+  CardsPanelConfig,
+  "actions" | "onSubmitAnswer"
+> & {
+  actions?: SerializedPanelAction[];
+  canSubmit: boolean;
+};
+
 /** Panel data safe to send across a process boundary. */
 export type SerializedPanelConfig =
-  SerializedListPanelConfig | SerializedGridPanelConfig;
+  | SerializedListPanelConfig
+  | SerializedGridPanelConfig
+  | SerializedCardsPanelConfig;
 
 /** Slot state safe to send across IPC or another structured-clone boundary. */
 export interface SerializedSlotState {
@@ -306,6 +395,26 @@ function serializeCell({
   };
 }
 
+function canSubmitCardsAnswer(panel: CardsPanelConfig): boolean {
+  if (panel.card.face !== "front" || !panel.answerInput) {
+    return false;
+  }
+  return (
+    panel.answerInput.disabled !== true &&
+    panel.answerInput.id === panel.card.attemptId &&
+    typeof panel.onSubmitAnswer === "function"
+  );
+}
+
+function serializeCardsPanel(panel: CardsPanelConfig): SerializedCardsPanelConfig {
+  const { onSubmitAnswer: _onSubmitAnswer, actions, ...rest } = panel;
+  return {
+    ...rest,
+    actions: actions?.map(serializeAction),
+    canSubmit: canSubmitCardsAnswer(panel),
+  };
+}
+
 /** Remove executable callbacks while preserving which actions the host supports. */
 export function serializeSlotState(state: SlotState): SerializedSlotState {
   const panel = state.panel;
@@ -318,6 +427,14 @@ export function serializeSlotState(state: SlotState): SerializedSlotState {
         cells: panel.cells.map(serializeCell),
         actions: panel.actions?.map(serializeAction),
       },
+    };
+  }
+
+  if (panel.type === "cards") {
+    return {
+      badge: state.badge,
+      visible: state.visible,
+      panel: serializeCardsPanel(panel),
     };
   }
 
@@ -544,5 +661,40 @@ export function createGridSlotState(
       cells: options.cells ?? [],
       emptyMessage: options.emptyMessage,
     },
+  };
+}
+
+/**
+ * Create a slot state for a cards study panel in the front phase
+ */
+export function createCardsSlotState(
+  title: string,
+  card: CardsPanelCardBase,
+  options: {
+    badge?: number | string | null;
+    visible?: boolean;
+    progress?: CardsPanelProgress;
+    answerInput?: Omit<CardsAnswerInput, "id">;
+    actions?: PanelAction[];
+    onSubmitAnswer?: (answer: string) => void | Promise<void>;
+  } = {},
+): SlotState {
+  const progress = options.progress ?? { current: 1, total: 1 };
+  const panel: CardsPanelFront = {
+    type: "cards",
+    title,
+    progress,
+    card: { ...card, face: "front" },
+    answerInput: {
+      id: card.attemptId,
+      ...options.answerInput,
+    },
+    actions: options.actions,
+    onSubmitAnswer: options.onSubmitAnswer,
+  };
+  return {
+    badge: options.badge ?? null,
+    visible: options.visible ?? true,
+    panel,
   };
 }

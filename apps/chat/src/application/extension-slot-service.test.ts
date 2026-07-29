@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { SerializedSlotState } from "@vokality/ragdoll-extensions";
-import type { SlotChangeEvent } from "../../electron/electron-api";
+import type {
+  SlotActionRequest,
+  SlotChangeEvent,
+} from "../../electron/electron-api";
 import {
   ExtensionSlotService,
   type ExtensionSlotGateway,
@@ -25,7 +28,7 @@ const initialState: SerializedSlotState = {
 
 function createGateway(state: SerializedSlotState | null) {
   let listener: ((event: SlotChangeEvent) => void) | null = null;
-  const actions: string[] = [];
+  const actions: SlotActionRequest[] = [];
   const gateway: ExtensionSlotGateway = {
     getExtensionSlots: async () => [
       {
@@ -44,8 +47,8 @@ function createGateway(state: SerializedSlotState | null) {
       };
     },
     onExtensionSlotsChanged: () => () => undefined,
-    executeSlotAction: async (_slotId, actionType, actionId) => {
-      actions.push(`${actionType}:${actionId}`);
+    executeSlotAction: async (_slotId, request) => {
+      actions.push(request);
       return { success: true };
     },
   };
@@ -68,7 +71,9 @@ describe("ExtensionSlotService", () => {
     if (panel?.type !== "list") throw new Error("expected list panel");
     panel.items?.[0]?.onClick?.();
     await Promise.resolve();
-    expect(testGateway.actions).toEqual(["item-click:task-1"]);
+    expect(testGateway.actions).toEqual([
+      { actionType: "item-click", actionId: "task-1" },
+    ]);
 
     service.stop();
     expect(testGateway.getListener()).toBeNull();
@@ -126,9 +131,61 @@ describe("ExtensionSlotService", () => {
     expect(panel.result).toEqual({ title: "You win!", status: "success" });
     panel.cells[0]?.onClick?.();
     await Promise.resolve();
-    expect(testGateway.actions).toEqual(["cell-click:1-1"]);
+    expect(testGateway.actions).toEqual([
+      { actionType: "cell-click", actionId: "1-1" },
+    ]);
     expect(panel.cells[1]?.onClick).toBeUndefined();
     expect(panel.cells[2]?.onClick).toBeUndefined();
+
+    service.stop();
+  });
+
+  it("hydrates cards panels and routes answer-submit with payload", async () => {
+    const cardsState: SerializedSlotState = {
+      badge: null,
+      visible: true,
+      panel: {
+        type: "cards",
+        title: "Review",
+        progress: { current: 1, total: 1 },
+        card: {
+          id: "card-1",
+          attemptId: "attempt-1",
+          front: "hola",
+          back: "hello",
+          face: "front",
+        },
+        answerInput: {
+          id: "attempt-1",
+          placeholder: "Answer",
+          maxLength: 100,
+        },
+        canSubmit: true,
+      },
+    };
+    const testGateway = createGateway(cardsState);
+    const service = new ExtensionSlotService(
+      testGateway.gateway,
+      () => undefined,
+    );
+    await service.start();
+
+    const slot = service.getSnapshot()[0];
+    const panel = slot?.state.getState().panel;
+    expect(panel?.type).toBe("cards");
+    if (panel?.type !== "cards" || panel.card.face !== "front") {
+      throw new Error("expected front cards panel");
+    }
+    expect(panel.onSubmitAnswer).toBeTypeOf("function");
+    await panel.onSubmitAnswer?.("hello");
+    await Promise.resolve();
+    expect(testGateway.actions).toEqual([
+      {
+        actionType: "answer-submit",
+        actionId: "attempt-1",
+        payload: "hello",
+      },
+    ]);
 
     service.stop();
   });

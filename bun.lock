@@ -17,6 +17,7 @@
       "dependencies": {
         "@vokality/ragdoll": "workspace:*",
         "@vokality/ragdoll-extension-character": "workspace:*",
+        "@vokality/ragdoll-extension-flash-cards": "workspace:*",
         "@vokality/ragdoll-extension-pomodoro": "workspace:*",
         "@vokality/ragdoll-extension-spotify": "workspace:*",
         "@vokality/ragdoll-extension-tasks": "workspace:*",
@@ -87,6 +88,16 @@
     },
     "packages/ragdoll-extension-character": {
       "name": "@vokality/ragdoll-extension-character",
+      "version": "0.1.0",
+      "dependencies": {
+        "@vokality/ragdoll-extensions": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "catalog:",
+      },
+    },
+    "packages/ragdoll-extension-flash-cards": {
+      "name": "@vokality/ragdoll-extension-flash-cards",
       "version": "0.1.0",
       "dependencies": {
         "@vokality/ragdoll-extensions": "workspace:*",
@@ -526,6 +537,8 @@
     "@vokality/ragdoll": ["@vokality/ragdoll@workspace:packages/ragdoll"],
 
     "@vokality/ragdoll-extension-character": ["@vokality/ragdoll-extension-character@workspace:packages/ragdoll-extension-character"],
+
+    "@vokality/ragdoll-extension-flash-cards": ["@vokality/ragdoll-extension-flash-cards@workspace:packages/ragdoll-extension-flash-cards"],
 
     "@vokality/ragdoll-extension-pomodoro": ["@vokality/ragdoll-extension-pomodoro@workspace:packages/ragdoll-extension-pomodoro"],
 

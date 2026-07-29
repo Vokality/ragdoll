@@ -83,7 +83,7 @@ The loader resolves package exports, constructs the configured extension, regist
 
 ### UI slots and IPC
 
-Extensions contribute React-free observable slot state. `serializeSlotState` removes callbacks while preserving action availability as `canClick` and `canToggle`. The renderer hydrates callbacks that send an action descriptor back to the Electron owner. The main process invokes only the callback belonging to the identified slot, section, item, or panel action.
+Extensions contribute React-free observable slot state. Panel configurations are `list`, `grid`, or `cards`. `serializeSlotState` removes callbacks while preserving action availability as `canClick`, `canToggle`, and `canSubmit`. The renderer hydrates callbacks that send a discriminated action request back to the Electron owner (`panel-action`, `section-action`, `item-click`, `item-toggle`, `cell-click`, or `answer-submit` with a required string payload). The main process invokes only the callback belonging to the identified slot, section, item, cell, or cards answer submit.
 
 This keeps functions and React objects out of IPC payloads.
 

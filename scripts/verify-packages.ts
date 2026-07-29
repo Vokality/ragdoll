@@ -9,6 +9,7 @@ const packageDirectories = [
   "packages/ragdoll-extension-pomodoro",
   "packages/ragdoll-extension-spotify",
   "packages/ragdoll-extension-tic-tac-toe",
+  "packages/ragdoll-extension-flash-cards",
   "examples/extension-weather",
 ] as const;
 
@@ -87,6 +88,8 @@ import { createExtension as createSpotify } from "@vokality/ragdoll-extension-sp
 import spotifyManifest from "@vokality/ragdoll-extension-spotify/manifest" with { type: "json" };
 import { createExtension as createTicTacToe } from "@vokality/ragdoll-extension-tic-tac-toe";
 import ticTacToeManifest from "@vokality/ragdoll-extension-tic-tac-toe/manifest" with { type: "json" };
+import { createExtension as createFlashCards } from "@vokality/ragdoll-extension-flash-cards";
+import flashCardsManifest from "@vokality/ragdoll-extension-flash-cards/manifest" with { type: "json" };
 import { createExtension as createWeather } from "@example/ragdoll-extension-weather";
 import weatherManifest from "@example/ragdoll-extension-weather/manifest" with { type: "json" };
 
@@ -108,6 +111,7 @@ const factories = [
   [createPomodoro, pomodoroManifest],
   [createSpotify, spotifyManifest],
   [createTicTacToe, ticTacToeManifest],
+  [createFlashCards, flashCardsManifest],
   [createWeather, weatherManifest],
 ] as const;
 for (const [factory, packageJson] of factories) {

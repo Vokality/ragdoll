@@ -9,7 +9,7 @@ React-free extension contracts, lifecycle management, capability registration, a
 - `@vokality/ragdoll-extensions/slots` — explicit React-free slot entrypoint.
 - `@vokality/ragdoll-extensions/ui` — optional React components and hooks.
 
-Built-in extensions are independent packages. Import them directly from `@vokality/ragdoll-extension-character`, `@vokality/ragdoll-extension-tasks`, `@vokality/ragdoll-extension-pomodoro`, `@vokality/ragdoll-extension-spotify`, or `@vokality/ragdoll-extension-tic-tac-toe`.
+Built-in extensions are independent packages. Import them directly from `@vokality/ragdoll-extension-character`, `@vokality/ragdoll-extension-tasks`, `@vokality/ragdoll-extension-pomodoro`, `@vokality/ragdoll-extension-spotify`, `@vokality/ragdoll-extension-tic-tac-toe`, or `@vokality/ragdoll-extension-flash-cards`.
 
 ## Installation
 

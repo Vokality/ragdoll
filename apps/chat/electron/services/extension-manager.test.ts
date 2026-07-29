@@ -225,35 +225,34 @@ describe("ExtensionManager slot integration", () => {
     );
 
     expect(
-      await manager.executeSlotAction("actions.main", "panel-action", "panel"),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "panel-action",
+        actionId: "panel",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction(
-        "actions.main",
-        "section-action",
-        "section",
-      ),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "section-action",
+        actionId: "section",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction(
-        "actions.main",
-        "item-click",
-        "root-item",
-      ),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "item-click",
+        actionId: "root-item",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction(
-        "actions.main",
-        "item-click",
-        "section-item",
-      ),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "item-click",
+        actionId: "section-item",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction(
-        "actions.main",
-        "item-toggle",
-        "section-item",
-      ),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "item-toggle",
+        actionId: "section-item",
+      }),
     ).toEqual({ success: true });
     expect(calls).toEqual([
       "panel",
@@ -345,23 +344,31 @@ describe("ExtensionManager slot integration", () => {
     await manager.getRegistry().register(extension, { host });
 
     expect(
-      await manager.executeSlotAction("actions.main", "cell-click", "0-1"),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "cell-click",
+        actionId: "0-1",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction("actions.main", "panel-action", "new"),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "panel-action",
+        actionId: "new",
+      }),
     ).toEqual({ success: true });
     expect(
-      await manager.executeSlotAction("actions.main", "cell-click", "0-0"),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "cell-click",
+        actionId: "0-0",
+      }),
     ).toEqual({
       success: false,
       error: "Action not found: cell-click:0-0",
     });
     expect(
-      await manager.executeSlotAction(
-        "actions.main",
-        "panel-action",
-        "disabled",
-      ),
+      await manager.executeSlotAction("actions.main", {
+        actionType: "panel-action",
+        actionId: "disabled",
+      }),
     ).toEqual({
       success: false,
       error: "Action not found: panel-action:disabled",
@@ -379,6 +386,90 @@ describe("ExtensionManager slot integration", () => {
         { id: "disabled", label: "Disabled", disabled: true },
       ],
     });
+
+    await manager.destroy();
+  });
+
+  it("routes cards answer-submit and rejects stale or oversized answers", async () => {
+    const answers: string[] = [];
+    const manager = createManager();
+    await manager.initialize();
+
+    const slotState = createSlotState(
+      {
+        badge: null,
+        visible: true,
+        panel: {
+          type: "cards",
+          title: "Review",
+          progress: { current: 1, total: 1 },
+          card: {
+            id: "card-1",
+            attemptId: "attempt-1",
+            front: "hola",
+            back: "hello",
+            face: "front",
+          },
+          answerInput: {
+            id: "attempt-1",
+            maxLength: 8,
+          },
+          onSubmitAnswer: (answer) => {
+            answers.push(answer);
+          },
+        },
+      },
+      () => undefined,
+    );
+    await manager.getRegistry().register(
+      createExtension({
+        id: "cards",
+        name: "Cards",
+        version: "1.0.0",
+        slots: [
+          {
+            id: "cards.main",
+            label: "Cards",
+            icon: "bookmark",
+            priority: 0,
+            state: slotState,
+          },
+        ],
+      }),
+      { host },
+    );
+
+    expect(
+      await manager.executeSlotAction("cards.main", {
+        actionType: "answer-submit",
+        actionId: "attempt-1",
+        payload: "hello",
+      }),
+    ).toEqual({ success: true });
+    expect(answers).toEqual(["hello"]);
+
+    expect(
+      await manager.executeSlotAction("cards.main", {
+        actionType: "answer-submit",
+        actionId: "stale",
+        payload: "hello",
+      }),
+    ).toEqual({
+      success: false,
+      error: "Action not found: answer-submit:stale",
+    });
+
+    expect(
+      await manager.executeSlotAction("cards.main", {
+        actionType: "answer-submit",
+        actionId: "attempt-1",
+        payload: "toolonganswer",
+      }),
+    ).toEqual({
+      success: false,
+      error: "Answer exceeds max length (8)",
+    });
+    expect(answers).toEqual(["hello"]);
 
     await manager.destroy();
   });

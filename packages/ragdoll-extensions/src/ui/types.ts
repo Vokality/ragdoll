@@ -1,5 +1,12 @@
 import type {
   ExtensionSlot,
+  CardsAnswerInput,
+  CardsPanelCardBase,
+  CardsPanelConfig,
+  CardsPanelFront,
+  CardsPanelProgress,
+  CardsPanelResult,
+  CardsPanelRevealed,
   GridPanelCell,
   GridPanelConfig,
   GridPanelResult,
@@ -16,6 +23,13 @@ import type {
 } from "../slots.js";
 
 export type {
+  CardsAnswerInput,
+  CardsPanelCardBase,
+  CardsPanelConfig,
+  CardsPanelFront,
+  CardsPanelProgress,
+  CardsPanelResult,
+  CardsPanelRevealed,
   GridPanelCell,
   GridPanelConfig,
   GridPanelResult,

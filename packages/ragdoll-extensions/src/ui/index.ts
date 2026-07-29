@@ -56,10 +56,17 @@ export type {
   ListPanelSection,
   GridPanelCell,
   GridPanelResult,
+  CardsPanelProgress,
+  CardsPanelResult,
+  CardsPanelCardBase,
+  CardsAnswerInput,
+  CardsPanelFront,
+  CardsPanelRevealed,
 
   // Panel configuration types
   ListPanelConfig,
   GridPanelConfig,
+  CardsPanelConfig,
   PanelConfig,
 
   // Slot state types
@@ -90,6 +97,7 @@ export {
   createHiddenSlotState,
   createListSlotState,
   createGridSlotState,
+  createCardsSlotState,
   type MutableSlotStateStore,
   type DerivedSlotStateOptions,
 } from "./create-slot-state.js";

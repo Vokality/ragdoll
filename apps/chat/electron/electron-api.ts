@@ -56,12 +56,28 @@ export interface SlotChangeEvent {
   state: SerializedSlotState;
 }
 
-export type SlotActionType =
+export type VoidSlotActionType =
   | "panel-action"
   | "section-action"
   | "item-click"
   | "item-toggle"
   | "cell-click";
+
+export type SlotActionType = VoidSlotActionType | "answer-submit";
+
+/** Maximum typed-answer length accepted over IPC for cards panels. */
+export const SLOT_ANSWER_MAX_LENGTH = 2000;
+
+export type SlotActionRequest =
+  | {
+      actionType: VoidSlotActionType;
+      actionId: string;
+    }
+  | {
+      actionType: "answer-submit";
+      actionId: string;
+      payload: string;
+    };
 
 export interface OAuthState {
   status: "disconnected" | "connecting" | "connected" | "error" | "expired";
@@ -200,8 +216,7 @@ export interface ElectronAPI {
   onExtensionSlotsChanged(callback: () => void): () => void;
   executeSlotAction(
     slotId: string,
-    actionType: SlotActionType,
-    actionId: string,
+    request: SlotActionRequest,
   ): Promise<OperationResult>;
 
   getOAuthState(extensionId: string): Promise<OAuthState | null>;

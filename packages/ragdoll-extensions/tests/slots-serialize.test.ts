@@ -84,4 +84,148 @@ describe("serializeSlotState", () => {
       "onClick" in (serialized.panel.cells[1] as Record<string, unknown>),
     ).toBe(false);
   });
+
+  it("strips cards submit handler and sets canSubmit for front phase", () => {
+    const serialized = serializeSlotState({
+      badge: 2,
+      visible: true,
+      panel: {
+        type: "cards",
+        title: "Review",
+        progress: { current: 1, total: 3, label: "Due" },
+        card: {
+          id: "card-1",
+          attemptId: "attempt-1",
+          front: "hola",
+          back: "hello",
+          face: "front",
+        },
+        answerInput: {
+          id: "attempt-1",
+          placeholder: "Type the answer",
+          submitLabel: "Check",
+          maxLength: 100,
+        },
+        actions: [{ id: "end", label: "End", onClick: () => undefined }],
+        onSubmitAnswer: () => undefined,
+      },
+    });
+
+    expect(serialized.panel.type).toBe("cards");
+    if (serialized.panel.type !== "cards") throw new Error("expected cards");
+    expect(serialized.panel.canSubmit).toBe(true);
+    expect(serialized.panel.card).toEqual({
+      id: "card-1",
+      attemptId: "attempt-1",
+      front: "hola",
+      back: "hello",
+      face: "front",
+    });
+    expect(serialized.panel.answerInput).toEqual({
+      id: "attempt-1",
+      placeholder: "Type the answer",
+      submitLabel: "Check",
+      maxLength: 100,
+    });
+    expect(serialized.panel.actions).toEqual([{ id: "end", label: "End" }]);
+    expect(
+      "onSubmitAnswer" in
+        (serialized.panel as unknown as Record<string, unknown>),
+    ).toBe(false);
+  });
+
+  it("disables canSubmit when answer input is disabled or mismatched", () => {
+    const disabled = serializeSlotState({
+      badge: null,
+      visible: true,
+      panel: {
+        type: "cards",
+        title: "Review",
+        progress: { current: 1, total: 1 },
+        card: {
+          id: "card-1",
+          attemptId: "attempt-1",
+          front: "hola",
+          back: "hello",
+          face: "front",
+        },
+        answerInput: {
+          id: "attempt-1",
+          disabled: true,
+        },
+        onSubmitAnswer: () => undefined,
+      },
+    });
+    expect(disabled.panel.type).toBe("cards");
+    if (disabled.panel.type !== "cards") throw new Error("expected cards");
+    expect(disabled.panel.canSubmit).toBe(false);
+
+    const mismatched = serializeSlotState({
+      badge: null,
+      visible: true,
+      panel: {
+        type: "cards",
+        title: "Review",
+        progress: { current: 1, total: 1 },
+        card: {
+          id: "card-1",
+          attemptId: "attempt-1",
+          front: "hola",
+          back: "hello",
+          face: "front",
+        },
+        answerInput: {
+          id: "stale-attempt",
+        },
+        onSubmitAnswer: () => undefined,
+      },
+    });
+    expect(mismatched.panel.type).toBe("cards");
+    if (mismatched.panel.type !== "cards") throw new Error("expected cards");
+    expect(mismatched.panel.canSubmit).toBe(false);
+  });
+
+  it("serializes revealed cards without canSubmit", () => {
+    const serialized = serializeSlotState({
+      badge: null,
+      visible: true,
+      panel: {
+        type: "cards",
+        title: "Review",
+        progress: { current: 2, total: 4 },
+        card: {
+          id: "card-2",
+          attemptId: "attempt-2",
+          front: "hola",
+          back: "hello",
+          face: "back",
+        },
+        result: {
+          title: "Correct",
+          message: "Nice work",
+          status: "success",
+        },
+        actions: [
+          {
+            id: "attempt-2:easy",
+            label: "Easy",
+            onClick: () => undefined,
+          },
+        ],
+      },
+    });
+
+    expect(serialized.panel.type).toBe("cards");
+    if (serialized.panel.type !== "cards") throw new Error("expected cards");
+    expect(serialized.panel.canSubmit).toBe(false);
+    expect(serialized.panel.result).toEqual({
+      title: "Correct",
+      message: "Nice work",
+      status: "success",
+    });
+    expect(serialized.panel.answerInput).toBeUndefined();
+    expect(serialized.panel.actions).toEqual([
+      { id: "attempt-2:easy", label: "Easy" },
+    ]);
+  });
 });

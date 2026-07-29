@@ -1,4 +1,5 @@
 import type {
+  SerializedCardsPanelConfig,
   SerializedGridPanelCell,
   SerializedListPanelItem,
   SerializedListPanelSection,
@@ -7,6 +8,8 @@ import type {
 } from "@vokality/ragdoll-extensions";
 import {
   createSlotState,
+  type CardsPanelConfig,
+  type CardsPanelFront,
   type GridPanelCell,
   type ListPanelItem,
   type ListPanelSection,
@@ -15,7 +18,10 @@ import {
   type SlotState,
 } from "@vokality/ragdoll-extensions/slots";
 import type { ExtensionUISlot } from "@vokality/ragdoll-extensions/ui";
-import type { ElectronAPI, SlotActionType } from "../../electron/electron-api";
+import type {
+  ElectronAPI,
+  SlotActionRequest,
+} from "../../electron/electron-api";
 
 export type ExtensionSlotGateway = Pick<
   ElectronAPI,
@@ -147,7 +153,8 @@ export class ExtensionSlotService {
       action: SerializedPanelAction,
     ): PanelAction => ({
       ...action,
-      onClick: () => this.executeAction(slotId, actionType, action.id),
+      onClick: () =>
+        this.executeAction(slotId, { actionType, actionId: action.id }),
     });
 
     if (state.panel.type === "grid") {
@@ -157,7 +164,11 @@ export class ExtensionSlotService {
           ...metadata,
           onClick:
             canClick && !metadata.disabled
-              ? () => this.executeAction(slotId, "cell-click", cell.id)
+              ? () =>
+                  this.executeAction(slotId, {
+                    actionType: "cell-click",
+                    actionId: cell.id,
+                  })
               : undefined,
         };
       };
@@ -174,15 +185,30 @@ export class ExtensionSlotService {
       };
     }
 
+    if (state.panel.type === "cards") {
+      return {
+        ...state,
+        panel: this.attachCardsHandlers(slotId, state.panel),
+      };
+    }
+
     const attachItem = (item: SerializedListPanelItem): ListPanelItem => {
       const { canClick, canToggle, ...metadata } = item;
       return {
         ...metadata,
         onClick: canClick
-          ? () => this.executeAction(slotId, "item-click", item.id)
+          ? () =>
+              this.executeAction(slotId, {
+                actionType: "item-click",
+                actionId: item.id,
+              })
           : undefined,
         onToggle: canToggle
-          ? () => this.executeAction(slotId, "item-toggle", item.id)
+          ? () =>
+              this.executeAction(slotId, {
+                actionType: "item-toggle",
+                actionId: item.id,
+              })
           : undefined,
       };
     };
@@ -209,16 +235,72 @@ export class ExtensionSlotService {
     };
   }
 
+  private attachCardsHandlers(
+    slotId: string,
+    panel: SerializedCardsPanelConfig,
+  ): CardsPanelConfig {
+    const actions = panel.actions?.map(
+      (action): PanelAction => ({
+        ...action,
+        onClick: () =>
+          this.executeAction(slotId, {
+            actionType: "panel-action",
+            actionId: action.id,
+          }),
+      }),
+    );
+
+    if (panel.card.face === "front") {
+      if (!panel.answerInput) {
+        throw new Error("Front cards panel is missing answerInput");
+      }
+      const answerInput = panel.answerInput;
+      const front: CardsPanelFront = {
+        type: "cards",
+        title: panel.title,
+        progress: panel.progress,
+        card: panel.card,
+        answerInput,
+        actions,
+        onSubmitAnswer: panel.canSubmit
+          ? (answer: string) =>
+              this.executeAction(slotId, {
+                actionType: "answer-submit",
+                actionId: answerInput.id,
+                payload: answer,
+              })
+          : undefined,
+      };
+      return front;
+    }
+
+    if (!panel.result) {
+      throw new Error("Revealed cards panel is missing result");
+    }
+
+    return {
+      type: "cards",
+      title: panel.title,
+      progress: panel.progress,
+      card: panel.card,
+      result: panel.result,
+      actions: actions ?? [],
+    };
+  }
+
   private executeAction(
     slotId: string,
-    actionType: SlotActionType,
-    actionId: string,
-  ): void {
-    void this.api
-      .executeSlotAction(slotId, actionType, actionId)
+    request: SlotActionRequest,
+  ): Promise<void> {
+    return this.api
+      .executeSlotAction(slotId, request)
       .then((result) => {
         if (!result.success) throw new Error(result.error);
       })
-      .catch(this.reportError);
+      .catch((error) => {
+        this.reportError(error);
+        throw error;
+      });
   }
 }
+

@@ -5,7 +5,7 @@ import type {
   ElectronAPI,
   OAuthConnectedEvent,
   OAuthFailedEvent,
-  SlotActionType,
+  SlotActionRequest,
   SlotChangeEvent,
 } from "./electron-api.js";
 import { IPC_CHANNELS } from "./electron-api.js";
@@ -108,16 +108,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
       );
     };
   },
-  executeSlotAction: (
-    slotId: string,
-    actionType: SlotActionType,
-    actionId: string,
-  ) =>
+  executeSlotAction: (slotId: string, request: SlotActionRequest) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.extensions.executeSlotAction,
       slotId,
-      actionType,
-      actionId,
+      request,
     ),
 
   // Extension OAuth
