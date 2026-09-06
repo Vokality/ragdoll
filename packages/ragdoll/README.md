@@ -11,7 +11,8 @@ bun add @vokality/ragdoll
 ## Quick Start
 
 ```tsx
-import { RagdollCharacter, CharacterController } from "@vokality/ragdoll";
+import { useState } from "react";
+import { RagdollCharacter, CharacterController, getDefaultTheme } from "@vokality/ragdoll";
 
 function App() {
   const [controller, setController] = useState<CharacterController | null>(
@@ -32,20 +33,14 @@ function App() {
 ## Features
 
 - **Facial Expressions**: smile, frown, laugh, angry, sad, surprise, confusion, thinking
-- **Actions**: wink, talk animations
+- **Actions**: wink, talk, and shake animations
 - **Head Pose**: yaw and pitch control with smooth transitions
 - **Themes**: default, robot, alien, monochrome (or create your own)
 - **Idle Animations**: subtle breathing, blinking, micro-movements
 
 ## Architecture & DDD
 
-Ragdoll follows a strict domain-driven split:
-
-- **Domain Core** – controllers, models, variants, themes, and state live under `packages/ragdoll/src`. They expose pure animation, expression, and pose logic with zero UI or transport knowledge.
-- **Presentation** – apps render the character (for example via `RagdollCharacter` or your own renderer) and subscribe to domain state through the event bus.
-- **Integration** – extensions plug into `CharacterController` via the `FeaturePlugin` interface without nesting app-specific logic inside the core package.
-
-Keeping UI, timers, or business-specific rules out of the core package ensures the framework stays reusable and easy to extend.
+`@vokality/ragdoll` is a React/SVG character package. Controllers, models, themes, and variants are UI-free TypeScript. `RagdollCharacter` is the bundled React renderer; hosts can also subscribe to `CharacterController` events and render their own UI.
 
 ## API
 
@@ -189,7 +184,7 @@ import type {
 
 ## Requirements
 
-- React 18 or 19
+- React 19
 - TypeScript (recommended)
 
 ## License

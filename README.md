@@ -8,7 +8,7 @@ Ragdoll is a Bun monorepo for an animated React character, a host-agnostic exten
 
 ## Requirements
 
-- Bun 1.3.14
+- Bun 1.4.2
 
 The repository declares the toolchain through `packageManager` and keeps one root `bun.lock`.
 
@@ -40,11 +40,12 @@ The root build is dependency-ordered: core libraries, extension packages, the ex
 - `packages/ragdoll-extension-pomodoro` — focus timer tools, state channel, and slot.
 - `packages/ragdoll-extension-spotify` — Spotify tools through host-provided OAuth.
 - `packages/ragdoll-extension-tic-tac-toe` — shared-board tic-tac-toe tools, events, and slot UI.
+- `packages/ragdoll-extension-flash-cards` — deck/card tools and a typed-answer review slot.
 
 ### Apps
 
-- `apps/chat` — Electron main process plus a React renderer.
-- `apps/emote` — VS Code extension, React webview, and Bun-launched MCP helper.
+- `apps/chat` — Electron chat host (`lumen`). See [`apps/chat/README.md`](apps/chat/README.md).
+- `apps/emote` — VS Code MCP character host (React webview + Bun MCP helper). It does not load Ragdoll extensions. MCP client config is [`apps/emote/mcp-config.example.json`](apps/emote/mcp-config.example.json).
 
 ### Example
 
@@ -84,6 +85,8 @@ Run package-specific checks with Bun workspace filters:
 bun run --filter @vokality/ragdoll-extensions test
 bun run --filter lumen typecheck
 ```
+
+Contributor workflow is in [CONTRIBUTING.md](./CONTRIBUTING.md). Agent and package-boundary rules are in [AGENTS.md](./AGENTS.md).
 
 ## License
 

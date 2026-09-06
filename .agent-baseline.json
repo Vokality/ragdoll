@@ -16,10 +16,13 @@
         { "path": "ARCHITECTURE.md", "heading": "Extension framework" },
         { "path": "ARCHITECTURE.md", "heading": "Monorepo build" },
         { "path": "README.md", "heading": "Package boundaries" },
+        { "path": "packages/ragdoll/package.json", "json_pointer": "/peerDependencies" },
         { "path": "packages/ragdoll-extensions/package.json", "json_pointer": "/exports" },
+        { "path": "packages/ragdoll-extension-flash-cards/package.json", "json_pointer": "/ragdollExtension" },
         { "path": "examples/extension-weather/package.json", "json_pointer": "/ragdollExtension" },
         "examples/extension-weather/src/index.ts",
         "scripts/verify-architecture.ts",
+        "scripts/verify-packages.ts",
         "packages/ragdoll-extensions/src/loader.ts",
         "packages/ragdoll-extensions/src/create-extension.ts",
         "packages/ragdoll-extensions/tests/loader.test.ts",
@@ -28,6 +31,9 @@
         { "path": "docs/extension-host-oauth.md", "heading": "Package contract" },
         { "path": "docs/conversation-events.md", "heading": "Contract" },
         ".github/workflows/test.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/emote-extension-publish.yml",
+        { "path": ".oxlintrc.json", "json_pointer": "/rules" },
         { "path": "tsconfig.base.json", "json_pointer": "/compilerOptions/strict" }
       ]
     },
@@ -35,14 +41,31 @@
       "path": "CLAUDE.md",
       "sources": [
         { "path": "package.json", "json_pointer": "/packageManager" },
+        { "path": "package.json", "json_pointer": "/engines" },
         { "path": "package.json", "json_pointer": "/scripts" },
         { "path": "ARCHITECTURE.md", "heading": "Dependency direction" },
         { "path": "ARCHITECTURE.md", "heading": "Extension framework" },
+        { "path": "ARCHITECTURE.md", "heading": "Monorepo build" },
         { "path": "packages/ragdoll-extensions/package.json", "json_pointer": "/exports" },
         { "path": "examples/extension-weather/package.json", "json_pointer": "/ragdollExtension" },
         "scripts/verify-architecture.ts",
         "packages/ragdoll-extensions/src/loader.ts",
-        "packages/ragdoll-extensions/src/create-extension.ts"
+        "packages/ragdoll-extensions/src/create-extension.ts",
+        { "path": ".oxlintrc.json", "json_pointer": "/rules" },
+        ".github/workflows/test.yml"
+      ]
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "sources": [
+        "scripts/verify-architecture.ts",
+        "packages/ragdoll-extensions/src/types/host-environment.ts",
+        "packages/ragdoll-extensions/src/loader.ts",
+        "packages/ragdoll-extensions/src/registry.ts",
+        "apps/chat/electron/electron-api.ts",
+        "apps/chat/electron/services/host-scheduler-capability.ts",
+        "apps/chat/electron/services/extension-message-bus.ts",
+        { "path": "apps/emote/package.json", "json_pointer": "/dependencies" }
       ]
     }
   ],

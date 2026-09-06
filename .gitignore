@@ -29,6 +29,8 @@ dist-ssr
 *.sln
 *.sw?
 .beads/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/baseline-project
 **/dist/
 **/release/

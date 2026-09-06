@@ -37,6 +37,9 @@ The default entrypoint is React-free. It owns:
 - config and OAuth schemas;
 - serializable slot state.
 
+Services are an in-process contribution type. First-party packages currently
+contribute tools, slots, and state channels.
+
 Runtime-specific features are separate entrypoints:
 
 - `/loader` loads packages through injected filesystem and import adapters;
@@ -58,17 +61,21 @@ If activation or validation fails, the registry disposes the partial contributio
 
 ### Host boundary
 
-`ExtensionHostEnvironment` is the only route from an extension into its host. Capabilities are explicit and optional:
+`ExtensionHostEnvironment` is the only route from an extension into its host. A host must both list a capability in `capabilities` and provide the matching implementation field. Required capabilities:
 
 - storage
 - logger
-- timers and scheduler
+- timers
+- scheduler
 - IPC
 - notifications
 - config
 - OAuth
+- conversationEvents
 
-An extension declares required host capabilities in both its runtime manifest and package metadata. The loader merges those requirements before registration.
+Optional capabilities are metadata: the loader requires the package and runtime optional lists to match exactly. The registry does not fail activation when an optional capability is absent; Lumen grants an optional capability only when the extension asked for it and the backing service exists.
+
+An extension declares required and optional host capabilities in both its runtime manifest and package metadata. The loader requires those lists to be identical before registration; it does not merge them.
 
 ### Package loading
 
@@ -79,7 +86,7 @@ The loader has no filesystem dependency. Its host supplies:
 - optional module import behavior;
 - a static or per-extension host environment.
 
-The loader resolves package exports, constructs the configured extension, registers it, and verifies that package-declared capability types match the actual contribution. A mismatch is rolled back.
+The loader resolves package exports, constructs the extension by calling `createExtension(config?)`, registers it, and verifies that package-declared capability types match the actual contribution. A mismatch is rolled back. The loader does not accept a bare extension object; register those through the registry.
 
 ### UI slots and IPC
 
@@ -95,19 +102,22 @@ Event names identify their boundary:
 - persisted extension conversation events use `domain.event` (for example, `timer.completed`);
 - Electron IPC channels use `namespace:operation` and are declared once in `IPC_CHANNELS`.
 
-Conversation-event input is validated at the host boundary before it is persisted. IPC producers and consumers share the same channel constants.
+Conversation-event input is validated at the host boundary before it is persisted. Lumen enforces the `domain.event` type pattern exported as `CONVERSATION_EVENT_TYPE_PATTERN`. IPC producers and consumers share the same channel constants. Host `ipc` topics are owner-scoped: an extension may use `extension-tool:<id>` or topics prefixed with `<id>:`.
 
 ## Application composition
 
 ### Chat
 
-The Electron main process owns filesystem, persistence, OAuth, notification, and IPC adapters. `ExtensionManager` composes the registry and loader, tracks state/slot subscriptions from capability events, and exposes serialized data to the renderer.
+The Electron main process owns filesystem, persistence, OAuth, notification, and IPC adapters. `ExtensionManager` composes the registry and loader, tracks state/slot subscriptions from capability events, and exposes serialized data to the renderer. GitHub-installed extension tarballs are checked against the GitHub asset `sha256` digest when the API provides one, then against package identity and semver.
 
 The React renderer consumes only browser-safe entrypoints. It does not import the loader or Electron main-process modules.
 
 ### Emote
 
-VS Code owns the extension host runtime. Emote bundles the extension entrypoint and a standalone MCP helper, while its webview consumes `@vokality/ragdoll` as a React dependency.
+VS Code owns the extension host runtime. Emote is an MCP character host: it
+bundles the VS Code entrypoint and a standalone MCP helper that drives
+`@vokality/ragdoll` over a local Unix socket (named pipe on Windows). It does
+not load Ragdoll extensions or implement `ExtensionHostEnvironment`.
 
 ## Monorepo build
 
@@ -119,3 +129,5 @@ The root Bun workspace uses one lockfile and a dependency catalog. Build order i
 4. applications.
 
 Each workspace cleans only its own output before compilation, preventing deleted source files from surviving in publish artifacts.
+
+`scripts/verify-architecture.ts` (run by `bun run typecheck`) checks source imports and `package.json` dependency graphs for the rules above. It skips test files, does not prove `serializeSlotState` behavior, and does not inspect Electron IPC runtime wiring beyond channel-name literals in `apps/chat`.

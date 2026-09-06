@@ -3,27 +3,47 @@
   "evidence": [
     {
       "source": ".agent-baseline.json",
-      "sha256": "5561e8c17f7ef7893b6a6c811a562e8368c99c22a6a65d83d2ccffbcbcb719c4"
+      "sha256": "41c0b807cbc5f8d7970c66b1135906957d0b70bc618afb35fb9c30284728a219"
+    },
+    {
+      "source": ".github/workflows/emote-extension-publish.yml",
+      "sha256": "3750e10f333771c45ac3306c36c2328af7c51ccea0385b84078afa9ce8858c87"
+    },
+    {
+      "source": ".github/workflows/release.yml",
+      "sha256": "c54ff8a9bb512ae00664537719431d0089c962179acc6ef29244029cec2235ad"
     },
     {
       "source": ".github/workflows/test.yml",
-      "sha256": "423f7022ea908310b76083a70f2e5b5826ab26eca999c09e8ddc0b47c15cb43f"
+      "sha256": "fbe64f88c52f8f1990c952927dd5e40457f51037f55ea2673f271a4ac9f82de3"
     },
     {
       "source": "AGENTS.md",
-      "sha256": "0853cb42bf9e1926dd984598340bb3d86b807c6a72afe69eea386b0b72395b78"
+      "sha256": "06c62795a61e01f2a77b01c04c16c7bb3d322b16a65e1fc3911fcbb94141de30"
+    },
+    {
+      "source": "ARCHITECTURE.md",
+      "sha256": "49faac4981effa01a2d3a0fdc8af147b65f98fd48991e1723c2018474974b03d"
     },
     {
       "source": "CLAUDE.md",
-      "sha256": "1f4ac93be473875d06a8fc423e3e2bc7309442695606db34e4d439f1ea7dca29"
+      "sha256": "7eae3256b98591ca3600e5a46df089531fff1a9c5b72e440c45a153684824707"
     },
     {
       "source": "apps/chat/electron/electron-api.ts",
       "sha256": "1103786052ff7ae0f1239c520f85f5dd6c8289e2dc01254b7b907e635364dc9a"
     },
     {
+      "source": "apps/chat/electron/services/extension-message-bus.ts",
+      "sha256": "ac891b6f340fe554d16ee291362645f56017e49e369042782c4e685e1535e12c"
+    },
+    {
+      "source": "apps/chat/electron/services/host-scheduler-capability.ts",
+      "sha256": "ee4108156fc92f03e12251afa43ae57cf3897ac8106f061f475ff9a061ad2901"
+    },
+    {
       "source": "examples/extension-weather/src/index.ts",
-      "sha256": "8c4193c7b660fc0c09c2598afa672ab1505234d63935c866d22edab4c3e69167"
+      "sha256": "91975c29b77d6be79032b33a83d142796cf61ffd50e404863f872637648b732a"
     },
     {
       "source": "packages/ragdoll-extensions/src/create-extension.ts",
@@ -31,11 +51,19 @@
     },
     {
       "source": "packages/ragdoll-extensions/src/loader.ts",
-      "sha256": "98c44ce4c778bc3efb269a1c871f27898f4a187bfb639c38d9597326365878b1"
+      "sha256": "09375de27207c81e89856b2e28801cba54951ca1622196edfc86ba5373c89d10"
+    },
+    {
+      "source": "packages/ragdoll-extensions/src/registry.ts",
+      "sha256": "182fad3310bd084b2b781b46273a8446c8f150ef3bd48c73855a1b9cee0f910b"
+    },
+    {
+      "source": "packages/ragdoll-extensions/src/types/host-environment.ts",
+      "sha256": "e2d3505ccae33e03089d610dcc8f9456d85bdf25b716e1e04cc5fa6282b7f6c4"
     },
     {
       "source": "packages/ragdoll-extensions/tests/loader.test.ts",
-      "sha256": "cfd7bbbbedf6e479c281101fc4e609f4630bbf95eeed34f70c7e6277e9b080ed"
+      "sha256": "e4c6a8214f1c760b1c476dc9522bfe7050f706ad70b9b3a0d95267469c6059a1"
     },
     {
       "source": "packages/ragdoll-extensions/tests/slots-serialize.test.ts",
@@ -43,28 +71,32 @@
     },
     {
       "source": "scripts/verify-architecture.ts",
-      "sha256": "a159ca1f2faff836cf2ff9d85fa99f1dc1d7718c3ba093cdc3bc09d4164fd536"
+      "sha256": "7f71e14230f878f058d9d0759e10daa11bf513adfbbee87e2c430eff8dc77faa"
+    },
+    {
+      "source": "scripts/verify-packages.ts",
+      "sha256": "60e302a008f143f70448cfc955c97c4f5fb3f3d7538adf4cd680f09c335d870f"
     },
     {
       "source": {
         "path": "CLAUDE.md",
         "heading": "Boundaries"
       },
-      "sha256": "05e595e6836200db88ce7b3192a65682821f60aad216e9c2e9ceb7c1c26d3a9f"
+      "sha256": "ecd162553ec645411ec47c3121972878f5f90b7f36e60c0ecc3633bed9c0e765"
     },
     {
       "source": {
         "path": "CLAUDE.md",
         "heading": "Commands"
       },
-      "sha256": "c26cfd7aeda0e3725deebc424ca64fa9b6910f5908623d9804042660218234bc"
+      "sha256": "94947cc658053a2a21d0c7dd40793d3b48703be3a796a6199449f19c7d567e77"
     },
     {
       "source": {
         "path": "docs/conversation-events.md",
         "heading": "Contract"
       },
-      "sha256": "643cf2aee55b6535e3b037990a015e79dbfb0ad3b38810f01cbb24e544f56e4e"
+      "sha256": "f363e36918f4bbeb295d374da9ce2fe4f53dfca56844896a640d8c1b40dfb644"
     },
     {
       "source": {
@@ -78,28 +110,28 @@
         "path": "CLAUDE.md",
         "heading": "Engineering rules"
       },
-      "sha256": "5f8bc82af796fcd1262fa1a1b0d814d7aa16d57ea7ba7457eb7ca6f4d6a5b119"
+      "sha256": "b6b2cdd0efdcb53d4f8b3f637f201f52f62196e08954fd6c70c6323c36254df3"
     },
     {
       "source": {
         "path": "CLAUDE.md",
         "heading": "Extension contract"
       },
-      "sha256": "dd06e1ef7ce4f5bf5fa1fd2b47196ac10f3d1342c3bff25fd462ed753c8d3176"
+      "sha256": "3a170121fbb458cea74abea97a3e46e88324bd19f5cd8bebb7c54c6ddeb45a66"
     },
     {
       "source": {
         "path": "ARCHITECTURE.md",
         "heading": "Extension framework"
       },
-      "sha256": "441e85c6c620d5d8ecf333b278e16dcb54eaa4aa37188712075aa240d50d3b8d"
+      "sha256": "929d050bdd0ec1a2f48d0f25386809c368b9edb306510e665daacc28e5a8b5ae"
     },
     {
       "source": {
         "path": "ARCHITECTURE.md",
         "heading": "Monorepo build"
       },
-      "sha256": "46766ce86a324f4860471108da894a20aa9a3daf05e351115a973373826cb7f9"
+      "sha256": "96f3ca0007706368fae0e15dbc4ab236407306fafbd5d564599dd4f5bac2b530"
     },
     {
       "source": {
@@ -124,10 +156,17 @@
     },
     {
       "source": {
+        "path": "apps/emote/package.json",
+        "json_pointer": "/dependencies"
+      },
+      "sha256": "00f12b219cc39c4dd8efbb0c9a7ad9d9b56758dee344a410a082719b012fe293"
+    },
+    {
+      "source": {
         "path": "package.json",
         "json_pointer": "/engines"
       },
-      "sha256": "0a9a420b2e032114485440ea74e376208d855947ade3e304f632ad694fcae154"
+      "sha256": "134a303d35383b800d8adc57360b7063d0844006e7f9dc721b597799c3fbcf02"
     },
     {
       "source": {
@@ -141,28 +180,49 @@
         "path": "package.json",
         "json_pointer": "/packageManager"
       },
-      "sha256": "5d6d6dc7630bffcd11ea47a8c99be5ebd9f17f066e48fd624d665d83ec856d1d"
+      "sha256": "e8f2d1d460ef69cd7eca87d93a5abf9868083165867ca39c1bae33c05e4ce00e"
+    },
+    {
+      "source": {
+        "path": "packages/ragdoll/package.json",
+        "json_pointer": "/peerDependencies"
+      },
+      "sha256": "f3d80ea40a5fad40ff8ffacd9be65f3d2882f7fb6564323191bce892a7af72e0"
     },
     {
       "source": {
         "path": "examples/extension-weather/package.json",
         "json_pointer": "/ragdollExtension"
       },
-      "sha256": "5160a826a824091c077df456e78663a78353aafe6c879487fac3c77b32362aa2"
+      "sha256": "be0c21edf128fd07594b689daae1331698bd600a213287488d171081bc9e2ca4"
+    },
+    {
+      "source": {
+        "path": "packages/ragdoll-extension-flash-cards/package.json",
+        "json_pointer": "/ragdollExtension"
+      },
+      "sha256": "6603f368560fb4fcca61bba92238c0cb1e9e07fce3cbad94d95255494db08d4b"
+    },
+    {
+      "source": {
+        "path": ".oxlintrc.json",
+        "json_pointer": "/rules"
+      },
+      "sha256": "d01655ac909607f133b2725b6e84e11d90d3949d6afd73549c79dbcaca066658"
     },
     {
       "source": {
         "path": "package.json",
         "json_pointer": "/scripts"
       },
-      "sha256": "2367ed8e20e5b0f48ba6103e8fe5acbe7164dc533bc8bcb59fbd6b61108a94ee"
+      "sha256": "202a05b15c39ce98d6fbb9c9d550f6fa02982ccf2d29c91d601dbe66757a5a6e"
     },
     {
       "source": {
         "path": "package.json",
         "json_pointer": "/workspaces"
       },
-      "sha256": "1649b0abc34ae0e683f82e791ba5a38be455005176674fbc6bd716800a755624"
+      "sha256": "e8d3de1f3df014c82eec21be749f417cc1626718ad5d9ec2908e0e1e80cc17e0"
     }
   ]
 }

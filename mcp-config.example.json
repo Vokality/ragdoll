@@ -1,11 +1,10 @@
 {
   "mcpServers": {
-    "ragdoll": {
+    "emote": {
       "command": "bun",
-      "args": ["run", "mcp-server"],
-      "cwd": "/path/to/ragdoll",
+      "args": ["/absolute/path/to/.emote/mcp-server.js"],
       "env": {
-        "RAGDOLL_API_URL": "http://localhost:3001"
+        "NODE_ENV": "production"
       }
     }
   }

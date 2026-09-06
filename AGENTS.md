@@ -1,6 +1,6 @@
 # Agent instructions
 
-Ragdoll is a Bun 1.3.14 workspace monorepo: a React character framework, a host-agnostic extension framework, first-party extension packages, the Electron chat app (`lumen`), and the Emote VS Code extension.
+Ragdoll is a Bun 1.4.2 workspace monorepo: a React character framework, a host-agnostic extension framework, first-party extension packages, the Electron chat app (`lumen`), and the Emote VS Code extension.
 
 Cursor and Claude Code also load [CLAUDE.md](./CLAUDE.md). Keep the shared engineering rules in both files aligned. Architecture detail lives in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -18,7 +18,7 @@ bun run lint
 
 Focused work uses workspace filters, for example `bun run --filter @vokality/ragdoll-extensions test`. Do not add npm, pnpm, or Yarn lockfiles or scripts. Do not execute tools by hardcoding paths under `node_modules`; use `bun run` for package scripts and `bunx --bun` for package binaries.
 
-CI on every push and pull request runs lint, test, typecheck, and `verify:packages` with Bun 1.3.14.
+CI on every push and pull request runs lint, test, typecheck, and `verify:packages` with Bun 1.4.2. Tag workflows (`chat-v*`, `emote-v*`) run the same checks before packaging.
 
 ## Boundaries
 
@@ -33,13 +33,13 @@ Decision:
 
 Do not add compatibility reexports or restore deleted entrypoints. Add a new public entrypoint only for a genuine runtime boundary.
 
-Evidence: [ARCHITECTURE.md](./ARCHITECTURE.md), `scripts/verify-architecture.ts` (run by `bun run typecheck`), and the `exports` map on `@vokality/ragdoll-extensions`.
+Evidence: [ARCHITECTURE.md](./ARCHITECTURE.md), `scripts/verify-architecture.ts` (run by `bun run typecheck`; source imports plus `package.json` graphs; skips tests and does not prove slot serialization), and the `exports` map on `@vokality/ragdoll-extensions`.
 
 ## Extension contract
 
 Trigger: creating, loading, or changing an extension package.
 
-Decision: export `createExtension(config?)` or an extension object the loader accepts. `package.json#ragdollExtension` is the canonical descriptor and must declare a stable id, in-package `entry`, provided capability types, required and optional host capabilities, and config or OAuth schemas when applicable. Registration requires an `ExtensionHostEnvironment`; shared extension packages must not import Electron or an app implementation.
+Decision: export `createExtension(config?)`. The loader does not accept a bare extension object; register those through the registry. `package.json#ragdollExtension` is the canonical descriptor object (not `true`) and must declare a stable id, in-package `entry`, provided capability types, required and optional host capabilities, and config or OAuth schemas when applicable. Package and runtime host-capability lists must match exactly. Registration requires an `ExtensionHostEnvironment` whose `capabilities` set matches implemented fields; shared extension packages must not import Electron or an app implementation.
 
 Slots contain React-free observable state. Serialize with `serializeSlotState` before IPC; that helper strips callbacks and preserves action availability as `canClick`, `canToggle`, and `canSubmit`. Route action descriptors back to the owning callback. Electron IPC channel names are declared once in `IPC_CHANNELS`.
 
@@ -47,7 +47,7 @@ The maintained package shape is [`examples/extension-weather`](./examples/extens
 
 ## Engineering rules
 
-- Keep TypeScript strict and avoid `any`.
+- Keep TypeScript strict. Oxlint enforces `typescript/no-explicit-any`.
 - Preserve package dependency direction (`bun run verify:architecture`).
 - Keep React imports out of core and loader entrypoints.
 - Clean only the workspace's own generated output.
@@ -71,7 +71,7 @@ Launching the Electron app in the cloud is not the same as locally. A headless V
 - Character framework: `packages/ragdoll`
 - Extension contracts, loader, slots, and UI: `packages/ragdoll-extensions`
 - First-party extensions: `packages/ragdoll-extension-*`
-- Electron chat host: `apps/chat` (package name `lumen`)
-- VS Code and MCP host: `apps/emote`
+- Electron chat host (`ExtensionHostEnvironment`): `apps/chat` (package name `lumen`)
+- VS Code MCP character host (not a Ragdoll extension host): `apps/emote`
 - Canonical new-extension example: `examples/extension-weather`
 - Agent baseline setup, audit, or refresh: `.agents/skills/baseline-project` (`$baseline-project` in Codex)
