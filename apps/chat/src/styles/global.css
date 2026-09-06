@@ -559,6 +559,17 @@ button:disabled {
    user messages as part of the terminal-flavored character.
    NO backdrop-filter here: Chromium re-renders the blur surface on every
    content change, which makes streaming text visibly flash. */
+/* Fade scrolling messages into the surrounding surface without covering chat. */
+.conversation-scroller {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 16px,
+    black calc(100% - 16px),
+    transparent
+  );
+}
+
 .bubble {
   max-width: 320px;
   min-width: 80px;
@@ -879,6 +890,14 @@ dialog.modal-card::backdrop {
   background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
   pointer-events: none;
   animation: glowBreathe 6s ease-in-out infinite;
+}
+
+/* The character light belongs to the screen, so toolbar bounds cannot clip it. */
+.chat-character-glow {
+  top: clamp(240px, 34vh, 300px);
+  width: 800px;
+  height: 800px;
+  z-index: 0;
 }
 
 @keyframes glowBreathe {

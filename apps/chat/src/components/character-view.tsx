@@ -51,9 +51,6 @@ export function CharacterView({
 
   return (
     <div style={styles.container}>
-      {/* Ambient glow that breathes behind the character */}
-      <div className="ambient-glow" style={styles.glow} />
-
       <div className="character-stage" data-panel-open={activeSlot !== null}>
         <div className="character-extension-card" aria-hidden={!activeSlot}>
           {activeSlot && (
@@ -96,10 +93,5 @@ const styles: Record<string, CSSProperties> = {
     position: "relative",
     padding: "16px 20px 0",
     overflow: "hidden",
-  },
-  glow: {
-    top: "170px",
-    width: "420px",
-    height: "420px",
   },
 };

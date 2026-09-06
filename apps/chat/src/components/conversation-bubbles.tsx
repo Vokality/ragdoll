@@ -72,6 +72,7 @@ export function ConversationBubbles({
   return (
     <div
       ref={scrollRef}
+      className="conversation-scroller"
       onScroll={handleScroll}
       style={styles.scroller}
       aria-live="polite"
@@ -134,7 +135,7 @@ const styles: Record<string, CSSProperties> = {
     maxWidth: "var(--chat-content-width)",
     overflowY: "auto",
     marginTop: "8px",
-    padding: "4px 0 12px",
+    padding: "18px 0",
   },
   list: {
     display: "flex",

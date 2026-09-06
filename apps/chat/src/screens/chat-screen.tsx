@@ -152,6 +152,7 @@ export function ChatScreen({
   return (
     <div style={styles.container}>
       <div className="app-atmosphere" />
+      <div className="ambient-glow chat-character-glow" aria-hidden="true" />
       <div style={styles.dragRegion} className="drag-region" />
 
       <header style={styles.header}>
@@ -314,7 +315,6 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 16px",
-    borderBottom: "1px solid var(--border-light)",
     paddingTop: "36px", // Account for drag region on macOS
     position: "relative",
     zIndex: 1,
