@@ -5,7 +5,12 @@
     {
       "name": "lumen-renderer",
       "command": "bash .cursor/start-lumen-renderer.sh",
-      "description": "Vite dev server for the Lumen (apps/chat) Electron renderer on http://localhost:5173. Required before launching the desktop app with .cursor/run-lumen-headless.sh."
+      "description": "Vite dev server for the Lumen (apps/chat) Electron renderer on http://localhost:5173."
+    },
+    {
+      "name": "lumen-app",
+      "command": "bash .cursor/run-lumen-headless.sh",
+      "description": "Canonical Cursor Cloud launch for the Lumen Electron desktop app. Waits for the renderer, then runs Electron in a private D-Bus session with a dedicated auto-unlocked keyring so safeStorage works without any login-keyring password prompt. Restart this terminal to relaunch the app."
     }
   ],
   "chromeExecutablePath": "/usr/local/bin/google-chrome",
