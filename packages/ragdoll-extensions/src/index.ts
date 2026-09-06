@@ -66,6 +66,7 @@ export type {
   HostLoggerCapability,
   HostTimersCapability,
   HostSchedulerCapability,
+  HostSchedulerPriority,
   HostIpcBridge,
   HostConversationEventsCapability,
   HostScheduleOptions,

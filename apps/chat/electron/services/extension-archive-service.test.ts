@@ -30,12 +30,16 @@ async function packedExtension(): Promise<{ bytes: Uint8Array; sha256: string }>
   };
 }
 
+function fakeFetch(
+  bytes: Uint8Array,
+): (input: string, init?: RequestInit) => Promise<Response> {
+  return async () => new Response(Buffer.from(bytes));
+}
+
 describe("ExtensionArchiveService", () => {
   it("extracts an archive whose sha256 matches the GitHub digest", async () => {
     const { bytes, sha256 } = await packedExtension();
-    const service = new ExtensionArchiveService(
-      async () => new Response(bytes),
-    );
+    const service = new ExtensionArchiveService(fakeFetch(bytes));
     const destination = await mkdtemp(join(tmpdir(), "ragdoll-archive-out-"));
     await service.downloadAndExtract(
       "https://example.test/extension.tar.gz",
@@ -52,9 +56,7 @@ describe("ExtensionArchiveService", () => {
 
   it("rejects a mismatched digest before extraction", async () => {
     const { bytes } = await packedExtension();
-    const service = new ExtensionArchiveService(
-      async () => new Response(bytes),
-    );
+    const service = new ExtensionArchiveService(fakeFetch(bytes));
     const destination = await mkdtemp(join(tmpdir(), "ragdoll-archive-bad-"));
     await expect(
       service.downloadAndExtract(

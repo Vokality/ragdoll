@@ -34,7 +34,12 @@ interface GitHubRepository {
 }
 
 export class GitHubReleaseService {
-  constructor(private readonly request: typeof fetch) {}
+  constructor(
+    private readonly request: (
+      input: string,
+      init?: RequestInit,
+    ) => Promise<Response>,
+  ) {}
 
   async resolve(sourceUrl: string): Promise<ExtensionRelease> {
     const direct = this.parseDirectDownloadUrl(sourceUrl);

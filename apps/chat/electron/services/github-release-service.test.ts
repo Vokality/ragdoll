@@ -1,10 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { GitHubReleaseService } from "./github-release-service.js";
 
+function fakeFetch(body: unknown): (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response> {
+  return async () => Response.json(body);
+}
+
 describe("GitHubReleaseService", () => {
   it("captures a sha256 GitHub asset digest", async () => {
-    const service = new GitHubReleaseService(async () =>
-      Response.json({
+    const service = new GitHubReleaseService(
+      fakeFetch({
         tag_name: "v1.2.3",
         assets: [
           {
@@ -28,8 +35,8 @@ describe("GitHubReleaseService", () => {
   });
 
   it("allows a release asset with no digest", async () => {
-    const service = new GitHubReleaseService(async () =>
-      Response.json({
+    const service = new GitHubReleaseService(
+      fakeFetch({
         tag_name: "v1.2.3",
         assets: [
           {
@@ -50,8 +57,8 @@ describe("GitHubReleaseService", () => {
   });
 
   it("rejects unsupported asset digests", async () => {
-    const service = new GitHubReleaseService(async () =>
-      Response.json({
+    const service = new GitHubReleaseService(
+      fakeFetch({
         tag_name: "v1.2.3",
         assets: [
           {
