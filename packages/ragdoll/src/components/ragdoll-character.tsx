@@ -71,6 +71,7 @@ export function RagdollCharacter({
       if (!isMounted) return;
       frame = requestAnimationFrame(tick);
       const deltaTime = Math.min((now - lastTime) / 1000, 0.05);
+      if (deltaTime < 1 / 60) return;
       lastTime = now;
       controller.update(deltaTime);
       scene.setData(computeRenderData(controller));

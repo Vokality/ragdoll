@@ -60,9 +60,8 @@ exec dbus-run-session -- bash -c '
   eval "$(printf "%s\n" "$LUMEN_KEYRING_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets,pkcs11 2>/dev/null)"
   export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
   exec bunx --bun --no-install electron . --no-sandbox --password-store=gnome-libsecret \
+    --disable-gpu \
     --ignore-gpu-blocklist \
     --enable-webgl \
-    --enable-unsafe-swiftshader \
-    --use-gl=angle \
-    --use-angle=swiftshader
+    --enable-unsafe-swiftshader
 '

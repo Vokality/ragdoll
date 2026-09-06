@@ -362,6 +362,16 @@ export class CharacterScene {
       data.rightIris.cy + 1,
       data.rightIris.pupilR * 0.3,
     );
+    const leftEyeOpen = data.leftEyePaths.aperture.height > 2;
+    const rightEyeOpen = data.rightEyePaths.aperture.height > 2;
+    this.circles.leftIris.mesh.visible = leftEyeOpen;
+    this.circles.leftPupil.mesh.visible = leftEyeOpen;
+    this.circles.leftHighlightA.mesh.visible = leftEyeOpen;
+    this.circles.leftHighlightB.mesh.visible = leftEyeOpen;
+    this.circles.rightIris.mesh.visible = rightEyeOpen;
+    this.circles.rightPupil.mesh.visible = rightEyeOpen;
+    this.circles.rightHighlightA.mesh.visible = rightEyeOpen;
+    this.circles.rightHighlightB.mesh.visible = rightEyeOpen;
     this.placeCircle(
       this.circles.noseTip,
       0,

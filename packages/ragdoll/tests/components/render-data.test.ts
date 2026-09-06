@@ -94,4 +94,17 @@ describe("computeRenderData", () => {
       einsteinData.currentTheme.colors.skin.mid,
     );
   });
+
+  it("advances idle blink over a few seconds of updates", () => {
+    const controller = tracked(createController({ themeId: "monochrome" }));
+    let blinked = false;
+    for (let i = 0; i < 160; i += 1) {
+      controller.update(0.05);
+      if (computeRenderData(controller).expression.leftEye.openness < 0.4) {
+        blinked = true;
+        break;
+      }
+    }
+    expect(blinked).toBe(true);
+  });
 });
