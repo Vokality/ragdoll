@@ -71,11 +71,11 @@ export function RagdollCharacter({
     let frame = 0;
     const tick = (now: number) => {
       if (!isMounted) return;
+      frame = requestAnimationFrame(tick);
       const deltaTime = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       controller.update(deltaTime);
       scene.setData(computeRenderData(controller));
-      frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
 

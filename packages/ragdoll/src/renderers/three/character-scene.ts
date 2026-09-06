@@ -459,6 +459,7 @@ export class CharacterScene {
       material.dispose();
     }
     disposeThemeMaterials(this.materials);
+    this.renderer.forceContextLoss();
     this.renderer.dispose();
   }
 
@@ -523,11 +524,15 @@ export class CharacterScene {
       part.mesh.visible = false;
       return;
     }
-    const geometry = new ExtrudeGeometry(shape, extrudeSettings(part.depth));
-    geometry.translate(0, 0, -part.depth / 2);
-    part.mesh.geometry.dispose();
-    part.mesh.geometry = geometry;
-    part.mesh.visible = true;
+    try {
+      const geometry = new ExtrudeGeometry(shape, extrudeSettings(part.depth));
+      geometry.translate(0, 0, -part.depth / 2);
+      part.mesh.geometry.dispose();
+      part.mesh.geometry = geometry;
+      part.mesh.visible = true;
+    } catch {
+      part.mesh.visible = false;
+    }
   }
 
   private updateStroke(part: LinePart, path: string): void {
