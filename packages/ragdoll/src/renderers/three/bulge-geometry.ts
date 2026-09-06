@@ -133,12 +133,13 @@ export function roundExtrudedOutline(
   radiusX: number,
   radiusY: number,
   amount: number,
-  maxEdgeLength = 16,
+  maxEdgeLength = 12,
 ): BufferGeometry {
   const subdivided = subdivideFaces(geometry, maxEdgeLength);
   bulgeFront(subdivided, radiusX, radiusY, amount);
   const welded = weldVertices(subdivided);
   if (welded !== subdivided) subdivided.dispose();
+  applyEllipsoidNormals(welded, radiusX, radiusY, amount);
   return welded;
 }
 
@@ -164,6 +165,40 @@ export function bulgeFront(
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
+}
+
+/**
+ * Replace faceted tessellation normals on the front cap with the ellipsoid
+ * gradient so the head shades like a smooth volume.
+ */
+export function applyEllipsoidNormals(
+  geometry: BufferGeometry,
+  radiusX: number,
+  radiusY: number,
+  amount: number,
+): void {
+  const positions = geometry.getAttribute("position");
+  if (!positions || amount === 0) return;
+  geometry.computeVertexNormals();
+  const normals = geometry.getAttribute("normal");
+  if (!normals) return;
+  const rx2 = radiusX * radiusX;
+  const ry2 = radiusY * radiusY;
+  const az2 = amount * amount;
+  const vertex = new Vector3();
+  const normal = new Vector3();
+  for (let i = 0; i < positions.count; i += 1) {
+    vertex.fromBufferAttribute(positions, i);
+    const bulge = surfaceOffsetZ(vertex.x, vertex.y, radiusX, radiusY, amount);
+    if (bulge <= 1) continue;
+    normal.set(vertex.x / rx2, vertex.y / ry2, bulge / az2).normalize();
+    if (vertex.z < bulge * 0.5) {
+      normal.z = -Math.abs(normal.z);
+      normal.normalize();
+    }
+    normals.setXYZ(i, normal.x, normal.y, normal.z);
+  }
+  normals.needsUpdate = true;
 }
 
 /** Translate a feature so its centroid sits on the head ellipsoid. */

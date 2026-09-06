@@ -15,6 +15,7 @@ import {
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  CircleGeometry,
   PlaneGeometry,
   ReplaceStencilOp,
   Scene,
@@ -51,7 +52,7 @@ const MOUTH_STENCIL = 3;
 /** Half of the face extrusion, used so features sit on the bulged front. */
 const FACE_FRONT = 11;
 
-type PathKind = "face" | "hair" | "feature" | "ear";
+type PathKind = "face" | "hair" | "feature" | "ear" | "wrap";
 
 interface ExtrudePart {
   mesh: Mesh;
@@ -160,6 +161,7 @@ export class CharacterScene {
   };
   private themeId = "";
   private readonly unitSphere = new SphereGeometry(1, 24, 18);
+  private readonly unitCircle = new CircleGeometry(1, 28);
   private readonly unitPlane = new PlaneGeometry(1, 1);
 
   constructor(canvas: HTMLCanvasElement) {
@@ -246,15 +248,15 @@ export class CharacterScene {
       leftEar: this.pathPart(this.materials.skin, 18, 0, "ear", 0, true),
       rightEar: this.pathPart(this.materials.skin, 18, 0, "ear", 0, true),
       face: this.pathPart(this.materials.skinFace, 22, 1, "face", 0, true),
-      leftSclera: this.pathPart(this.eyeMaterials.leftSclera, 4, 10, "feature", 2),
-      rightSclera: this.pathPart(this.eyeMaterials.rightSclera, 4, 10, "feature", 2),
-      leftUpperLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
-      leftLowerLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
-      rightUpperLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
-      rightLowerLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
+      leftSclera: this.pathPart(this.eyeMaterials.leftSclera, 3.2, 10, "wrap", 3),
+      rightSclera: this.pathPart(this.eyeMaterials.rightSclera, 3.2, 10, "wrap", 3),
+      leftUpperLid: this.pathPart(this.materials.lid, 2.8, 14, "wrap", 5),
+      leftLowerLid: this.pathPart(this.materials.lid, 2.8, 14, "wrap", 5),
+      rightUpperLid: this.pathPart(this.materials.lid, 2.8, 14, "wrap", 5),
+      rightLowerLid: this.pathPart(this.materials.lid, 2.8, 14, "wrap", 5),
       leftBrow: this.pathPart(this.materials.brow, 5.5, 15, "feature", 5),
       rightBrow: this.pathPart(this.materials.brow, 5.5, 15, "feature", 5),
-      nose: this.pathPart(this.materials.nose, 10, 16, "feature", 10, true),
+      nose: this.pathPart(this.materials.nose, 8, 16, "feature", 6, true),
       mouthOpening: this.pathPart(this.mouthMaterials.opening, 5, 17, "feature", 4),
       upperLip: this.pathPart(this.materials.upperLip, 5.5, 19, "feature", 6),
       lowerLip: this.pathPart(this.materials.lowerLip, 6, 19, "feature", 6),
@@ -277,10 +279,10 @@ export class CharacterScene {
 
     this.planes = {
       shadow: this.planePart(this.materials.shadow, 2),
-      blushLeft: this.planePart(this.materials.blush, 3),
-      blushRight: this.planePart(this.materials.blush, 3),
+      blushLeft: this.discPart(this.materials.blush, 3),
+      blushRight: this.discPart(this.materials.blush, 3),
       teeth: this.planePart(this.mouthMaterials.teeth, 18),
-      lipHighlight: this.planePart(this.overlays.lipSheen, 20),
+      lipHighlight: this.discPart(this.overlays.lipSheen, 20),
     };
 
     this.strokes = {
@@ -416,7 +418,7 @@ export class CharacterScene {
       data.dims.noseY + data.dims.noseHeight * 0.3,
       6.5,
       bulge,
-      14,
+      8,
     );
     this.spheres.hairHighlight.mesh.visible = data.hairPath.trim().length > 0;
     this.placeSphere(
@@ -509,6 +511,7 @@ export class CharacterScene {
       stroke.line.geometry.dispose();
     }
     this.unitSphere.dispose();
+    this.unitCircle.dispose();
     this.unitPlane.dispose();
     for (const material of Object.values(this.eyeMaterials)) {
       material.dispose();
@@ -553,6 +556,13 @@ export class CharacterScene {
 
   private planePart(material: Material, renderOrder: number): Mesh {
     const mesh = new Mesh(this.unitPlane, material);
+    mesh.renderOrder = renderOrder;
+    this.head.add(mesh);
+    return mesh;
+  }
+
+  private discPart(material: Material, renderOrder: number): Mesh {
+    const mesh = new Mesh(this.unitCircle, material);
     mesh.renderOrder = renderOrder;
     this.head.add(mesh);
     return mesh;
@@ -612,6 +622,17 @@ export class CharacterScene {
         geometry.translate(0, 0, 6);
       } else if (part.kind === "ear") {
         geometry.translate(0, 0, -14);
+      } else if (part.kind === "wrap") {
+        const rounded = roundExtrudedOutline(
+          geometry,
+          bulge.radiusX,
+          bulge.radiusY,
+          bulge.amount,
+          12,
+        );
+        geometry.dispose();
+        geometry = rounded;
+        geometry.translate(0, 0, FACE_FRONT - part.depth / 2 + part.extraZ);
       } else {
         const subdivided = subdivideFaces(geometry, 22);
         if (subdivided !== geometry) geometry.dispose();
@@ -697,7 +718,7 @@ export class CharacterScene {
     const x = cx;
     const y = -cy;
     mesh.position.set(x, y, this.headZ(x, y, bulge, extraZ));
-    mesh.scale.set(rx * 2, ry * 2, 1);
+    mesh.scale.set(rx, ry, 1);
     if (mesh.material instanceof MeshStandardMaterial) {
       mesh.material.opacity = opacity;
       mesh.material.transparent = opacity < 1;

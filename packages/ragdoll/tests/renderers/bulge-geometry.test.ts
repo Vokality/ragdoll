@@ -65,6 +65,33 @@ describe("head bulge", () => {
     geometry.dispose();
   });
 
+  it("shades the rounded disc with a smooth outward normal at the center", () => {
+    const shape = new Shape();
+    shape.absarc(0, 0, 50, 0, Math.PI * 2, false);
+    const extruded = new ExtrudeGeometry(shape, {
+      depth: 10,
+      bevelEnabled: false,
+      curveSegments: 16,
+    });
+    extruded.translate(0, 0, -5);
+    const geometry = roundExtrudedOutline(extruded, 50, 50, 30, 12);
+    extruded.dispose();
+    const positions = geometry.getAttribute("position");
+    const normals = geometry.getAttribute("normal");
+    let nz = 0;
+    let bestZ = -Infinity;
+    for (let i = 0; i < positions.count; i += 1) {
+      if (Math.hypot(positions.getX(i), positions.getY(i)) >= 6) continue;
+      const z = positions.getZ(i);
+      if (z > bestZ) {
+        bestZ = z;
+        nz = normals.getZ(i);
+      }
+    }
+    expect(nz).toBeGreaterThan(0.85);
+    geometry.dispose();
+  });
+
   it("scales the head ellipsoid from face dimensions", () => {
     const bulge = headBulgeParams(140, 170);
     expect(bulge.radiusX).toBeCloseTo(78.4);
