@@ -26,6 +26,7 @@ export class ChatApplicationService {
   private turnQueue = Promise.resolve();
   private pendingEventRun: Promise<void> | null = null;
   private activeUserTurn: AbortController | null = null;
+  private stopping = false;
 
   constructor(
     private readonly storage: StorageRepository,
@@ -42,6 +43,8 @@ export class ChatApplicationService {
 
   clearConversation(): Promise<OperationResult> {
     return this.enqueueTurn(async () => {
+      if (this.stopping)
+        return { success: false, error: "Application is shutting down" };
       await this.storage.update((draft) => {
         draft.conversation = [];
         draft.pendingAgentTurns = [];
@@ -58,6 +61,8 @@ export class ChatApplicationService {
     }
 
     return this.enqueueTurn(async () => {
+      if (this.stopping)
+        return { success: false, error: "Application is shutting down" };
       const abort = new AbortController();
       this.activeUserTurn = abort;
       let streamed = "";
@@ -107,7 +112,16 @@ export class ChatApplicationService {
     return { success: true };
   }
 
+  async destroy(): Promise<void> {
+    this.stopping = true;
+    this.activeUserTurn?.abort();
+    // An event may already have executed tools. Finish and persist that turn
+    // before unloading its extension; leave unstarted jobs for the next launch.
+    await this.turnQueue;
+  }
+
   schedulePendingEventTurns(): Promise<void> {
+    if (this.stopping) return Promise.resolve();
     if (this.pendingEventRun) return this.pendingEventRun;
 
     const run = this.enqueueTurn(async () => {
@@ -124,8 +138,9 @@ export class ChatApplicationService {
   }
 
   private async processPendingEventTurns(): Promise<void> {
-    while (true) {
+    while (!this.stopping) {
       const data = await this.storage.read();
+      if (this.stopping) return;
       const job = data.pendingAgentTurns[0];
       if (!job) return;
 

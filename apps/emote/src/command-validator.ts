@@ -64,14 +64,34 @@ function isAllowed<T extends string>(
   value: unknown,
   allowed: readonly T[],
 ): value is T {
-  return typeof value === "string" && allowed.includes(value as T);
+  return (
+    typeof value === "string" &&
+    allowed.some((candidate) => candidate === value)
+  );
 }
 
-export function validateCommand(raw: RawCommand): CommandValidationResult {
+function isCommandObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function validateCommand(raw: unknown): CommandValidationResult {
+  if (!isCommandObject(raw))
+    return { ok: false, reason: "Command must be an object" };
   if (typeof raw.type !== "string") {
     return { ok: false, reason: "Command missing type" };
   }
 
+  const numericFields =
+    raw.type === "setHeadPose"
+      ? ["duration", "yawDegrees", "pitchDegrees"]
+      : raw.type === "setMood" || raw.type === "triggerAction"
+        ? ["duration"]
+        : [];
+  for (const field of numericFields) {
+    if (raw[field] !== undefined && finiteNumber(raw[field]) === undefined) {
+      return { ok: false, reason: `${field} must be a finite number` };
+    }
+  }
   switch (raw.type) {
     case "show":
     case "hide":
@@ -118,12 +138,22 @@ export function validateCommand(raw: RawCommand): CommandValidationResult {
       };
     }
     case "setSpeechBubble": {
+      if (
+        raw.text !== undefined &&
+        raw.text !== null &&
+        typeof raw.text !== "string"
+      ) {
+        return {
+          ok: false,
+          reason: "Speech bubble text must be a string or null",
+        };
+      }
       if (raw.tone !== undefined && !isAllowed(raw.tone, VALID_TONES)) {
         return { ok: false, reason: `Unknown tone "${String(raw.tone)}"` };
       }
       const text =
         typeof raw.text === "string"
-          ? raw.text.trim().slice(0, MAX_BUBBLE_CHARACTERS)
+          ? Array.from(raw.text.trim()).slice(0, MAX_BUBBLE_CHARACTERS).join("")
           : "";
       return {
         ok: true,

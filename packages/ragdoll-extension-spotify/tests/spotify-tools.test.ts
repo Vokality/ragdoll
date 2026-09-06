@@ -133,3 +133,56 @@ describe("Spotify tools", () => {
     });
   });
 });
+
+it("validates playback arguments before handlers call the provider", async () => {
+  const calls: string[] = [];
+  const tools = createSpotifyTools(
+    createApi({
+      resume: async () => {
+        calls.push("resume");
+      },
+      playSearch: async () => {
+        calls.push("search");
+        return true;
+      },
+      skipToNext: async () => {
+        calls.push("next");
+      },
+      skipToPrevious: async () => {
+        calls.push("previous");
+      },
+    }),
+  );
+  const play = tools.find(
+    ({ definition }) => definition.function.name === "playSpotify",
+  );
+  const skip = tools.find(
+    ({ definition }) => definition.function.name === "skipSpotify",
+  );
+  if (!play || !skip) throw new Error("Missing Spotify playback tools");
+  for (const args of [
+    { query: 123 },
+    { query: "" },
+    { query: "jazz", type: "invalid" },
+    { type: "track" },
+  ]) {
+    const validation = play.validate?.(args);
+    expect(validation?.valid).toBe(false);
+    expect(await play.handler(args, {})).toEqual({
+      success: false,
+      error: validation?.error,
+    });
+  }
+  for (const args of [{}, { direction: "invalid" }, { direction: 1 }]) {
+    const validation = skip.validate?.(args);
+    expect(validation?.valid).toBe(false);
+    expect(await skip.handler(args, {})).toEqual({
+      success: false,
+      error: validation?.error,
+    });
+  }
+  expect(calls).toEqual([]);
+  await skip.handler({ direction: "next" }, {});
+  await skip.handler({ direction: "previous" }, {});
+  expect(calls).toEqual(["next", "previous"]);
+});

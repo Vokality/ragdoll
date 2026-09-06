@@ -49,9 +49,11 @@ export type ExtensionManagementGateway = Pick<
 >;
 
 export class ExtensionManagementService {
+  private toggleQueue: Promise<void> = Promise.resolve();
   constructor(private readonly api: ExtensionManagementGateway) {}
 
   async loadOverview(): Promise<ExtensionOverview> {
+    await this.toggleQueue;
     const [available, disabled, installed] = await Promise.all([
       this.api.getDiscoveredExtensions(),
       this.api.getDisabledExtensions(),
@@ -81,9 +83,21 @@ export class ExtensionManagementService {
     return this.api.updateExtension(extensionId);
   }
 
-  async setDisabled(extensionIds: string[]): Promise<void> {
-    const result = await this.api.setDisabledExtensions(extensionIds);
-    if (!result.success) throw new Error(result.error);
+  toggle(extensionId: string): Promise<string[]> {
+    const operation = this.toggleQueue.then(async () => {
+      const disabled = await this.api.getDisabledExtensions();
+      const next = disabled.includes(extensionId)
+        ? disabled.filter((id) => id !== extensionId)
+        : [...disabled, extensionId];
+      const result = await this.api.setDisabledExtensions(next);
+      if (!result.success) throw new Error(result.error);
+      return next;
+    });
+    this.toggleQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
   }
 
   async loadConfiguration(

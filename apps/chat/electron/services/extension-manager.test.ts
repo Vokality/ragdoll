@@ -855,3 +855,68 @@ describe("ExtensionManager built-in boundaries", () => {
     await manager.destroy();
   });
 });
+
+it.each(["disable", "destroy"])(
+  "serializes overlapping loads before %s",
+  async (operation) => {
+    let activations = 0;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const manager = createManager(undefined, [
+      {
+        descriptor: descriptor("queued", ["tools"], {
+          canDisable: true,
+          name: "Queued",
+        }),
+        createExtension: () =>
+          createExtension({
+            id: "queued",
+            name: "Queued",
+            version: "1.0.0",
+            tools: [
+              {
+                definition: {
+                  type: "function",
+                  function: {
+                    name: "queuedTool",
+                    description: "Test",
+                    parameters: { type: "object", properties: {} },
+                  },
+                },
+                handler: () => ({ success: true }),
+              },
+            ],
+            onInitialize: async () => {
+              if (++activations > 1) {
+                entered.resolve();
+                await release.promise;
+              }
+            },
+          }),
+      },
+    ]);
+    await manager.initialize();
+    await manager.unloadPackage("@example/queued");
+    const first = manager.loadPackage("@example/queued");
+    await entered.promise;
+    const second = manager.loadPackage("@example/queued");
+    const terminal =
+      operation === "disable"
+        ? manager.setDisabledExtensions(["queued"])
+        : manager.destroy();
+    release.resolve();
+    const results = await Promise.all([first, second]);
+    await terminal;
+    expect(results.every((result) => result.success)).toBe(true);
+    expect(activations).toBe(2);
+    if (operation === "disable")
+      expect(manager.getDisabledExtensions()).toEqual(["queued"]);
+    else
+      await expect(manager.loadPackage("@example/queued")).rejects.toThrow(
+        "shutting down",
+      );
+    expect(manager.getAvailableExtensions()).toEqual([]);
+    expect(manager.getTools()).toEqual([]);
+    await manager.destroy();
+  },
+);

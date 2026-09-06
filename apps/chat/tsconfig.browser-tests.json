@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["scripts/test-browser.ts", "tests/browser-runner.ts"]
+}

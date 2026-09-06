@@ -75,8 +75,9 @@ export interface HostConversationEventsCapability {
  * Storage surface scoped per extension.
  */
 export interface HostStorageCapability {
-  read<T = unknown>(extensionId: string, key: string): Promise<T | undefined>;
-  write<T = unknown>(extensionId: string, key: string, value: T): Promise<void>;
+  /** Stored values are untrusted; extensions validate their own state schemas. */
+  read(extensionId: string, key: string): Promise<unknown>;
+  write(extensionId: string, key: string, value: unknown): Promise<void>;
   delete(extensionId: string, key: string): Promise<void>;
   list(extensionId: string): Promise<string[]>;
 }

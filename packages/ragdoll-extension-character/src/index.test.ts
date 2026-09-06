@@ -79,3 +79,47 @@ describe("Character package boundaries", () => {
     ).rejects.toThrow("without an implementation");
   });
 });
+
+it("rejects non-finite and out-of-range character parameters before IPC", async () => {
+  const published: unknown[] = [];
+  const registry = createRegistry({
+    now: Date.now,
+    onListenerError: () => undefined,
+  });
+  await registry.register(createExtension(), {
+    host: hostWithIpc((_topic, payload) => published.push(payload)),
+  });
+  try {
+    for (const value of [NaN, Infinity, -Infinity, "1", null]) {
+      for (const [name, args] of [
+        ["setMood", { mood: "smile", duration: value }],
+        ["triggerAction", { action: "wink", duration: value }],
+        ["setHeadPose", { yawDegrees: value }],
+        ["setHeadPose", { pitchDegrees: value }],
+        ["setHeadPose", { duration: value }],
+      ] satisfies Array<[string, Record<string, unknown>]>) {
+        expect((await registry.executeTool(name, args)).success).toBe(false);
+      }
+    }
+    expect(
+      (await registry.executeTool("setHeadPose", { yawDegrees: 36 })).success,
+    ).toBe(false);
+    expect(published).toEqual([]);
+    expect(
+      (await registry.executeTool("setMood", { mood: "smile", duration: 0 }))
+        .success,
+    ).toBe(true);
+    expect(
+      (
+        await registry.executeTool("setHeadPose", {
+          yawDegrees: -35,
+          pitchDegrees: 20,
+          duration: 2,
+        })
+      ).success,
+    ).toBe(true);
+    expect(published).toHaveLength(2);
+  } finally {
+    await registry.destroy();
+  }
+});

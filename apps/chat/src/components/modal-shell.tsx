@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useLayoutEffect,
   useRef,
   type CSSProperties,
   type ReactNode,
@@ -24,13 +24,20 @@ export function ModalShell({
 }: ModalShellProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+    const previousFocus = document.activeElement;
     // Light dismiss (backdrop click) via the platform; React's typings
     // don't include the `closedby` attribute yet.
     dialog.setAttribute("closedby", "any");
     if (!dialog.open) dialog.showModal();
+    return () => {
+      dialog.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
   }, []);
 
   return (
@@ -39,7 +46,11 @@ export function ModalShell({
       className="modal-card card"
       style={{ maxWidth }}
       aria-label={title}
-      onClose={onClose}
+      onClose={(event) => {
+        // Strict Mode can close and reopen the same element before its queued
+        // native close event is delivered.
+        if (!event.currentTarget.open) onClose();
+      }}
     >
       <div style={styles.header}>
         <h2 style={styles.title}>{title}</h2>

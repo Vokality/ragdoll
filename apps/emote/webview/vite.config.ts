@@ -12,7 +12,6 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "../dist/webview"),
     emptyOutDir: true,
     sourcemap: false,
-    minify: "esbuild",
     cssCodeSplit: false,
     rollupOptions: {
       treeshake: true,

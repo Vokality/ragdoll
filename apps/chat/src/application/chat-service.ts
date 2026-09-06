@@ -1,7 +1,7 @@
 import type { ChatMessage } from "../domain/chat";
 import { getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
-import type { ChatGateway } from "./ports/chat-gateway";
+import type { ChatGateway, ChatSendResult } from "./ports/chat-gateway";
 import type {
   CharacterThemeId,
   CharacterVariantId,
@@ -22,10 +22,16 @@ export class ChatService {
   private messages: ChatMessage[] = [];
   private streamingContent = "";
   private conversationVersion = 0;
+  private readonly settingsVersions: Record<keyof ChatSettings, number> = {
+    theme: 0,
+    variant: 0,
+  };
+  private lifecycleVersion = 0;
   private snapshot: ChatSnapshot;
   private readonly listeners = new Set<() => void>();
   private unsubscribeStreaming: (() => void) | null = null;
   private startPromise: Promise<void> | null = null;
+  private activeSend: symbol | null = null;
 
   constructor(
     private readonly gateway: ChatGateway,
@@ -50,40 +56,49 @@ export class ChatService {
   start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
 
+    const lifecycleVersion = ++this.lifecycleVersion;
     this.unsubscribeStreaming = this.gateway.subscribeToStreaming({
       onText: (text) => {
+        if (this.lifecycleVersion !== lifecycleVersion) return;
         this.streamingContent += text;
         this.publish();
       },
-      onStreamEnd: () => this.finishStream(),
+      onStreamEnd: () => {
+        if (this.lifecycleVersion === lifecycleVersion) this.finishStream();
+      },
       onConversationChanged: (conversation) => {
+        if (this.lifecycleVersion !== lifecycleVersion) return;
         this.conversationVersion += 1;
         this.messages = conversation;
         this.dropStreamingContentIfPersisted();
         this.publish();
       },
     });
-    this.startPromise = this.hydrate().catch((error: unknown) => {
-      this.reportError(error);
-    });
+    this.startPromise = this.hydrate(lifecycleVersion).catch(
+      (error: unknown) => {
+        if (this.lifecycleVersion === lifecycleVersion) this.reportError(error);
+      },
+    );
     return this.startPromise;
   }
 
   stop(): void {
+    this.lifecycleVersion += 1;
     this.unsubscribeStreaming?.();
     this.unsubscribeStreaming = null;
     this.startPromise = null;
   }
 
-  readonly sendMessage = async (
-    message: string,
-  ): Promise<{ success: boolean; error?: string }> => {
+  readonly sendMessage = async (message: string): Promise<ChatSendResult> => {
     const trimmed = message.trim();
     if (!trimmed) return { success: false, error: "Message is empty" };
     if (this.snapshot.isLoading) {
       return { success: false, error: "Already processing" };
     }
 
+    const send = Symbol("chat turn");
+    this.activeSend = send;
+    const lifecycleVersion = this.lifecycleVersion;
     this.streamingContent = "";
     this.publish({ isLoading: true, isStreaming: true, error: null });
 
@@ -93,7 +108,35 @@ export class ChatService {
     } catch (error) {
       result = { success: false, error: this.getErrorMessage(error) };
     }
-    if (!result.success) {
+    if (this.activeSend !== send) return result;
+    if (result.success) {
+      if (this.lifecycleVersion !== lifecycleVersion) {
+        // A React subscription gap can lose text and the completion event.
+        // Recover the persisted response without replaying the user turn.
+        this.streamingContent = "";
+        const recoveryLifecycle = this.lifecycleVersion;
+        const conversationVersion = this.conversationVersion;
+        try {
+          const conversation = await this.gateway.fetchConversation();
+          if (
+            this.activeSend === send &&
+            this.lifecycleVersion === recoveryLifecycle &&
+            this.conversationVersion === conversationVersion
+          ) {
+            this.messages = conversation;
+            this.conversationVersion += 1;
+          }
+        } catch (error) {
+          if (
+            this.activeSend === send &&
+            this.lifecycleVersion === recoveryLifecycle
+          ) {
+            this.reportError(error);
+          }
+        }
+      }
+      if (this.activeSend === send) this.finishStream();
+    } else {
       this.streamingContent = "";
       this.publish({
         isLoading: false,
@@ -101,6 +144,7 @@ export class ChatService {
         error: result.error,
       });
     }
+    if (this.activeSend === send) this.activeSend = null;
     return result;
   };
 
@@ -116,6 +160,7 @@ export class ChatService {
   readonly changeTheme = async (theme: CharacterThemeId): Promise<boolean> => {
     try {
       await this.gateway.persistSettings({ theme });
+      this.settingsVersions.theme += 1;
       this.publish({
         settings: { ...this.snapshot.settings, theme },
         error: null,
@@ -132,6 +177,7 @@ export class ChatService {
   ): Promise<boolean> => {
     try {
       await this.gateway.persistSettings({ variant });
+      this.settingsVersions.variant += 1;
       this.publish({
         settings: { ...this.snapshot.settings, variant },
         error: null,
@@ -170,16 +216,29 @@ export class ChatService {
     callback: (name: string, args: Record<string, unknown>) => void,
   ): (() => void) => this.gateway.onFunctionCall(callback);
 
-  private async hydrate(): Promise<void> {
+  private async hydrate(lifecycleVersion: number): Promise<void> {
     const conversationVersion = this.conversationVersion;
+    const settingsVersions = { ...this.settingsVersions };
     const [settings, messages] = await Promise.all([
       this.gateway.fetchSettings(),
       this.gateway.fetchConversation(),
     ]);
+    if (this.lifecycleVersion !== lifecycleVersion) return;
     if (this.conversationVersion === conversationVersion) {
       this.messages = messages;
     }
-    this.publish({ settings });
+    this.publish({
+      settings: {
+        theme:
+          settingsVersions.theme === this.settingsVersions.theme
+            ? settings.theme
+            : this.snapshot.settings.theme,
+        variant:
+          settingsVersions.variant === this.settingsVersions.variant
+            ? settings.variant
+            : this.snapshot.settings.variant,
+      },
+    });
   }
 
   private finishStream(): void {

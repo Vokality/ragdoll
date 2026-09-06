@@ -236,3 +236,190 @@ describe("ExtensionRegistry capability integrity", () => {
     ).rejects.toThrow("without an implementation");
   });
 });
+
+describe("ExtensionRegistry concurrent registration", () => {
+  it("reserves an ID before activation and disposes only the accepted runtime", async () => {
+    const registry = createRegistry(registryDependencies);
+    const gate = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    let activations = 0;
+    let disposals = 0;
+    const instance: RagdollExtension = {
+      ...extension("pending", {}),
+      activate: async () => {
+        activations++;
+        started.resolve();
+        await gate.promise;
+        return {
+          tools: [tool("pendingTool")],
+          dispose: () => {
+            disposals++;
+          },
+        };
+      },
+    };
+    const first = registry.register(instance, { host });
+    await started.promise;
+    await expect(registry.register(instance, { host })).rejects.toThrow(
+      "already in progress",
+    );
+    gate.resolve();
+    await first;
+    expect(activations).toBe(1);
+    await registry.destroy();
+    expect(disposals).toBe(1);
+  });
+
+  it("waits for pending activation cleanup during destruction", async () => {
+    const registry = createRegistry(registryDependencies);
+    const gate = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    let disposed = false;
+    const pending = registry.register(
+      {
+        ...extension("pending", {}),
+        activate: async () => {
+          started.resolve();
+          await gate.promise;
+          return {
+            tools: [tool("pendingTool")],
+            dispose: () => {
+              disposed = true;
+            },
+          };
+        },
+      },
+      { host },
+    );
+    const outcome = pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await started.promise;
+    let destroyed = false;
+    const destruction = registry.destroy().then(() => {
+      destroyed = true;
+    });
+    await expect(
+      registry.register(extension("late", { tools: [tool("lateTool")] }), {
+        host,
+      }),
+    ).rejects.toThrow("destroyed");
+    expect(destroyed).toBe(false);
+    gate.resolve();
+    await destruction;
+    expect(await outcome).toBeInstanceOf(Error);
+    expect(String(await outcome)).toContain("destroyed");
+    expect(disposed).toBe(true);
+    expect(registry.getAllTools()).toEqual([]);
+  });
+
+  it("allows registered listeners to await another registration", async () => {
+    const registry = createRegistry(registryDependencies);
+    registry.on("extension:registered", async (event) => {
+      if (event.extensionId === "first") {
+        await registry.register(
+          extension("second", { tools: [tool("secondTool")] }),
+          { host },
+        );
+      }
+    });
+    await registry.register(
+      extension("first", { tools: [tool("firstTool")] }),
+      { host },
+    );
+    expect(registry.getExtensionIds()).toEqual(["first", "second"]);
+    await registry.destroy();
+  });
+
+  it("rechecks capability ownership after replacement cleanup yields", async () => {
+    const registry = createRegistry(registryDependencies);
+    const gate = Promise.withResolvers<void>();
+    const disposing = Promise.withResolvers<void>();
+    await registry.register(
+      extension("original", {
+        tools: [tool("shared")],
+        dispose: async () => {
+          disposing.resolve();
+          await gate.promise;
+        },
+      }),
+      { host },
+    );
+    let replacementDisposals = 0;
+    const replacing = registry.register(
+      extension("original", {
+        tools: [tool("shared")],
+        dispose: () => {
+          replacementDisposals++;
+        },
+      }),
+      { host, replace: true },
+    );
+    const outcome = replacing.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await disposing.promise;
+    await registry.register(
+      extension("competitor", { tools: [tool("shared")] }),
+      { host },
+    );
+    gate.resolve();
+    expect(await outcome).toBeInstanceOf(Error);
+    expect(String(await outcome)).toContain("conflicts");
+    expect(registry.has("original")).toBe(false);
+    expect(registry.has("competitor")).toBe(true);
+    expect(registry.hasTool("shared")).toBe(true);
+    expect(replacementDisposals).toBe(1);
+    await registry.destroy();
+  });
+});
+
+it("reports pending activation cleanup failures during destruction and still cleans registered runtimes", async () => {
+  const registry = createRegistry(registryDependencies);
+  const started = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  let healthyDisposed = false;
+  await registry.register(
+    extension("healthy", {
+      tools: [tool("healthy")],
+      dispose: () => {
+        healthyDisposed = true;
+      },
+    }),
+    { host },
+  );
+  const cleanupError = new Error("Pending runtime cleanup failed");
+  const pending = registry.register(
+    {
+      ...extension("pending", {}),
+      activate: async () => {
+        started.resolve();
+        await gate.promise;
+        return {
+          tools: [tool("pending")],
+          dispose: () => {
+            throw cleanupError;
+          },
+        };
+      },
+    },
+    { host },
+  );
+  const registrationOutcome = pending.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  await started.promise;
+  const destruction = registry.destroy();
+  const destructionOutcome = destruction.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  gate.resolve();
+  expect(await destructionOutcome).toBe(cleanupError);
+  expect(await registrationOutcome).toBeInstanceOf(AggregateError);
+  expect(healthyDisposed).toBe(true);
+  expect(registry.getAllTools()).toEqual([]);
+});

@@ -49,7 +49,6 @@ export function CharacterView({
       {/* Character */}
       <div style={styles.characterWrapper}>
         <RagdollCharacter
-          key={`${themeId}-${variantId}`}
           onControllerReady={handleControllerReady}
           onEventSubscriberError={onEventSubscriberError}
           theme={theme}

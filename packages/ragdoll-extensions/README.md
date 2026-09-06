@@ -162,3 +162,7 @@ await registry.unregister("weather");
 unsubscribe();
 await registry.destroy();
 ```
+
+Registration reserves the extension ID while activation is pending; another registration for that ID rejects, including a replacement. Different IDs may activate concurrently, but global capability conflicts are checked before their contributions become visible. Failed registration disposes the activated contribution.
+
+Destroying a registry closes it to new registrations and waits for pending activations to clean up before removing registered extensions. Create a new registry to start another host lifetime.

@@ -25,6 +25,7 @@ export interface OAuthRedirectService {
 
 export class OAuthLoopbackService implements OAuthRedirectService {
   private readonly servers = new Map<Server, () => void>();
+  private stopped = false;
 
   constructor(
     private readonly callbackTimeoutMs: number,
@@ -35,21 +36,31 @@ export class OAuthLoopbackService implements OAuthRedirectService {
     extensionId: string,
     callbackPort?: number,
   ): Promise<OAuthRedirectSession> {
+    if (this.stopped) throw new Error("OAuth callback service was stopped");
     const callbackPath = `/oauth/callback/${encodeURIComponent(extensionId)}`;
-    let settle:
-      | {
-          resolve: (value: OAuthCallbackResult) => void;
-          reject: (reason: Error) => void;
-        }
-      | undefined;
-    const result = new Promise<OAuthCallbackResult>((resolve, reject) => {
-      settle = { resolve, reject };
-    });
-
+    const callback = Promise.withResolvers<OAuthCallbackResult>();
+    const listening = Promise.withResolvers<void>();
+    // Startup can fail before a caller receives the session and its result.
+    // Observe rejection immediately while preserving it for the eventual caller.
+    void callback.promise.catch(() => undefined);
+    void listening.promise.catch(() => undefined);
+    const abort = new AbortController();
     let completed = false;
+    let timeout: unknown;
+
     const server = createServer((request, response) => {
-      const requestUrl = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
-      if (request.method !== "GET" || requestUrl.pathname !== callbackPath) {
+      let requestUrl: URL;
+      try {
+        requestUrl = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
+      } catch {
+        response.writeHead(400).end();
+        return;
+      }
+      if (
+        completed ||
+        request.method !== "GET" ||
+        requestUrl.pathname !== callbackPath
+      ) {
         response.writeHead(404).end();
         return;
       }
@@ -58,79 +69,69 @@ export class OAuthLoopbackService implements OAuthRedirectService {
         .writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
+          Connection: "close",
         })
         .end(
           "<!doctype html><html><body><p>Authentication complete. You can close this window.</p></body></html>",
         );
       completed = true;
-      settle?.resolve({
+      callback.resolve({
         code: requestUrl.searchParams.get("code"),
         error: requestUrl.searchParams.get("error"),
         state: requestUrl.searchParams.get("state"),
       });
-      this.closeServer(server);
+      this.timers.clearTimeout(timeout);
+      // Let the callback page finish sending before closing its connection.
+      server.close();
     });
-    this.servers.set(server, () => {
+
+    const cancel = (error: Error): void => {
       if (!completed) {
         completed = true;
-        settle?.reject(new Error("OAuth callback service was stopped"));
+        callback.reject(error);
       }
-      if (server.listening) server.close();
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      const onError = (error: Error) => {
-        server.off("listening", onListening);
-        reject(error);
-      };
-      const onListening = () => {
-        server.off("error", onError);
-        resolve();
-      };
-      server.once("error", onError);
-      server.once("listening", onListening);
-      server.listen(callbackPort ?? 0, LOOPBACK_HOST);
-    }).catch((error: unknown) => {
-      this.closeServer(server);
-      throw error;
-    });
-
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      this.closeServer(server);
-      throw new Error("OAuth callback listener did not bind to a TCP port");
-    }
-
-    const timeout = this.timers.setTimeout(() => {
-      if (completed) return;
-      completed = true;
-      settle?.reject(new Error("OAuth authorization timed out"));
-      this.closeServer(server);
-    }, this.callbackTimeoutMs);
-    result
-      .finally(() => this.timers.clearTimeout(timeout))
-      .catch(() => undefined);
-
-    return {
-      redirectUri: `http://${LOOPBACK_HOST}:${address.port}${callbackPath}`,
-      result,
-      close: () => {
-        if (!completed) {
-          completed = true;
-          settle?.reject(new Error("OAuth authorization was cancelled"));
-        }
-        this.closeServer(server);
-      },
+      listening.reject(error);
+      this.timers.clearTimeout(timeout);
+      abort.abort();
+      server.closeAllConnections();
+      this.servers.delete(server);
     };
+    this.servers.set(server, () =>
+      cancel(new Error("OAuth callback service was stopped")),
+    );
+    server.once("close", () => this.servers.delete(server));
+    server.on("error", cancel);
+    server.once("listening", listening.resolve);
+
+    try {
+      server.listen({
+        port: callbackPort ?? 0,
+        host: LOOPBACK_HOST,
+        signal: abort.signal,
+      });
+      await listening.promise;
+      if (this.stopped) throw new Error("OAuth callback service was stopped");
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("OAuth callback listener did not bind to a TCP port");
+      }
+      timeout = this.timers.setTimeout(() => {
+        cancel(new Error("OAuth authorization timed out"));
+      }, this.callbackTimeoutMs);
+      return {
+        redirectUri: `http://${LOOPBACK_HOST}:${address.port}${callbackPath}`,
+        result: callback.promise,
+        close: () => cancel(new Error("OAuth authorization was cancelled")),
+      };
+    } catch (error) {
+      cancel(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
   }
 
   destroy(): void {
+    this.stopped = true;
     for (const cancel of this.servers.values()) cancel();
     this.servers.clear();
-  }
-
-  private closeServer(server: Server): void {
-    this.servers.delete(server);
-    if (server.listening) server.close();
   }
 }

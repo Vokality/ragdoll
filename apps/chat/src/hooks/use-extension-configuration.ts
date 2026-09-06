@@ -30,16 +30,45 @@ export function useExtensionConfiguration(
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [owner, setOwner] = useState({ extensionId, isOpen, service });
+  if (
+    owner.extensionId !== extensionId ||
+    owner.isOpen !== isOpen ||
+    owner.service !== service
+  ) {
+    setOwner({ extensionId, isOpen, service });
+    setSchema(null);
+    setStatus(null);
+    setValues({});
+    setOauth(null);
+    setSaving(false);
+    setError(null);
+  }
   const loadVersion = useRef(0);
+  const oauthVersion = useRef(0);
+  const savingRef = useRef(false);
+  const fieldVersions = useRef(new Map<string, number>());
 
   const loadOAuth = useCallback(async () => {
-    setOauth(await service.getOAuthState(extensionId));
+    const version = loadVersion.current;
+    const request = ++oauthVersion.current;
+    try {
+      const next = await service.getOAuthState(extensionId);
+      if (version === loadVersion.current && request === oauthVersion.current)
+        setOauth(next);
+    } catch (error) {
+      if (version === loadVersion.current && request === oauthVersion.current)
+        setError(getErrorMessage(error));
+    }
   }, [extensionId, service]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const version = ++loadVersion.current;
+    const oauthRequest = ++oauthVersion.current;
+    savingRef.current = false;
+    fieldVersions.current.clear();
 
     void (async () => {
       try {
@@ -52,7 +81,7 @@ export function useExtensionConfiguration(
         setSchema(configuration?.schema ?? null);
         setStatus(configuration?.status ?? null);
         setValues(configuration?.values ?? {});
-        setOauth(nextOAuth);
+        if (oauthRequest === oauthVersion.current) setOauth(nextOAuth);
       } catch (loadError) {
         if (version !== loadVersion.current) return;
         setError(getErrorMessage(loadError));
@@ -82,6 +111,7 @@ export function useExtensionConfiguration(
 
   const changeValue = useCallback(
     (key: string, value: ExtensionConfigValue) => {
+      fieldVersions.current.set(key, (fieldVersions.current.get(key) ?? 0) + 1);
       setValues((current) => ({ ...current, [key]: value }));
       setError(null);
     },
@@ -89,25 +119,46 @@ export function useExtensionConfiguration(
   );
 
   const save = useCallback(async () => {
-    if (!schema) return;
+    if (!schema || savingRef.current) return;
+    const version = loadVersion.current;
+    const savedFieldVersions = new Map(fieldVersions.current);
+    const oauthRequest = oauthVersion.current;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
       const { configuration, oauth: nextOAuth } =
         await service.saveConfiguration(extensionId, values);
+      if (version !== loadVersion.current) return;
       setSchema(configuration.schema);
       setStatus(configuration.status);
-      setValues(configuration.values);
-      setOauth(nextOAuth);
+      const editedKeys = new Set(
+        [...fieldVersions.current]
+          .filter(([key, revision]) => revision !== savedFieldVersions.get(key))
+          .map(([key]) => key),
+      );
+      setValues((current) => {
+        const next = { ...configuration.values };
+        for (const [key, value] of Object.entries(current)) {
+          if (editedKeys.has(key)) next[key] = value;
+        }
+        return next;
+      });
+      if (oauthRequest === oauthVersion.current) setOauth(nextOAuth);
       if (configuration.status.isConfigured) onConfigured?.();
     } catch (saveError) {
-      setError(getErrorMessage(saveError));
+      if (version === loadVersion.current) setError(getErrorMessage(saveError));
     } finally {
-      setSaving(false);
+      if (version === loadVersion.current) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }, [extensionId, onConfigured, schema, service, values]);
 
   const connect = useCallback(async () => {
+    const version = loadVersion.current;
+    oauthVersion.current += 1;
     setError(null);
     setOauth((current) =>
       current ? { ...current, status: "connecting" } : current,
@@ -115,17 +166,20 @@ export function useExtensionConfiguration(
     try {
       await service.startOAuth(extensionId);
     } catch (connectError) {
+      if (version !== loadVersion.current) return;
       setError(getErrorMessage(connectError));
       await loadOAuth();
     }
   }, [extensionId, loadOAuth, service]);
 
   const disconnect = useCallback(async () => {
+    const version = loadVersion.current;
     try {
       await service.disconnectOAuth(extensionId);
-      await loadOAuth();
+      if (version === loadVersion.current) await loadOAuth();
     } catch (disconnectError) {
-      setError(getErrorMessage(disconnectError));
+      if (version === loadVersion.current)
+        setError(getErrorMessage(disconnectError));
     }
   }, [extensionId, loadOAuth, service]);
 

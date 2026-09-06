@@ -91,15 +91,20 @@ export class OAuthManager implements HostOAuthCapability {
   private authorizationCompletion: Promise<void> | null = null;
   private pendingAuthorization: PendingAuthorization | null = null;
   private initialized = false;
+  private readonly lifetime = new AbortController();
+  private authorizationAttempt: symbol | null = null;
 
   constructor(private readonly config: OAuthManagerConfig) {}
 
   async initialize(): Promise<void> {
+    this.lifetime.signal.throwIfAborted();
     if (this.initialized) return;
     this.initialized = true;
 
     try {
-      this.tokens = await this.config.loadTokens();
+      const tokens = await this.config.loadTokens();
+      this.lifetime.signal.throwIfAborted();
+      this.tokens = tokens;
       if (!this.tokens) return;
 
       if (!this.isExpired(this.tokens)) {
@@ -120,7 +125,7 @@ export class OAuthManager implements HostOAuthCapability {
 
       this.setState({ status: "expired", isAuthenticated: false });
     } catch (error) {
-      this.fail(error);
+      if (!this.lifetime.signal.aborted) this.fail(error);
     }
   }
 
@@ -134,14 +139,22 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   async startFlow(): Promise<string> {
+    this.lifetime.signal.throwIfAborted();
     const clientId = this.config.getClientId();
     if (!clientId) throw new Error("OAuth client ID is not configured");
 
     this.cancelPendingAuthorization();
+    const attempt = Symbol("authorization");
+    this.authorizationAttempt = attempt;
     const session = await this.config.redirects.createSession(
       this.config.extensionId,
       this.config.oauthConfig.callbackPort,
     );
+    if (this.authorizationAttempt !== attempt || this.lifetime.signal.aborted) {
+      void session.result.catch(() => undefined);
+      session.close();
+      throw new Error("OAuth authorization was cancelled");
+    }
     const transaction: PendingAuthorization = {
       session,
       state: generateRandomString(64),
@@ -161,6 +174,8 @@ export class OAuthManager implements HostOAuthCapability {
     let challenge: string;
     try {
       challenge = await generateCodeChallenge(transaction.verifier);
+      if (this.pendingAuthorization !== transaction)
+        throw new Error("OAuth authorization was cancelled");
     } catch (error) {
       if (this.pendingAuthorization === transaction) {
         this.pendingAuthorization = null;
@@ -200,6 +215,7 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   async getAccessToken(): Promise<string | null> {
+    this.lifetime.signal.throwIfAborted();
     if (!this.tokens?.accessToken) return null;
     if (this.isExpired(this.tokens, TOKEN_EXPIRY_SKEW_MS)) {
       if (!this.tokens.refreshToken) {
@@ -208,7 +224,8 @@ export class OAuthManager implements HostOAuthCapability {
       }
       await this.refreshAccessToken();
     }
-    return this.tokens.accessToken;
+    this.lifetime.signal.throwIfAborted();
+    return this.tokens?.accessToken ?? null;
   }
 
   async disconnect(): Promise<void> {
@@ -216,8 +233,9 @@ export class OAuthManager implements HostOAuthCapability {
     this.cancelPendingAuthorization();
     await this.authorizationCompletion?.catch(() => undefined);
     await this.refreshPromise?.catch(() => undefined);
-    this.tokens = null;
+    this.clearRefreshTimer();
     await this.config.clearTokens();
+    this.tokens = null;
     this.setState({
       status: "disconnected",
       isAuthenticated: false,
@@ -227,10 +245,15 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   isAuthenticated(): boolean {
-    return this.state.isAuthenticated && this.tokens !== null;
+    return (
+      !this.lifetime.signal.aborted &&
+      this.state.isAuthenticated &&
+      this.tokens !== null
+    );
   }
 
   destroy(): void {
+    this.lifetime.abort(new Error("OAuth manager was destroyed"));
     this.clearRefreshTimer();
     this.cancelPendingAuthorization();
     this.listeners.clear();
@@ -242,16 +265,16 @@ export class OAuthManager implements HostOAuthCapability {
     try {
       const callback = await transaction.session.result;
       if (this.pendingAuthorization !== transaction) return;
-      this.validateCallback(callback, transaction.state);
+      const code = this.validateCallback(callback, transaction.state);
       const tokens = await this.exchangeAuthorizationCode(
-        callback.code!,
+        code,
         transaction.verifier,
         transaction.session.redirectUri,
       );
       if (this.pendingAuthorization !== transaction) return;
-      this.tokens = tokens;
       await this.config.saveTokens(tokens);
       if (this.pendingAuthorization !== transaction) return;
+      this.tokens = tokens;
       this.markConnected();
       this.log("info", "OAuth connected");
       this.pendingAuthorization = null;
@@ -266,7 +289,7 @@ export class OAuthManager implements HostOAuthCapability {
   private validateCallback(
     callback: OAuthCallbackResult,
     expectedState: string,
-  ): void {
+  ): string {
     if (callback.state !== expectedState) {
       throw new Error("OAuth callback state did not match the active flow");
     }
@@ -276,6 +299,7 @@ export class OAuthManager implements HostOAuthCapability {
     if (!callback.code) {
       throw new Error("OAuth callback is missing an authorization code");
     }
+    return callback.code;
   }
 
   private async exchangeAuthorizationCode(
@@ -304,6 +328,7 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   private async performTokenRefresh(): Promise<void> {
+    this.lifetime.signal.throwIfAborted();
     const currentTokens = this.tokens;
     const refreshToken = currentTokens?.refreshToken;
     if (!refreshToken) throw new Error("No OAuth refresh token is available");
@@ -315,12 +340,15 @@ export class OAuthManager implements HostOAuthCapability {
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       });
-      this.tokens = this.toTokens(response, currentTokens);
-      await this.config.saveTokens(this.tokens);
+      this.lifetime.signal.throwIfAborted();
+      const tokens = this.toTokens(response, currentTokens);
+      await this.config.saveTokens(tokens);
+      this.lifetime.signal.throwIfAborted();
+      this.tokens = tokens;
       this.markConnected();
       this.log("debug", "OAuth access token refreshed");
     } catch (error) {
-      this.fail(error);
+      if (!this.lifetime.signal.aborted) this.fail(error);
       throw error;
     }
   }
@@ -332,6 +360,7 @@ export class OAuthManager implements HostOAuthCapability {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(parameters),
+      signal: this.lifetime.signal,
     });
     if (!response.ok) {
       throw new Error(
@@ -398,12 +427,16 @@ export class OAuthManager implements HostOAuthCapability {
 
   private scheduleTokenRefresh(): void {
     this.clearRefreshTimer();
-    if (!this.tokens?.expiresAt || !this.tokens.refreshToken) return;
+    if (
+      this.lifetime.signal.aborted ||
+      !this.tokens?.expiresAt ||
+      !this.tokens.refreshToken
+    )
+      return;
 
-    const delay = Math.max(
-      0,
-      this.tokens.expiresAt - this.config.now() - SCHEDULED_REFRESH_LEAD_MS,
-    );
+    const remaining = Math.max(0, this.tokens.expiresAt - this.config.now());
+    const delay =
+      remaining - Math.min(SCHEDULED_REFRESH_LEAD_MS, remaining / 2);
     this.refreshTimer = this.config.timers.setTimeout(() => {
       void this.refreshAccessToken().catch((error) => {
         this.log("error", "Scheduled OAuth token refresh failed", error);
@@ -418,6 +451,7 @@ export class OAuthManager implements HostOAuthCapability {
   }
 
   private cancelPendingAuthorization(): void {
+    this.authorizationAttempt = null;
     const pending = this.pendingAuthorization;
     this.pendingAuthorization = null;
     pending?.session.close();

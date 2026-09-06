@@ -187,7 +187,6 @@ export function App() {
         case "setTheme": {
           const newTheme = getTheme(message.themeId);
           setTheme(newTheme);
-          ctrl.setTheme(newTheme.id);
           break;
         }
         case "setVariant":
@@ -199,12 +198,6 @@ export function App() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
-
-  useEffect(() => {
-    if (controller) {
-      controller.setTheme(theme.id);
-    }
-  }, [controller, theme]);
 
   useEffect(() => {
     vscode.setState({
@@ -222,7 +215,6 @@ export function App() {
       {showOverlay && <StatusOverlay variant={overlayVariant} />}
       <div style={styles.characterContainer}>
         <RagdollCharacter
-          key={`${theme.id}-${variant}`}
           onControllerReady={handleControllerReady}
           onEventSubscriberError={(error) => {
             console.error("Ragdoll event subscriber failed", error);

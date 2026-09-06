@@ -41,3 +41,39 @@ describe("validateCommand", () => {
     });
   });
 });
+
+it("rejects non-object transport payloads without throwing", () => {
+  for (const value of [null, undefined, [], 42, "setMood", true]) {
+    expect(validateCommand(value)).toEqual({
+      ok: false,
+      reason: "Command must be an object",
+    });
+  }
+});
+
+it("rejects invalid supplied numbers instead of treating them as omitted", () => {
+  for (const value of [NaN, Infinity, -Infinity, null, "1"]) {
+    expect(
+      validateCommand({ type: "setMood", mood: "smile", duration: value }).ok,
+    ).toBe(false);
+    expect(validateCommand({ type: "setHeadPose", yawDegrees: value }).ok).toBe(
+      false,
+    );
+  }
+});
+
+it("keeps complete Unicode characters at the speech-bubble limit", () => {
+  const result = validateCommand({
+    type: "setSpeechBubble",
+    text: "a".repeat(239) + "🌍extra",
+  });
+  expect(result).toEqual({
+    ok: true,
+    command: {
+      type: "setSpeechBubble",
+      text: "a".repeat(239) + "🌍",
+      tone: "default",
+    },
+  });
+  expect(validateCommand({ type: "setSpeechBubble", text: {} }).ok).toBe(false);
+});

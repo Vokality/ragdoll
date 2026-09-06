@@ -47,7 +47,9 @@ export function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         },
       },
       handler: async (args) => {
-        const { query, type } = args as PlaySpotifyArgs;
+        const parsed = parsePlay(args);
+        if (!parsed.valid) return { success: false, error: parsed.error };
+        const { query, type } = parsed.args;
         try {
           if (!query) {
             await api.resume();
@@ -59,7 +61,7 @@ export function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
           return toolFailure(error);
         }
       },
-      validate: validatePlay,
+      validate: (args) => validationResult(parsePlay(args)),
     },
     {
       definition: {
@@ -106,7 +108,9 @@ export function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
         },
       },
       handler: async (args) => {
-        const { direction } = args as unknown as SkipSpotifyArgs;
+        const parsed = parseSkip(args);
+        if (!parsed.valid) return { success: false, error: parsed.error };
+        const { direction } = parsed.args;
         try {
           if (direction === "next") {
             await api.skipToNext();
@@ -124,7 +128,7 @@ export function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
           return toolFailure(error);
         }
       },
-      validate: validateSkip,
+      validate: (args) => validationResult(parseSkip(args)),
     },
     {
       definition: {
@@ -155,7 +159,20 @@ export function createSpotifyTools(api: SpotifyApiClient): ExtensionTool[] {
   ];
 }
 
-function validatePlay(args: Record<string, unknown>): ValidationResult {
+type ParsedArguments<T> =
+  { valid: true; args: T } | { valid: false; error: string };
+
+function validationResult<T>(result: ParsedArguments<T>): ValidationResult {
+  return result.valid ? { valid: true } : result;
+}
+
+function isSearchType(value: unknown): value is SpotifySearchType {
+  return SEARCH_TYPES.some((type) => type === value);
+}
+
+function parsePlay(
+  args: Record<string, unknown>,
+): ParsedArguments<PlaySpotifyArgs> {
   const unsupported = unsupportedArgument(args, ["query", "type"]);
   if (unsupported) return unsupported;
   if (
@@ -164,10 +181,7 @@ function validatePlay(args: Record<string, unknown>): ValidationResult {
   ) {
     return { valid: false, error: "query must be a non-empty string" };
   }
-  if (
-    args.type !== undefined &&
-    !SEARCH_TYPES.includes(args.type as SpotifySearchType)
-  ) {
+  if (args.type !== undefined && !isSearchType(args.type)) {
     return {
       valid: false,
       error: `type must be one of: ${SEARCH_TYPES.join(", ")}`,
@@ -176,16 +190,18 @@ function validatePlay(args: Record<string, unknown>): ValidationResult {
   if (args.type !== undefined && args.query === undefined) {
     return { valid: false, error: "type requires query" };
   }
-  return { valid: true };
+  return { valid: true, args: { query: args.query, type: args.type } };
 }
 
-function validateSkip(args: Record<string, unknown>): ValidationResult {
+function parseSkip(
+  args: Record<string, unknown>,
+): ParsedArguments<SkipSpotifyArgs> {
   const unsupported = unsupportedArgument(args, ["direction"]);
   if (unsupported) return unsupported;
   if (args.direction !== "next" && args.direction !== "previous") {
     return { valid: false, error: "direction must be 'next' or 'previous'" };
   }
-  return { valid: true };
+  return { valid: true, args: { direction: args.direction } };
 }
 
 function validateNoArguments(args: Record<string, unknown>): ValidationResult {
@@ -195,7 +211,7 @@ function validateNoArguments(args: Record<string, unknown>): ValidationResult {
 function unsupportedArgument(
   args: Record<string, unknown>,
   supported: readonly string[],
-): ValidationResult | null {
+): { valid: false; error: string } | null {
   const argument = Object.keys(args).find((key) => !supported.includes(key));
   return argument
     ? { valid: false, error: `unsupported argument: ${argument}` }

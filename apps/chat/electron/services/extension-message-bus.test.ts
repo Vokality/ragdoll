@@ -39,8 +39,36 @@ describe("ExtensionMessageBus", () => {
     expect(() => ipc.publish("pomodoro:tick", {})).toThrow(
       "cannot use IPC topic 'pomodoro:tick'",
     );
-    expect(() => ipc.subscribe("extension-tool:character", () => undefined)).toThrow(
-      "cannot use IPC topic 'extension-tool:character'",
-    );
+    expect(() =>
+      ipc.subscribe("extension-tool:character", () => undefined),
+    ).toThrow("cannot use IPC topic 'extension-tool:character'");
   });
+});
+
+it("rejects malformed tool arguments before forwarding", () => {
+  const calls: unknown[] = [];
+  const ipc = new ExtensionMessageBus((...args) =>
+    calls.push(args),
+  ).forExtension("character");
+  for (const args of [null, [], "smile", 2]) {
+    expect(() =>
+      ipc.publish("extension-tool:character", { tool: "setMood", args }),
+    ).toThrow();
+  }
+  expect(() =>
+    ipc.publish("extension-tool:character", { tool: "", args: {} }),
+  ).toThrow();
+  expect(calls).toHaveLength(0);
+});
+
+it("an old unsubscribe cannot remove listeners registered after clear", () => {
+  const bus = new ExtensionMessageBus(() => undefined);
+  const ipc = bus.forExtension("tasks");
+  const oldUnsubscribe = ipc.subscribe("tasks:changed", () => undefined);
+  bus.clear();
+  const received: unknown[] = [];
+  ipc.subscribe("tasks:changed", (payload) => received.push(payload));
+  oldUnsubscribe();
+  ipc.publish("tasks:changed", 1);
+  expect(received).toEqual([1]);
 });

@@ -290,3 +290,33 @@ describe("OpenAIAgentRunner user tool rounds", () => {
     ]);
   });
 });
+
+describe("user-turn text recovery", () => {
+  it("recovers an empty final response without repeating a completed tool", async () => {
+    const { runner, session, executed } = createRunner(
+      [
+        round(toolCall("move", "tic_tac_toe_place", { row: 0, col: 0 })),
+        responseRound(""),
+        responseRound("Done."),
+      ],
+      [{ success: true }],
+    );
+    expect(await runner.runUserTurn("key", [], () => undefined)).toBe("Done.");
+    expect(executed).toHaveLength(1);
+    expect(session.toolChoices).toEqual(["auto", "auto", "none"]);
+    expect(session.toolNames[2]).toEqual([]);
+    expect(session.messages[2].some((message) => message.role === "tool")).toBe(
+      true,
+    );
+  });
+  it("stops after one empty recovery response", async () => {
+    const { runner, session } = createRunner(
+      [responseRound(""), responseRound("")],
+      [],
+    );
+    await expect(
+      runner.runUserTurn("key", [], () => undefined),
+    ).rejects.toThrow("empty response");
+    expect(session.toolChoices).toEqual(["auto", "none"]);
+  });
+});

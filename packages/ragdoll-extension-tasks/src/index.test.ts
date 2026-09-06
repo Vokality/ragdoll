@@ -14,6 +14,31 @@ import { createExtension } from "./index.js";
 const REQUIRED_CAPABILITIES = ["storage", "logger"];
 
 describe("Tasks package boundaries", () => {
+  it("rejects corrupt stored state before exposing task tools", async () => {
+    const host: ExtensionHostEnvironment = {
+      capabilities: new Set<ExtensionHostCapability>(REQUIRED_CAPABILITIES),
+      storage: {
+        read: async () => ({
+          tasks: [],
+          activeTaskId: "missing",
+          isExpanded: false,
+        }),
+        write: async () => {
+          throw new Error("Corrupt state must not be overwritten");
+        },
+        delete: async () => {},
+        list: async () => [],
+      },
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+    };
+    await expect(
+      createExtension().activate(host, {
+        instanceId: "tasks-test",
+        createdAt: 0,
+      }),
+    ).rejects.toThrow("Active task must reference a stored task");
+  });
+
   it("publishes its required host capabilities in package and runtime manifests", () => {
     const descriptor = createExtensionPackageDescriptor(
       parseExtensionPackageJson(JSON.stringify(packageJson)),

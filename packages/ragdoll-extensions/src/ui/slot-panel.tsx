@@ -6,11 +6,14 @@
 
 import {
   useState,
+  useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   type CSSProperties,
   type FormEvent,
 } from "react";
+import { usePanelAction } from "./use-panel-action.js";
 import { useSlotState } from "./hooks.js";
 import type {
   SlotPanelProps,
@@ -64,6 +67,7 @@ interface SlotPanelBaseProps {
  */
 export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
   const [mounted, setMounted] = useState(isOpen);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   // Mount immediately when opened; keep rendering through the exit animation.
   if (isOpen && !mounted) {
@@ -82,18 +86,21 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
     onClose();
   }, [onClose]);
 
-  // Close on Escape while the sheet is open, matching modal behavior.
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        handleClose();
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!mounted || !dialog) return;
+    const previousFocus = document.activeElement;
+    dialog.setAttribute("closedby", "any");
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      // React may detach the dialog before cleanup, bypassing the browser's
+      // normal close-time focus restoration.
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true });
       }
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, handleClose]);
+  }, [mounted]);
 
   if (!mounted) {
     return null;
@@ -105,18 +112,16 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
     <>
       <style>{panelStyles}</style>
 
-      {/* Backdrop */}
-      <div
-        className={`slot-panel-backdrop ${isExiting ? "exiting" : ""}`}
-        onClick={handleClose}
-      />
-
       {/* Sheet */}
-      <div
+      <dialog
+        ref={dialogRef}
         className={`slot-panel-sheet ${panel.type === "grid" ? "slot-panel-sheet-grid" : ""} ${panel.type === "cards" ? "slot-panel-sheet-cards" : ""} ${isExiting ? "exiting" : ""}`}
-        role="dialog"
-        aria-modal="true"
         aria-label={panel.title}
+        onCancel={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (isOpen) handleClose();
+        }}
       >
         {/* Handle */}
         <div style={styles.handleWrapper}>
@@ -130,7 +135,7 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
         ) : (
           <CardsPanel config={panel} onClose={handleClose} />
         )}
-      </div>
+      </dialog>
     </>
   );
 }
@@ -150,16 +155,20 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
     attemptId: card.attemptId,
     draft: "",
     pending: false,
+    error: "",
   });
 
   if (form.attemptId !== card.attemptId) {
-    setForm({ attemptId: card.attemptId, draft: "", pending: false });
+    setForm({
+      attemptId: card.attemptId,
+      draft: "",
+      pending: false,
+      error: "",
+    });
   }
 
-  const draft =
-    form.attemptId === card.attemptId ? form.draft : "";
-  const pending =
-    form.attemptId === card.attemptId ? form.pending : false;
+  const draft = form.attemptId === card.attemptId ? form.draft : "";
+  const pending = form.attemptId === card.attemptId ? form.pending : false;
 
   const canSubmit =
     card.face === "front" &&
@@ -167,15 +176,31 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
     config.answerInput?.disabled !== true &&
     !pending;
 
+  const submittingAttempt = useRef<string | null>(null);
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canSubmit || !config.onSubmitAnswer) return;
+    if (
+      !canSubmit ||
+      !config.onSubmitAnswer ||
+      submittingAttempt.current === card.attemptId
+    )
+      return;
     const answer = draft.trim();
     if (!answer) return;
-    setForm((current) => ({ ...current, pending: true }));
+    submittingAttempt.current = card.attemptId;
+    setForm((current) => ({ ...current, pending: true, error: "" }));
     try {
       await config.onSubmitAnswer(answer);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setForm((current) =>
+        current.attemptId === card.attemptId
+          ? { ...current, error: message }
+          : current,
+      );
     } finally {
+      if (submittingAttempt.current === card.attemptId)
+        submittingAttempt.current = null;
       setForm((current) =>
         current.attemptId === card.attemptId
           ? { ...current, pending: false }
@@ -259,15 +284,19 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
 
         {card.face === "front" && config.answerInput ? (
           <form style={styles.answerForm} onSubmit={handleSubmit}>
+            {form.attemptId === card.attemptId && form.error ? (
+              <p role="alert">{form.error}</p>
+            ) : null}
             <input
               type="text"
               value={draft}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  draft: event.target.value,
-                }))
-              }
+                  draft: value,
+                }));
+              }}
               placeholder={config.answerInput.placeholder ?? "Type your answer"}
               maxLength={config.answerInput.maxLength}
               disabled={!canSubmit}
@@ -424,6 +453,7 @@ interface GridCellProps {
 }
 
 function GridCell({ cell, index }: GridCellProps) {
+  const interaction = usePanelAction();
   const statusStyle = getGridStatusStyle(cell.status);
   const clickable = typeof cell.onClick === "function" && !cell.disabled;
 
@@ -431,8 +461,8 @@ function GridCell({ cell, index }: GridCellProps) {
     <button
       type="button"
       className="slot-panel-grid-cell"
-      onClick={clickable ? cell.onClick : undefined}
-      disabled={!clickable}
+      onClick={clickable ? () => void interaction.run(cell.onClick) : undefined}
+      disabled={!clickable || interaction.pending}
       aria-label={
         cell.ariaLabel ??
         (cell.sublabel
@@ -446,6 +476,7 @@ function GridCell({ cell, index }: GridCellProps) {
         cursor: clickable ? "pointer" : "default",
       }}
     >
+      {interaction.error ? <span role="alert">{interaction.error}</span> : null}
       <span style={styles.gridCellLabel}>{cell.label || "\u00A0"}</span>
       {cell.sublabel && (
         <span style={styles.gridCellSublabel}>{cell.sublabel}</span>
@@ -534,34 +565,42 @@ function PanelSection({ section }: PanelSectionProps) {
   return (
     <section style={styles.section}>
       <div style={styles.sectionHeader}>
-        <h3
-          style={{
-            ...styles.sectionTitle,
-            cursor: section.collapsible ? "pointer" : "default",
-          }}
-          onClick={
-            section.collapsible ? () => setIsCollapsed(!isCollapsed) : undefined
-          }
-        >
-          {section.collapsible && (
-            <span style={{ marginRight: "8px" }}>
-              {isCollapsed ? "▸" : "▾"}
-            </span>
+        <h3 style={styles.sectionTitle}>
+          {section.collapsible ? (
+            <button
+              type="button"
+              aria-expanded={!isCollapsed}
+              onClick={() => setIsCollapsed((current) => !current)}
+              style={{
+                border: 0,
+                padding: 0,
+                background: "transparent",
+                color: "inherit",
+                font: "inherit",
+                textTransform: "inherit",
+                letterSpacing: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              <span aria-hidden="true" style={{ marginRight: "8px" }}>
+                {isCollapsed ? "▸" : "▾"}
+              </span>
+              {section.title} ({section.items.length})
+            </button>
+          ) : (
+            <>
+              {section.title} ({section.items.length})
+            </>
           )}
-          {section.title} ({section.items.length})
         </h3>
         {section.actions && (
           <div style={styles.sectionActions}>
             {section.actions.map((action) => (
-              <button
+              <ActionButton
                 key={action.id}
-                onClick={action.onClick}
-                disabled={action.disabled}
-                style={styles.sectionActionButton}
-                className="slot-panel-section-action"
-              >
-                {action.label}
-              </button>
+                action={action}
+                appearance="section"
+              />
             ))}
           </div>
         )}
@@ -588,6 +627,8 @@ interface PanelItemProps {
 }
 
 function PanelItem({ item, index }: PanelItemProps) {
+  const interaction = usePanelAction();
+  const Content = item.onClick ? "button" : "div";
   const statusStyle = getStatusStyle(item.status);
 
   return (
@@ -601,7 +642,8 @@ function PanelItem({ item, index }: PanelItemProps) {
     >
       {item.checkable && (
         <button
-          onClick={item.onToggle}
+          onClick={() => void interaction.run(item.onToggle)}
+          disabled={!item.onToggle || interaction.pending}
           style={{
             ...styles.checkbox,
             ...(item.checked && styles.checkboxChecked),
@@ -621,10 +663,22 @@ function PanelItem({ item, index }: PanelItemProps) {
         />
       )}
 
-      <div
-        style={styles.itemContent}
+      <Content
+        {...(item.onClick
+          ? { type: "button" as const, disabled: interaction.pending }
+          : {})}
+        style={{
+          ...styles.itemContent,
+          border: 0,
+          background: "transparent",
+          color: "inherit",
+          font: "inherit",
+          textAlign: "left",
+        }}
         className={item.onClick ? "slot-panel-item-clickable" : undefined}
-        onClick={item.onClick}
+        onClick={
+          item.onClick ? () => void interaction.run(item.onClick) : undefined
+        }
       >
         <span
           style={{
@@ -637,7 +691,10 @@ function PanelItem({ item, index }: PanelItemProps) {
         {item.sublabel && (
           <span style={styles.itemSublabel}>{item.sublabel}</span>
         )}
-      </div>
+        {interaction.error ? (
+          <span role="alert">{interaction.error}</span>
+        ) : null}
+      </Content>
     </li>
   );
 }
@@ -649,32 +706,41 @@ function PanelItem({ item, index }: PanelItemProps) {
 interface ActionButtonProps {
   action: PanelAction;
   forceDisabled?: boolean;
+  appearance?: "panel" | "section";
 }
 
-function ActionButton({ action, forceDisabled = false }: ActionButtonProps) {
-  const [pending, setPending] = useState(false);
+function ActionButton({
+  action,
+  forceDisabled = false,
+  appearance = "panel",
+}: ActionButtonProps) {
+  const interaction = usePanelAction();
   const variantStyle = getActionVariantStyle(action.variant);
-  const disabled = action.disabled === true || forceDisabled || pending;
-
-  const handleClick = async () => {
-    if (disabled) return;
-    setPending(true);
-    try {
-      await action.onClick();
-    } finally {
-      setPending(false);
-    }
-  };
+  const disabled =
+    action.disabled === true || forceDisabled || interaction.pending;
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={disabled}
-      style={{ ...styles.actionButton, ...variantStyle }}
-      className="slot-panel-action"
-    >
-      {action.label}
-    </button>
+    <>
+      <button
+        onClick={() => {
+          if (!disabled) void interaction.run(action.onClick);
+        }}
+        disabled={disabled}
+        style={
+          appearance === "section"
+            ? styles.sectionActionButton
+            : { ...styles.actionButton, ...variantStyle }
+        }
+        className={
+          appearance === "section"
+            ? "slot-panel-section-action"
+            : "slot-panel-action"
+        }
+      >
+        {action.label}
+      </button>
+      {interaction.error ? <p role="alert">{interaction.error}</p> : null}
+    </>
   );
 }
 
@@ -844,22 +910,26 @@ const panelStyles = `
     }
   }
 
-  .slot-panel-backdrop {
-    position: fixed;
-    inset: 0;
+  .slot-panel-sheet::backdrop {
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    z-index: 100;
     animation: slotPanelBackdropFadeIn ${ANIMATION_DURATION}ms ease-out forwards;
   }
 
-  .slot-panel-backdrop.exiting {
+  .slot-panel-sheet.exiting::backdrop {
     animation: slotPanelBackdropFadeOut ${ANIMATION_DURATION}ms ease-out forwards;
   }
 
   .slot-panel-sheet {
     position: fixed;
+    top: auto;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+    color: inherit;
     bottom: 0;
     left: 0;
     right: 0;

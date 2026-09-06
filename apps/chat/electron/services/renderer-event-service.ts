@@ -6,6 +6,7 @@ import type {
   SlotChangeEvent,
 } from "../electron-api.js";
 import { IPC_CHANNELS } from "../electron-api.js";
+import { sendRendererEvent } from "./send-renderer-event.js";
 
 export class RendererEventService {
   private window: BrowserWindow | null = null;
@@ -50,7 +51,8 @@ export class RendererEventService {
   }
 
   private send(channel: string, ...args: unknown[]): void {
-    this.getLiveWindow()?.webContents.send(channel, ...args);
+    const window = this.getLiveWindow();
+    if (window) sendRendererEvent(window.webContents, channel, ...args);
   }
 
   private getLiveWindow(): BrowserWindow | null {

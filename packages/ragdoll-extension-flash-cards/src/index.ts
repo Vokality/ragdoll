@@ -104,16 +104,47 @@ export interface FlashCardToolHandler {
   endReview(args: EndReviewArgs): Promise<ToolResult> | ToolResult;
 }
 
-function requireString(value: unknown, field: string): ValidationResult {
+function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    return { valid: false, error: `${field} must be a non-empty string` };
+    throw new Error(`${field} must be a non-empty string`);
   }
-  return { valid: true };
+  return value;
 }
 
-function optionalString(value: unknown, field: string): ValidationResult {
-  if (value === undefined) return { valid: true };
-  return requireString(value, field);
+function parseAddDeck(args: Record<string, unknown>): AddDeckArgs {
+  return { name: requireString(args.name, "name") };
+}
+
+function parseAddCard(args: Record<string, unknown>): AddCardArgs {
+  return {
+    deckId: requireString(args.deckId, "deckId"),
+    front: requireString(args.front, "front"),
+    back: requireString(args.back, "back"),
+  };
+}
+
+function parseDeckFilter(args: Record<string, unknown>): ListDueCardsArgs {
+  return {
+    deckId:
+      args.deckId === undefined
+        ? undefined
+        : requireString(args.deckId, "deckId"),
+  };
+}
+
+function validateArguments<T>(
+  parse: (args: Record<string, unknown>) => T,
+  args: Record<string, unknown>,
+): ValidationResult {
+  try {
+    parse(args);
+    return { valid: true };
+  } catch (error) {
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export function createFlashCardTools(
@@ -135,8 +166,8 @@ export function createFlashCardTools(
           },
         },
       },
-      validate: (args) => requireString(args.name, "name"),
-      handler: (args) => handler.addDeck(args as unknown as AddDeckArgs),
+      validate: (args) => validateArguments(parseAddDeck, args),
+      handler: (args) => handler.addDeck(parseAddDeck(args)),
     },
     {
       definition: {
@@ -155,14 +186,8 @@ export function createFlashCardTools(
           },
         },
       },
-      validate: (args) => {
-        const deckId = requireString(args.deckId, "deckId");
-        if (!deckId.valid) return deckId;
-        const front = requireString(args.front, "front");
-        if (!front.valid) return front;
-        return requireString(args.back, "back");
-      },
-      handler: (args) => handler.addCard(args as unknown as AddCardArgs),
+      validate: (args) => validateArguments(parseAddCard, args),
+      handler: (args) => handler.addCard(parseAddCard(args)),
     },
     {
       definition: {
@@ -173,7 +198,7 @@ export function createFlashCardTools(
           parameters: { type: "object", properties: {} },
         },
       },
-      handler: (args) => handler.listDecks(args as ListDecksArgs),
+      handler: () => handler.listDecks({}),
     },
     {
       definition: {
@@ -192,8 +217,8 @@ export function createFlashCardTools(
           },
         },
       },
-      validate: (args) => optionalString(args.deckId, "deckId"),
-      handler: (args) => handler.listDueCards(args as ListDueCardsArgs),
+      validate: (args) => validateArguments(parseDeckFilter, args),
+      handler: (args) => handler.listDueCards(parseDeckFilter(args)),
     },
     {
       definition: {
@@ -212,8 +237,8 @@ export function createFlashCardTools(
           },
         },
       },
-      validate: (args) => optionalString(args.deckId, "deckId"),
-      handler: (args) => handler.startReview(args as StartReviewArgs),
+      validate: (args) => validateArguments(parseDeckFilter, args),
+      handler: (args) => handler.startReview(parseDeckFilter(args)),
     },
     {
       definition: {
@@ -224,7 +249,7 @@ export function createFlashCardTools(
           parameters: { type: "object", properties: {} },
         },
       },
-      handler: (args) => handler.getReviewState(args as GetReviewStateArgs),
+      handler: () => handler.getReviewState({}),
     },
     {
       definition: {
@@ -235,7 +260,7 @@ export function createFlashCardTools(
           parameters: { type: "object", properties: {} },
         },
       },
-      handler: (args) => handler.endReview(args as EndReviewArgs),
+      handler: () => handler.endReview({}),
     },
   ];
 }
@@ -298,10 +323,7 @@ async function loadDurableState(
   storage: HostStorageCapability,
   logger: HostLoggerCapability,
 ): Promise<DurableFlashCardState> {
-  const raw = await storage.read<unknown>(
-    DEFAULT_EXTENSION_ID,
-    DEFAULT_STORAGE_KEY,
-  );
+  const raw = await storage.read(DEFAULT_EXTENSION_ID, DEFAULT_STORAGE_KEY);
   if (raw === undefined || raw === null) return EMPTY_DURABLE_STATE;
   if (isDurableFlashCardState(raw)) return raw;
   logger.error(
@@ -524,7 +546,11 @@ async function createRuntime(
         }
         return result;
       } catch (error) {
-        manager.restoreCheckpoint(checkpoint.durable, checkpoint.session, false);
+        manager.restoreCheckpoint(
+          checkpoint.durable,
+          checkpoint.session,
+          false,
+        );
         throw error;
       } finally {
         if (manager.getState().pending) {
@@ -579,9 +605,7 @@ async function createRuntime(
     },
     addCard: async ({ deckId, front, back }) => {
       try {
-        const card = await enqueue(() =>
-          manager.addCard(deckId, front, back),
-        );
+        const card = await enqueue(() => manager.addCard(deckId, front, back));
         return { success: true, data: card };
       } catch (error) {
         return {

@@ -81,7 +81,13 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
       </div>
 
       {/* Render active slot's panel */}
-      {activeSlot && <SlotPanel slot={activeSlot} onClose={handleClosePanel} />}
+      {activeSlot && (
+        <SlotPanel
+          key={activeSlot.id}
+          slot={activeSlot}
+          onClose={handleClosePanel}
+        />
+      )}
     </>
   );
 }

@@ -9,9 +9,25 @@ import type { StorageRepository } from "../infrastructure/storage-repository.js"
 
 export class ExtensionOperationsService {
   constructor(
-    private readonly manager: ExtensionManager,
-    private readonly installer: ExtensionInstaller,
-    private readonly storage: StorageRepository,
+    private readonly manager: Pick<
+      ExtensionManager,
+      | "getDiscoveredExtensions"
+      | "getAvailableExtensions"
+      | "discoverAndLoadPackages"
+      | "unloadPackage"
+      | "loadPackage"
+      | "getDisabledExtensions"
+      | "setDisabledExtensions"
+    >,
+    private readonly installer: Pick<
+      ExtensionInstaller,
+      | "installFromGitHub"
+      | "uninstall"
+      | "getInstalledExtensions"
+      | "checkForUpdates"
+      | "prepareUpdate"
+    >,
+    private readonly storage: Pick<StorageRepository, "update">,
   ) {}
 
   async install(repoUrl: string): Promise<InstallResult> {
@@ -51,15 +67,18 @@ export class ExtensionOperationsService {
         error: `Failed to unload extension '${extensionId}'`,
       };
     }
+    let result: OperationResult;
     try {
-      return await this.installer.uninstall(extensionId);
+      result = await this.installer.uninstall(extensionId);
     } catch (error) {
-      if (loaded) await this.manager.loadPackage(loaded.packageName);
-      return {
+      result = {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
     }
+    if (!result.success && loaded)
+      await this.restorePackage(loaded.packageName);
+    return result;
   }
 
   getInstalled() {
@@ -102,9 +121,18 @@ export class ExtensionOperationsService {
       };
     }
 
-    const update = await this.installer.prepareUpdate(extensionId);
+    let update: Awaited<ReturnType<ExtensionInstaller["prepareUpdate"]>>;
+    try {
+      update = await this.installer.prepareUpdate(extensionId);
+    } catch (error) {
+      if (loaded) await this.restorePackage(loaded.packageName);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
     if ("success" in update) {
-      if (loaded) await this.manager.loadPackage(loaded.packageName);
+      if (loaded) await this.restorePackage(loaded.packageName);
       return update;
     }
     try {
@@ -122,11 +150,16 @@ export class ExtensionOperationsService {
       return update.result;
     } catch (error) {
       await update.rollback();
-      if (loaded) await this.manager.loadPackage(loaded.packageName);
+      if (loaded) await this.restorePackage(loaded.packageName);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+  private async restorePackage(packageName: string): Promise<void> {
+    const result = await this.manager.loadPackage(packageName);
+    if (!result.success)
+      throw new Error(result.error ?? `Failed to restore '${packageName}'`);
   }
 }

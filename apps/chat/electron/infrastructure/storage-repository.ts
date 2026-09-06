@@ -1,12 +1,6 @@
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writePrivateFile } from "./write-private-file.js";
 import { z } from "zod";
 import {
   CHARACTER_THEME_IDS,
@@ -72,7 +66,7 @@ export function createStorageRepository(
   const storageFile = join(userDataPath, "chat-storage.json");
   let updateQueue = Promise.resolve();
 
-  const read = async (): Promise<StorageData> => {
+  const readSnapshot = async (): Promise<StorageData> => {
     try {
       return storageSchema.parse(
         JSON.parse(await readFile(storageFile, "utf8")),
@@ -83,37 +77,38 @@ export function createStorageRepository(
     }
   };
 
-  const write = async (data: StorageData): Promise<void> => {
+  const persist = async (data: StorageData): Promise<void> => {
     const validated = storageSchema.parse(data);
-    const temporaryFile = `${storageFile}.tmp`;
-    await mkdir(dirname(storageFile), { recursive: true });
-    await writeFile(temporaryFile, JSON.stringify(validated, null, 2), {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try {
-      await rename(temporaryFile, storageFile);
-      await chmod(storageFile, 0o600);
-    } catch (error) {
-      await unlink(temporaryFile).catch(() => undefined);
-      throw error;
-    }
+    await writePrivateFile(storageFile, JSON.stringify(validated, null, 2));
   };
 
-  const update = (
-    mutator: (draft: StorageData) => void,
-  ): Promise<StorageData> => {
-    const operation = updateQueue.then(async () => {
-      const draft = await read();
-      mutator(draft);
-      await write(draft);
-      return draft;
-    });
+  const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
+    const operation = updateQueue.then(task);
     updateQueue = operation.then(
       () => undefined,
       () => undefined,
     );
     return operation;
+  };
+  const read = async (): Promise<StorageData> => {
+    await updateQueue;
+    return readSnapshot();
+  };
+  const write = async (data: StorageData): Promise<void> => {
+    // Snapshot at the boundary so later caller mutations cannot change a queued write.
+    const snapshot = storageSchema.parse(data);
+    return enqueue(() => persist(snapshot));
+  };
+
+  const update = (
+    mutator: (draft: StorageData) => void,
+  ): Promise<StorageData> => {
+    return enqueue(async () => {
+      const draft = await readSnapshot();
+      mutator(draft);
+      await persist(draft);
+      return draft;
+    });
   };
 
   return { filePath: storageFile, read, write, update };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 /** Floor speed so the reveal always reads as motion, never a crawl. */
 const MIN_CHARS_PER_SECOND = 40;
@@ -8,6 +8,7 @@ const CATCH_UP_SECONDS = 0.6;
 interface RevealState {
   key: string | number;
   count: number;
+  fraction: number;
 }
 
 function subscribeReducedMotion(onStoreChange: () => void): () => void {
@@ -47,8 +48,8 @@ export function useSmoothText(
   const [state, setState] = useState<RevealState>(() => ({
     key: resetKey,
     count: shouldAnimate ? 0 : target.length,
+    fraction: 0,
   }));
-  const fractionRef = useRef(0);
 
   // Adjust state when the tracked message or motion preference changes
   // (React's documented "adjust state during render" pattern).
@@ -56,11 +57,12 @@ export function useSmoothText(
     setState({
       key: resetKey,
       count: shouldAnimate ? 0 : target.length,
+      fraction: 0,
     });
   } else if (state.count > target.length) {
-    setState({ key: resetKey, count: target.length });
+    setState({ key: resetKey, count: target.length, fraction: 0 });
   } else if (reducedMotion && state.count < target.length) {
-    setState({ key: resetKey, count: target.length });
+    setState({ key: resetKey, count: target.length, fraction: 0 });
   }
 
   const revealCount =
@@ -70,10 +72,6 @@ export function useSmoothText(
         ? 0
         : target.length;
   const isCaughtUp = revealCount >= target.length;
-
-  useEffect(() => {
-    fractionRef.current = 0;
-  }, [resetKey]);
 
   useEffect(() => {
     if (reducedMotion || isCaughtUp) return;
@@ -94,14 +92,12 @@ export function useSmoothText(
           MIN_CHARS_PER_SECOND,
           backlog / CATCH_UP_SECONDS,
         );
-        fractionRef.current += speed * dt;
-        const advance = Math.floor(fractionRef.current);
-        if (advance <= 0) return current;
-
-        fractionRef.current -= advance;
+        const fraction = current.fraction + speed * dt;
+        const advance = Math.floor(fraction);
         return {
           key: current.key,
           count: Math.min(target.length, current.count + advance),
+          fraction: fraction - advance,
         };
       });
 

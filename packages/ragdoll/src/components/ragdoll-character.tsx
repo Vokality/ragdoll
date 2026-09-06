@@ -18,7 +18,11 @@ const wrapperStyle: React.CSSProperties = {
   maxHeight: "380px",
 };
 
-export function RagdollCharacter({
+export function RagdollCharacter(props: RagdollCharacterProps) {
+  return <CharacterInstance key={props.variant} {...props} />;
+}
+
+function CharacterInstance({
   onControllerReady,
   onEventSubscriberError,
   theme,
@@ -33,12 +37,9 @@ export function RagdollCharacter({
       }),
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [appliedTheme, setAppliedTheme] = useState(theme);
-
-  if (appliedTheme !== theme) {
+  useEffect(() => {
     controller.setTheme(theme.id);
-    setAppliedTheme(theme);
-  }
+  }, [controller, theme.id]);
 
   useEffect(() => {
     onControllerReady(controller);

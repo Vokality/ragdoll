@@ -11,6 +11,8 @@ export interface SettingsNotice {
   text: string;
 }
 
+type ExtensionOperation = "update" | "uninstall";
+
 export function useExtensionSettings(
   service: ExtensionManagementService,
   isOpen: boolean,
@@ -24,17 +26,34 @@ export function useExtensionSettings(
   const [installUrl, setInstallUrl] = useState("");
   const [notice, setNotice] = useState<SettingsNotice | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
+  const installPending = useRef(false);
+  const installUrlVersion = useRef(0);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [uninstallingId, setUninstallingId] = useState<string | null>(null);
+  const operations = useRef(new Map<string, ExtensionOperation>());
+  const [pendingOperations, setPendingOperations] = useState<
+    ReadonlyMap<string, ExtensionOperation>
+  >(() => new Map());
   const refreshGeneration = useRef(0);
+
+  const beginOperation = useCallback(
+    (id: string, operation: ExtensionOperation) => {
+      if (operations.current.has(id)) return false;
+      operations.current.set(id, operation);
+      setPendingOperations(new Map(operations.current));
+      return true;
+    },
+    [],
+  );
+
+  const finishOperation = useCallback((id: string) => {
+    operations.current.delete(id);
+    setPendingOperations(new Map(operations.current));
+  }, []);
 
   const applyOverview = useCallback(
     (
       generation: number,
-      overview: Awaited<
-        ReturnType<ExtensionManagementService["loadOverview"]>
-      >,
+      overview: Awaited<ReturnType<ExtensionManagementService["loadOverview"]>>,
     ) => {
       if (generation !== refreshGeneration.current) return;
       setAvailable(overview.available);
@@ -79,7 +98,9 @@ export function useExtensionSettings(
 
   const install = useCallback(async () => {
     const url = installUrl.trim();
-    if (!url) return;
+    if (!url || installPending.current) return;
+    installPending.current = true;
+    const submittedVersion = installUrlVersion.current;
     setIsInstalling(true);
     setNotice(null);
     try {
@@ -88,7 +109,7 @@ export function useExtensionSettings(
         setNotice({ tone: "error", text: result.error });
         return;
       }
-      setInstallUrl("");
+      if (installUrlVersion.current === submittedVersion) setInstallUrl("");
       if (result.requiresConfiguration && result.message) {
         setNotice({ tone: "info", text: result.message });
       }
@@ -96,13 +117,14 @@ export function useExtensionSettings(
     } catch (error) {
       setNotice({ tone: "error", text: getErrorMessage(error) });
     } finally {
+      installPending.current = false;
       setIsInstalling(false);
     }
   }, [installUrl, refresh, service]);
 
   const uninstall = useCallback(
     async (extensionId: string) => {
-      setUninstallingId(extensionId);
+      if (!beginOperation(extensionId, "uninstall")) return;
       setNotice(null);
       try {
         const result = await service.uninstall(extensionId);
@@ -114,10 +136,10 @@ export function useExtensionSettings(
       } catch (error) {
         setNotice({ tone: "error", text: getErrorMessage(error) });
       } finally {
-        setUninstallingId(null);
+        finishOperation(extensionId);
       }
     },
-    [refresh, service],
+    [beginOperation, finishOperation, refresh, service],
   );
 
   const checkUpdates = useCallback(async () => {
@@ -134,7 +156,7 @@ export function useExtensionSettings(
 
   const update = useCallback(
     async (extensionId: string) => {
-      setUpdatingId(extensionId);
+      if (!beginOperation(extensionId, "update")) return;
       setNotice(null);
       try {
         const result = await service.update(extensionId);
@@ -152,25 +174,25 @@ export function useExtensionSettings(
       } catch (error) {
         setNotice({ tone: "error", text: getErrorMessage(error) });
       } finally {
-        setUpdatingId(null);
+        finishOperation(extensionId);
       }
     },
-    [refresh, service],
+    [beginOperation, finishOperation, refresh, service],
   );
 
   const toggle = useCallback(
     async (extensionId: string) => {
-      const next = disabled.includes(extensionId)
-        ? disabled.filter((id) => id !== extensionId)
-        : [...disabled, extensionId];
+      const generation = ++refreshGeneration.current;
       try {
-        await service.setDisabled(next);
-        setDisabled(next);
+        const next = await service.toggle(extensionId);
+        if (generation === refreshGeneration.current) setDisabled(next);
       } catch (error) {
+        if (generation !== refreshGeneration.current) return;
         setNotice({ tone: "error", text: getErrorMessage(error) });
+        await refresh();
       }
     },
-    [disabled, service],
+    [refresh, service],
   );
 
   return {
@@ -184,9 +206,9 @@ export function useExtensionSettings(
     notice,
     isInstalling,
     isCheckingUpdates,
-    updatingId,
-    uninstallingId,
+    pendingOperations,
     setInstallUrl: (value: string) => {
+      installUrlVersion.current += 1;
       setInstallUrl(value);
       setNotice(null);
     },

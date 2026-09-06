@@ -40,10 +40,11 @@ type ConfigChangeListener = (values: ConfigValues) => void;
 // =============================================================================
 
 export class ConfigManager implements HostConfigCapability {
-  private config: ConfigManagerConfig;
+  private readonly config: ConfigManagerConfig;
   private values: ConfigValues = {};
   private listeners: Set<ConfigChangeListener> = new Set();
   private initialized = false;
+  private updates = Promise.resolve();
 
   constructor(config: ConfigManagerConfig) {
     this.config = config;
@@ -51,7 +52,9 @@ export class ConfigManager implements HostConfigCapability {
     // Initialize with defaults from schema
     for (const [key, field] of Object.entries(config.schema)) {
       if (field.default !== undefined) {
-        this.values[key] = field.default as string | number | boolean;
+        const error = this.validateValue(key, field.default, field);
+        if (error) throw new Error(error);
+        this.values[key] = field.default;
       }
     }
   }
@@ -59,21 +62,16 @@ export class ConfigManager implements HostConfigCapability {
   /**
    * Initialize the manager - load existing values from storage
    */
-  async initialize(): Promise<void> {
-    if (this.initialized) return;
-
-    const stored = await this.config.loadValues();
-    if (stored) {
-      for (const [key, value] of Object.entries(stored)) {
-        const field = this.config.schema[key];
-        if (!field) throw new Error(`Unknown config field: ${key}`);
-        const error = this.validateValue(key, value, field);
-        if (error) throw new Error(error);
+  initialize(): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.initialized) return;
+      const stored = await this.config.loadValues();
+      if (stored) {
+        this.validateValues(stored);
+        this.values = { ...this.values, ...stored };
       }
-      this.values = { ...this.values, ...stored };
-    }
-
-    this.initialized = true;
+      this.initialized = true;
+    });
   }
 
   // ===========================================================================
@@ -106,7 +104,7 @@ export class ConfigManager implements HostConfigCapability {
       const value = this.values[key];
       // secret property only exists on string and number types
       const isSecret = "secret" in field && field.secret;
-      if (isSecret && value) {
+      if (isSecret && value !== undefined && value !== "") {
         redactedValues[key] = "********";
       } else {
         redactedValues[key] = value;
@@ -125,20 +123,8 @@ export class ConfigManager implements HostConfigCapability {
     return () => this.listeners.delete(listener);
   }
 
-  async setValue(key: string, value: string | number | boolean): Promise<void> {
-    const field = this.config.schema[key];
-    if (!field) throw new Error(`Unknown config field: ${key}`);
-    const error = this.validateValue(key, value, field);
-    if (error) throw new Error(error);
-
-    const nextValues = { ...this.values, [key]: value };
-    await this.config.saveValues(nextValues);
-    this.values = nextValues;
-
-    // Notify listeners
-    this.emitChange();
-
-    this.log("debug", `Config value set: ${key}`);
+  setValue(key: string, value: string | number | boolean): Promise<void> {
+    return this.setValues({ [key]: value });
   }
 
   isConfigured(): boolean {
@@ -153,42 +139,48 @@ export class ConfigManager implements HostConfigCapability {
    * Set multiple values at once
    */
   async setValues(values: ConfigValues): Promise<void> {
-    // Validate all values first
-    for (const [key, value] of Object.entries(values)) {
-      const field = this.config.schema[key];
-      if (!field) throw new Error(`Unknown config field: ${key}`);
-      const error = this.validateValue(key, value, field);
-      if (error) {
-        throw new Error(error);
-      }
-    }
-
-    const nextValues = { ...this.values, ...values };
-    await this.config.saveValues(nextValues);
-    this.values = nextValues;
-
-    // Notify listeners
-    this.emitChange();
-
-    this.log("debug", `Config values updated`);
+    const changes = { ...values };
+    this.validateValues(changes);
+    await this.enqueue(async () => {
+      const nextValues = { ...this.values, ...changes };
+      await this.config.saveValues(nextValues);
+      this.values = nextValues;
+      this.emitChange();
+      this.log("debug", "Config values updated");
+    });
   }
 
   /**
    * Clear all config values
    */
-  async clear(): Promise<void> {
-    const nextValues: ConfigValues = {};
-
-    // Re-apply defaults
-    for (const [key, field] of Object.entries(this.config.schema)) {
-      if (field.default !== undefined) {
-        nextValues[key] = field.default as string | number | boolean;
+  clear(): Promise<void> {
+    return this.enqueue(async () => {
+      const nextValues: ConfigValues = {};
+      for (const [key, field] of Object.entries(this.config.schema)) {
+        if (field.default !== undefined) nextValues[key] = field.default;
       }
-    }
+      await this.config.saveValues(nextValues);
+      this.values = nextValues;
+      this.emitChange();
+    });
+  }
 
-    await this.config.saveValues(nextValues);
-    this.values = nextValues;
-    this.emitChange();
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const result = this.updates.then(operation);
+    this.updates = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private validateValues(values: ConfigValues): void {
+    for (const [key, value] of Object.entries(values)) {
+      if (!Object.hasOwn(this.config.schema, key))
+        throw new Error(`Unknown config field: ${key}`);
+      const error = this.validateValue(key, value, this.config.schema[key]);
+      if (error) throw new Error(error);
+    }
   }
 
   // ===========================================================================
@@ -201,11 +193,17 @@ export class ConfigManager implements HostConfigCapability {
     field: ConfigSchema[string],
   ): string | null {
     // Type check
-    if (field.type === "string" && typeof value !== "string") {
+    if (
+      (field.type === "string" || field.type === "select") &&
+      typeof value !== "string"
+    ) {
       return `${key} must be a string`;
     }
-    if (field.type === "number" && typeof value !== "number") {
-      return `${key} must be a number`;
+    if (
+      field.type === "number" &&
+      (typeof value !== "number" || !Number.isFinite(value))
+    ) {
+      return `${key} must be a finite number`;
     }
     if (field.type === "boolean" && typeof value !== "boolean") {
       return `${key} must be a boolean`;
@@ -213,25 +211,14 @@ export class ConfigManager implements HostConfigCapability {
 
     // String-specific validation
     if (field.type === "string" && typeof value === "string") {
-      const stringField = field as {
-        minLength?: number;
-        maxLength?: number;
-        pattern?: string;
-      };
-      if (
-        stringField.minLength !== undefined &&
-        value.length < stringField.minLength
-      ) {
-        return `${key} must be at least ${stringField.minLength} characters`;
+      if (field.minLength !== undefined && value.length < field.minLength) {
+        return `${key} must be at least ${field.minLength} characters`;
       }
-      if (
-        stringField.maxLength !== undefined &&
-        value.length > stringField.maxLength
-      ) {
-        return `${key} must be at most ${stringField.maxLength} characters`;
+      if (field.maxLength !== undefined && value.length > field.maxLength) {
+        return `${key} must be at most ${field.maxLength} characters`;
       }
-      if (stringField.pattern) {
-        const regex = new RegExp(stringField.pattern);
+      if (field.pattern) {
+        const regex = new RegExp(field.pattern);
         if (!regex.test(value)) {
           return `${key} does not match required pattern`;
         }
@@ -240,19 +227,17 @@ export class ConfigManager implements HostConfigCapability {
 
     // Number-specific validation
     if (field.type === "number" && typeof value === "number") {
-      const numberField = field as { min?: number; max?: number };
-      if (numberField.min !== undefined && value < numberField.min) {
-        return `${key} must be at least ${numberField.min}`;
+      if (field.min !== undefined && value < field.min) {
+        return `${key} must be at least ${field.min}`;
       }
-      if (numberField.max !== undefined && value > numberField.max) {
-        return `${key} must be at most ${numberField.max}`;
+      if (field.max !== undefined && value > field.max) {
+        return `${key} must be at most ${field.max}`;
       }
     }
 
     // Select validation
     if (field.type === "select" && typeof value === "string") {
-      const selectField = field as { options: Array<{ value: string }> };
-      const validValues = selectField.options.map((o) => o.value);
+      const validValues = field.options.map((o) => o.value);
       if (!validValues.includes(value)) {
         return `${key} must be one of: ${validValues.join(", ")}`;
       }
@@ -262,10 +247,9 @@ export class ConfigManager implements HostConfigCapability {
   }
 
   private emitChange(): void {
-    const values = this.getValues();
     for (const listener of this.listeners) {
       try {
-        listener(values);
+        listener(this.getValues());
       } catch (error) {
         this.log("error", "Error in config listener:", error);
       }

@@ -11,6 +11,13 @@ export type HairStyle = "default" | "wild" | "short" | "bald";
  */
 export type MustacheStyle = "none" | "bushy" | "thin" | "handlebar";
 
+/** Resolved visual traits shared by geometry, grooming, and surface rendering. */
+export interface CharacterAppearance {
+  hairStyle: HairStyle;
+  mustacheStyle: MustacheStyle;
+  age: number;
+}
+
 /**
  * Partial dimensions that can override defaults
  */

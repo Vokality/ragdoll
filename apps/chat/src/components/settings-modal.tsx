@@ -214,7 +214,9 @@ function FeatureTogglesSection({
               </div>
               <button
                 type="button"
-                onClick={() => canToggle && void extensions.toggle(extension.id)}
+                onClick={() =>
+                  canToggle && void extensions.toggle(extension.id)
+                }
                 disabled={!canToggle}
                 className={`switch${isDisabled ? "" : " on"}`}
                 aria-pressed={!isDisabled}
@@ -363,8 +365,9 @@ function InstalledExtensionRow({
   const update = extensions.updates.find(
     (entry) => entry.extensionId === ext.id && entry.hasUpdate,
   );
-  const isUpdating = extensions.updatingId === ext.id;
-  const isUninstalling = extensions.uninstallingId === ext.id;
+  const operation = extensions.pendingOperations.get(ext.id);
+  const isUpdating = operation === "update";
+  const isUninstalling = operation === "uninstall";
   // Check if this extension needs configuration
   const extInfo = extensions.available.find((e) => e.id === ext.id);
   const needsConfig = extInfo && (extInfo.hasConfigSchema || extInfo.hasOAuth);
@@ -400,7 +403,7 @@ function InstalledExtensionRow({
           <button
             type="button"
             onClick={() => void extensions.update(ext.id)}
-            disabled={isUpdating}
+            disabled={operation !== undefined}
             className="btn-secondary"
             style={styles.updateButton}
           >
@@ -410,7 +413,7 @@ function InstalledExtensionRow({
         <button
           type="button"
           onClick={() => void extensions.uninstall(ext.id)}
-          disabled={isUninstalling}
+          disabled={operation !== undefined}
           style={styles.uninstallButton}
         >
           {isUninstalling ? <span className="spinner-sm" /> : "Uninstall"}

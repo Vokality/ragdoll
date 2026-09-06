@@ -42,7 +42,7 @@ export class LumenApplication {
   private readonly chat;
   private readonly conversationEvents;
   private readonly unsubscribeConversationEvents: () => void;
-  private disposeIpc: (() => void) | null = null;
+  private disposeIpc: (() => Promise<void>) | null = null;
 
   private constructor(
     private readonly config: MainProcessConfig,
@@ -128,7 +128,19 @@ export class LumenApplication {
       storage,
       disabledExtensions,
     );
-    await application.initialize();
+    try {
+      await application.initialize();
+    } catch (error) {
+      try {
+        await application.destroy();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Application startup and cleanup failed",
+        );
+      }
+      throw error;
+    }
     return application;
   }
 
@@ -145,11 +157,12 @@ export class LumenApplication {
   }
 
   async destroy(): Promise<void> {
-    this.disposeIpc?.();
+    const pendingIpc = this.disposeIpc?.();
     this.disposeIpc = null;
     this.unsubscribeConversationEvents();
-    await this.extensions.destroy();
     this.oauthRedirects.destroy();
+    await Promise.all([this.chat.destroy(), pendingIpc]);
+    await this.extensions.destroy();
   }
 
   private async initialize(): Promise<void> {
@@ -174,13 +187,17 @@ export class LumenApplication {
       installer,
       this.storage,
     );
-    this.disposeIpc = registerIpc(ipcMain, {
-      apiKeys: this.apiKeys,
-      chat: this.chat,
-      extensions: this.extensions,
-      extensionOperations,
-      navigation: this.navigation,
-      storage: this.storage,
-    });
+    this.disposeIpc = registerIpc(
+      ipcMain,
+      {
+        apiKeys: this.apiKeys,
+        chat: this.chat,
+        extensions: this.extensions,
+        extensionOperations,
+        navigation: this.navigation,
+        storage: this.storage,
+      },
+      (event) => this.windows.authorizeIpc(event),
+    );
   }
 }

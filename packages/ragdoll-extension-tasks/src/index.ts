@@ -34,6 +34,7 @@ import {
   type TaskEvent,
   type TaskEventCallback,
 } from "./task-manager.js";
+import { taskStateSchema } from "./task-state-schema.js";
 
 // =============================================================================
 // Constants
@@ -108,53 +109,65 @@ export interface TaskToolHandler {
 // Validators
 // =============================================================================
 
-function validateAddTask(args: Record<string, unknown>): ValidationResult {
-  if (!args.text || typeof args.text !== "string") {
-    return { valid: false, error: "text is required and must be a string" };
+function parseTaskStatus(value: unknown): TaskStatus {
+  const status = VALID_TASK_STATUSES.find((candidate) => candidate === value);
+  if (!status) {
+    throw new Error(
+      `Invalid status '${String(value)}'. Valid: ${VALID_TASK_STATUSES.join(", ")}`,
+    );
   }
-  if (args.text.trim().length === 0) {
-    return { valid: false, error: "text cannot be empty" };
-  }
-  if (args.status !== undefined) {
-    if (!VALID_TASK_STATUSES.includes(args.status as TaskStatus)) {
-      return {
-        valid: false,
-        error: `Invalid status '${args.status}'. Valid: ${VALID_TASK_STATUSES.join(", ")}`,
-      };
-    }
-  }
-  return { valid: true };
+  return status;
 }
 
-function validateUpdateTaskStatus(
-  args: Record<string, unknown>,
-): ValidationResult {
+function parseAddTask(args: Record<string, unknown>): AddTaskArgs {
+  if (!args.text || typeof args.text !== "string") {
+    throw new Error("text is required and must be a string");
+  }
+  if (args.text.trim().length === 0) throw new Error("text cannot be empty");
+  return {
+    text: args.text,
+    status:
+      args.status === undefined ? undefined : parseTaskStatus(args.status),
+  };
+}
+
+function parseTaskId(args: Record<string, unknown>): SetActiveTaskArgs {
   if (!args.taskId || typeof args.taskId !== "string") {
-    return { valid: false, error: "taskId is required and must be a string" };
+    throw new Error("taskId is required and must be a string");
   }
+  return { taskId: args.taskId };
+}
+
+function parseUpdateTaskStatus(
+  args: Record<string, unknown>,
+): UpdateTaskStatusArgs {
+  const { taskId } = parseTaskId(args);
   if (!args.status || typeof args.status !== "string") {
-    return { valid: false, error: "status is required and must be a string" };
+    throw new Error("status is required and must be a string");
   }
-  if (!VALID_TASK_STATUSES.includes(args.status as TaskStatus)) {
-    return {
-      valid: false,
-      error: `Invalid status '${args.status}'. Valid: ${VALID_TASK_STATUSES.join(", ")}`,
-    };
-  }
+  const status = parseTaskStatus(args.status);
   if (
     args.blockedReason !== undefined &&
     typeof args.blockedReason !== "string"
   ) {
-    return { valid: false, error: "blockedReason must be a string" };
+    throw new Error("blockedReason must be a string");
   }
-  return { valid: true };
+  return { taskId, status, blockedReason: args.blockedReason };
 }
 
-function validateTaskId(args: Record<string, unknown>): ValidationResult {
-  if (!args.taskId || typeof args.taskId !== "string") {
-    return { valid: false, error: "taskId is required and must be a string" };
+function validateArguments<T>(
+  parse: (args: Record<string, unknown>) => T,
+  args: Record<string, unknown>,
+): ValidationResult {
+  try {
+    parse(args);
+    return { valid: true };
+  } catch (error) {
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
-  return { valid: true };
 }
 
 function validateNoArgs(): ValidationResult {
@@ -190,8 +203,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) => handler.addTask(args as unknown as AddTaskArgs),
-      validate: validateAddTask,
+      handler: (args, _ctx) => handler.addTask(parseAddTask(args)),
+      validate: (args) => validateArguments(parseAddTask, args),
     },
     {
       definition: {
@@ -222,8 +235,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
         },
       },
       handler: (args, _ctx) =>
-        handler.updateTaskStatus(args as unknown as UpdateTaskStatusArgs),
-      validate: validateUpdateTaskStatus,
+        handler.updateTaskStatus(parseUpdateTaskStatus(args)),
+      validate: (args) => validateArguments(parseUpdateTaskStatus, args),
     },
     {
       definition: {
@@ -243,9 +256,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) =>
-        handler.setActiveTask(args as unknown as SetActiveTaskArgs),
-      validate: validateTaskId,
+      handler: (args, _ctx) => handler.setActiveTask(parseTaskId(args)),
+      validate: (args) => validateArguments(parseTaskId, args),
     },
     {
       definition: {
@@ -265,9 +277,8 @@ function createTaskTools(handler: TaskToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) =>
-        handler.removeTask(args as unknown as RemoveTaskArgs),
-      validate: validateTaskId,
+      handler: (args, _ctx) => handler.removeTask(parseTaskId(args)),
+      validate: (args) => validateArguments(parseTaskId, args),
     },
     {
       definition: {
@@ -359,12 +370,10 @@ function requireHostCapabilities(host: ExtensionHostEnvironment): {
 async function loadTaskState(
   storage: HostStorageCapability,
 ): Promise<TaskState> {
-  return (
-    (await storage.read<TaskState>(
-      DEFAULT_EXTENSION_ID,
-      DEFAULT_STORAGE_KEY,
-    )) ?? DEFAULT_TASK_STATE
-  );
+  const stored = await storage.read(DEFAULT_EXTENSION_ID, DEFAULT_STORAGE_KEY);
+  return stored === undefined
+    ? DEFAULT_TASK_STATE
+    : taskStateSchema.parse(stored);
 }
 
 async function createRuntime(

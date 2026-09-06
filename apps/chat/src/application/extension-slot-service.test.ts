@@ -28,6 +28,7 @@ const initialState: SerializedSlotState = {
 
 function createGateway(state: SerializedSlotState | null) {
   let listener: ((event: SlotChangeEvent) => void) | null = null;
+  let slotsListener: (() => void) | null = null;
   const actions: SlotActionRequest[] = [];
   const gateway: ExtensionSlotGateway = {
     getExtensionSlots: async () => [
@@ -46,13 +47,23 @@ function createGateway(state: SerializedSlotState | null) {
         listener = null;
       };
     },
-    onExtensionSlotsChanged: () => () => undefined,
+    onExtensionSlotsChanged: (callback) => {
+      slotsListener = callback;
+      return () => {
+        slotsListener = null;
+      };
+    },
     executeSlotAction: async (_slotId, request) => {
       actions.push(request);
       return { success: true };
     },
   };
-  return { gateway, actions, getListener: () => listener };
+  return {
+    gateway,
+    actions,
+    getListener: () => listener,
+    changeSlots: () => slotsListener?.(),
+  };
 }
 
 describe("ExtensionSlotService", () => {
@@ -189,4 +200,74 @@ describe("ExtensionSlotService", () => {
 
     service.stop();
   });
+});
+
+it("keeps slot updates that arrive before initial state resolves", async () => {
+  const testGateway = createGateway(initialState);
+  const state = Promise.withResolvers<SerializedSlotState | null>();
+  testGateway.gateway.getSlotState = () => state.promise;
+  const errors: unknown[] = [];
+  const service = new ExtensionSlotService(testGateway.gateway, (error) =>
+    errors.push(error),
+  );
+  const started = service.start();
+  await Promise.resolve();
+  expect(() =>
+    testGateway.getListener()?.({
+      slotId: "tasks.main",
+      extensionId: "tasks",
+      state: { ...initialState, badge: 3 },
+    }),
+  ).not.toThrow();
+  state.resolve(initialState);
+  await started;
+  expect(service.getSnapshot()[0].state.getState().badge).toBe(3);
+  expect(errors).toEqual([]);
+  service.stop();
+});
+
+it("does not roll back live state when a reload returns an older snapshot", async () => {
+  const testGateway = createGateway(initialState);
+  const service = new ExtensionSlotService(testGateway.gateway, (error) => {
+    throw error;
+  });
+  await service.start();
+  const state = Promise.withResolvers<SerializedSlotState | null>();
+  testGateway.gateway.getSlotState = () => state.promise;
+  const published = Promise.withResolvers<void>();
+  const unsubscribe = service.subscribe(() => published.resolve());
+  testGateway.changeSlots();
+  await Promise.resolve();
+  testGateway.getListener()?.({
+    slotId: "tasks.main",
+    extensionId: "tasks",
+    state: { ...initialState, badge: 4 },
+  });
+  expect(service.getSnapshot()[0].state.getState().badge).toBe(4);
+  state.resolve(initialState);
+  await published.promise;
+  expect(service.getSnapshot()[0].state.getState().badge).toBe(4);
+  unsubscribe();
+  service.stop();
+});
+
+it("ignores a failed obsolete load after the service restarts", async () => {
+  const testGateway = createGateway(initialState);
+  const stale = Promise.withResolvers<SerializedSlotState | null>();
+  testGateway.gateway.getSlotState = () => stale.promise;
+  const errors: unknown[] = [];
+  const service = new ExtensionSlotService(testGateway.gateway, (error) =>
+    errors.push(error),
+  );
+  const started = service.start();
+  await Promise.resolve();
+  service.stop();
+  testGateway.gateway.getSlotState = async () => initialState;
+  await service.start();
+  stale.reject(new Error("obsolete"));
+  await started;
+  expect(errors).toEqual([]);
+  expect(service.getSnapshot()).toHaveLength(1);
+  expect(testGateway.getListener()).not.toBeNull();
+  service.stop();
 });

@@ -1,12 +1,6 @@
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writePrivateFile } from "./write-private-file.js";
 import { z } from "zod";
 import type { InstalledExtension } from "../electron-api.js";
 
@@ -21,9 +15,19 @@ const installedExtensionSchema = z
   })
   .strict();
 
-const registrySchema = z.object({
-  extensions: z.record(z.string(), installedExtensionSchema),
-});
+const registrySchema = z
+  .object({
+    extensions: z.record(z.string(), installedExtensionSchema),
+  })
+  .refine(
+    (registry) =>
+      Object.entries(registry.extensions).every(
+        ([id, extension]) => id === extension.id,
+      ),
+    {
+      message: "Extension registry keys must match their extension ids",
+    },
+  );
 
 function isMissingFile(error: unknown): boolean {
   return error instanceof Error && Reflect.get(error, "code") === "ENOENT";
@@ -40,14 +44,17 @@ export class InstalledExtensionRepository {
   ) {}
 
   async list(): Promise<InstalledExtension[]> {
+    await this.updateQueue;
     return Object.values((await this.read()).extensions).map((extension) =>
       this.toInstalledExtension(extension),
     );
   }
 
   async get(extensionId: string): Promise<InstalledExtension | null> {
-    const extension = (await this.read()).extensions[extensionId];
-    return extension ? this.toInstalledExtension(extension) : null;
+    await this.updateQueue;
+    const { extensions } = await this.read();
+    if (!Object.hasOwn(extensions, extensionId)) return null;
+    return this.toInstalledExtension(extensions[extensionId]);
   }
 
   async set(extension: InstalledExtension): Promise<void> {
@@ -97,19 +104,7 @@ export class InstalledExtensionRepository {
 
   private async write(registry: z.infer<typeof registrySchema>): Promise<void> {
     const validated = registrySchema.parse(registry);
-    const temporaryPath = `${this.filePath}.tmp`;
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(temporaryPath, JSON.stringify(validated, null, 2), {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try {
-      await rename(temporaryPath, this.filePath);
-      await chmod(this.filePath, 0o600);
-    } catch (error) {
-      await unlink(temporaryPath).catch(() => undefined);
-      throw error;
-    }
+    await writePrivateFile(this.filePath, JSON.stringify(validated, null, 2));
   }
 
   private toInstalledExtension(extension: StoredExtension): InstalledExtension {

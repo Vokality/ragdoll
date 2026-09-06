@@ -92,7 +92,17 @@ function toEventPayload(snapshot: GameSnapshot): JsonObject {
   };
 }
 
-function validateStartArgs(args: StartGameArgs): ValidationResult {
+type ParsedArguments<T> =
+  | { valid: true; args: T }
+  | { valid: false; error: string; retryable?: boolean };
+
+function validationResult<T>(result: ParsedArguments<T>): ValidationResult {
+  return result.valid ? { valid: true } : result;
+}
+
+function parseStartArgs(
+  args: Record<string, unknown>,
+): ParsedArguments<StartGameArgs> {
   if (
     args.userMark !== undefined &&
     args.userMark !== "X" &&
@@ -107,10 +117,15 @@ function validateStartArgs(args: StartGameArgs): ValidationResult {
   ) {
     return { valid: false, error: "firstPlayer must be user or agent" };
   }
-  return { valid: true };
+  return {
+    valid: true,
+    args: { userMark: args.userMark, firstPlayer: args.firstPlayer },
+  };
 }
 
-function validatePlaceArgs(args: PlaceMarkArgs): ValidationResult {
+function parsePlaceArgs(
+  args: Record<string, unknown>,
+): ParsedArguments<PlaceMarkArgs> {
   if (
     typeof args.row !== "number" ||
     typeof args.col !== "number" ||
@@ -130,7 +145,7 @@ function validatePlaceArgs(args: PlaceMarkArgs): ValidationResult {
       retryable: true,
     };
   }
-  return { valid: true };
+  return { valid: true, args: { row: args.row, col: args.col } };
 }
 
 export function createTicTacToeTools(
@@ -162,8 +177,13 @@ export function createTicTacToeTools(
           },
         },
       },
-      validate: (args) => validateStartArgs(args as StartGameArgs),
-      handler: (args) => handler.start(args as StartGameArgs),
+      validate: (args) => validationResult(parseStartArgs(args)),
+      handler: (args) => {
+        const parsed = parseStartArgs(args);
+        return parsed.valid
+          ? handler.start(parsed.args)
+          : { success: false, error: parsed.error };
+      },
     },
     {
       definition: {
@@ -193,8 +213,17 @@ export function createTicTacToeTools(
           },
         },
       },
-      validate: (args) => validatePlaceArgs(args as unknown as PlaceMarkArgs),
-      handler: (args) => handler.place(args as unknown as PlaceMarkArgs),
+      validate: (args) => validationResult(parsePlaceArgs(args)),
+      handler: (args) => {
+        const parsed = parsePlaceArgs(args);
+        return parsed.valid
+          ? handler.place(parsed.args)
+          : {
+              success: false,
+              error: parsed.error,
+              retryable: parsed.retryable,
+            };
+      },
     },
     {
       definition: {

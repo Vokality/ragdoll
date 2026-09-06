@@ -21,7 +21,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as net from "net";
 import { EMOTE_SOCKET_PATH } from "./ipc-path";
-import { VALID_ACTIONS, VALID_MOODS, VALID_THEMES, VALID_TONES, VALID_VARIANTS } from "./types";
+import {
+  VALID_ACTIONS,
+  VALID_MOODS,
+  VALID_THEMES,
+  VALID_TONES,
+  VALID_VARIANTS,
+} from "./types";
 import type { ActionId, ThemeId, VariantId } from "./types";
 import { EMOTE_VERSION } from "./version";
 
@@ -85,6 +91,7 @@ function parseSocketResponse(value: string): SocketResponse {
 function sendCommand(command: CommandPayload): Promise<SocketResponse> {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
+    socket.setEncoding("utf8");
     let responseBuffer = "";
     let resolved = false;
 
@@ -107,8 +114,8 @@ function sendCommand(command: CommandPayload): Promise<SocketResponse> {
       socket.write(JSON.stringify(command) + "\n");
     });
 
-    socket.on("data", (data) => {
-      responseBuffer += data.toString();
+    socket.on("data", (data: string) => {
+      responseBuffer += data;
       const newlineIndex = responseBuffer.indexOf("\n");
       if (newlineIndex !== -1) {
         const message = responseBuffer.slice(0, newlineIndex).trim();
@@ -185,6 +192,7 @@ async function getHealthReport(): Promise<{
 }> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
+    socket.setEncoding("utf8");
     const timeout = setTimeout(() => {
       socket.destroy();
       resolve({

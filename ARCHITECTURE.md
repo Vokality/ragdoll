@@ -20,7 +20,7 @@ The framework never imports an app or a first-party extension. Extension package
 
 - controllers coordinate expression, head pose, actions, and idle behavior;
 - models represent geometry and the skeleton;
-- `RagdollCharacter` renders a themed perspective Three.js canvas from outline-path geometry;
+- `RagdollCharacter` renders an anatomical head in a themed perspective Three.js canvas, with facial morph targets and scalp-fitted grooming;
 - state and events are framework-local;
 - themes and variants are registered through typed APIs;
 - `/testing` exposes reusable clocks, builders, and mocks.
@@ -77,6 +77,8 @@ If activation or validation fails, the registry disposes the partial contributio
 Optional capabilities are metadata: the loader requires the package and runtime optional lists to match exactly. The registry does not fail activation when an optional capability is absent; Lumen grants an optional capability only when the extension asked for it and the backing service exists.
 
 An extension declares required and optional host capabilities in both its runtime manifest and package metadata. The loader requires those lists to be identical before registration; it does not merge them.
+
+Host storage reads return `unknown`; each extension validates its own persisted state before loading it into domain objects. Lumen serializes mutations per extension, snapshots JSON values at the write boundary, and atomically replaces private storage files. Missing keys return `undefined`; malformed documents fail without resetting stored data.
 
 ### Package loading
 

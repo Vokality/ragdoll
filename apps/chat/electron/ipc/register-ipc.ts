@@ -1,4 +1,4 @@
-import type { IpcMain } from "electron";
+import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 import type { ApiKeyService } from "../services/api-key-service.js";
 import type { ChatApplicationService } from "../services/chat-application-service.js";
@@ -24,16 +24,22 @@ export interface IpcServices {
 export function registerIpc(
   ipcMain: IpcMain,
   services: IpcServices,
-): () => void {
-  const registrar = new IpcRegistrar(ipcMain);
-  registerAuthIpc(registrar, services.apiKeys);
-  registerChatIpc(registrar, services.chat);
-  registerExtensionIpc(
-    registrar,
-    services.extensions,
-    services.extensionOperations,
-  );
-  registerSettingsIpc(registrar, services.storage);
-  registerShellIpc(registrar, services.navigation);
+  authorize: (event: IpcMainInvokeEvent) => boolean,
+): () => Promise<void> {
+  const registrar = new IpcRegistrar(ipcMain, authorize);
+  try {
+    registerAuthIpc(registrar, services.apiKeys);
+    registerChatIpc(registrar, services.chat);
+    registerExtensionIpc(
+      registrar,
+      services.extensions,
+      services.extensionOperations,
+    );
+    registerSettingsIpc(registrar, services.storage);
+    registerShellIpc(registrar, services.navigation);
+  } catch (error) {
+    void registrar.dispose();
+    throw error;
+  }
   return () => registrar.dispose();
 }

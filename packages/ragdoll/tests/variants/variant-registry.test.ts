@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import {
   getVariant,
   getDefaultVariant,
@@ -9,8 +9,8 @@ import {
 import type { CharacterVariant } from "../../src/variants/types";
 
 describe("Variant Registry", () => {
-  beforeEach(() => {
-    // Reset registry state by not modifying it
+  afterEach(() => {
+    registerVariant(getDefaultVariant());
   });
 
   describe("getVariant", () => {

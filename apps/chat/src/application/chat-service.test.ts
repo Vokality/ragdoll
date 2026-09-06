@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { ChatGateway, StreamingHandlers } from "./ports/chat-gateway";
+import type {
+  ChatGateway,
+  ChatSendResult,
+  StreamingHandlers,
+} from "./ports/chat-gateway";
 import { ChatService } from "./chat-service";
 
 function createGateway() {
@@ -38,6 +42,171 @@ function createGateway() {
 }
 
 describe("ChatService", () => {
+  it("recovers a completed response after a subscription gap without sending it again", async () => {
+    const testGateway = createGateway();
+    const completion = Promise.withResolvers<ChatSendResult>();
+    let persisted = false;
+    let sends = 0;
+    testGateway.gateway.sendMessage = () => {
+      sends++;
+      return completion.promise;
+    };
+    testGateway.gateway.fetchConversation = async () =>
+      persisted
+        ? [
+            { role: "user", content: "Hi" },
+            { role: "assistant", content: "Complete answer" },
+          ]
+        : [{ role: "user", content: "Hi" }];
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    await service.start();
+    const send = service.sendMessage("Hi");
+    const retiredHandlers = testGateway.getStreamingHandlers();
+    retiredHandlers?.onText("Complete");
+    service.stop();
+    await service.start();
+    retiredHandlers?.onText(" stale");
+    retiredHandlers?.onStreamEnd();
+    expect(service.getSnapshot().isLoading).toBe(true);
+    persisted = true;
+    completion.resolve({ success: true });
+    await send;
+    expect(sends).toBe(1);
+    expect(service.getSnapshot()).toMatchObject({
+      isLoading: false,
+      isStreaming: false,
+      error: null,
+      visibleMessages: [
+        { role: "user", content: "Hi" },
+        { role: "assistant", content: "Complete answer" },
+      ],
+    });
+    service.stop();
+  });
+
+  it.each<ChatSendResult>([
+    { success: true },
+    { success: false, error: "Old failure" },
+  ])(
+    "an older request result cannot finish or fail a newer turn: %j",
+    async (oldResult) => {
+      const testGateway = createGateway();
+      const old = Promise.withResolvers<ChatSendResult>();
+      const current = Promise.withResolvers<ChatSendResult>();
+      let sends = 0;
+      testGateway.gateway.sendMessage = () =>
+        ++sends === 1 ? old.promise : current.promise;
+      const service = new ChatService(testGateway.gateway, {
+        theme: "default",
+        variant: "human",
+      });
+      await service.start();
+      const first = service.sendMessage("First");
+      testGateway.getStreamingHandlers()?.onStreamEnd();
+      const second = service.sendMessage("Second");
+      testGateway.getStreamingHandlers()?.onText("New answer");
+      old.resolve(oldResult);
+      await first;
+      expect(service.getSnapshot()).toMatchObject({
+        isLoading: true,
+        isStreaming: true,
+        error: null,
+      });
+      expect(service.getSnapshot().visibleMessages.at(-1)?.content).toBe(
+        "New answer",
+      );
+      current.resolve({ success: true });
+      await second;
+      expect(service.getSnapshot().isLoading).toBe(false);
+      service.stop();
+    },
+  );
+
+  it("conversation recovery does not overwrite a newer live projection", async () => {
+    const testGateway = createGateway();
+    const completion = Promise.withResolvers<ChatSendResult>();
+    const recovery =
+      Promise.withResolvers<
+        Awaited<ReturnType<ChatGateway["fetchConversation"]>>
+      >();
+    const recoveryStarted = Promise.withResolvers<void>();
+    let reads = 0;
+    testGateway.gateway.sendMessage = () => completion.promise;
+    testGateway.gateway.fetchConversation = () => {
+      if (++reads < 3) return Promise.resolve([]);
+      recoveryStarted.resolve();
+      return recovery.promise;
+    };
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    await service.start();
+    const send = service.sendMessage("Hi");
+    service.stop();
+    await service.start();
+    completion.resolve({ success: true });
+    await recoveryStarted.promise;
+    testGateway
+      .getStreamingHandlers()
+      ?.onConversationChanged([
+        { role: "assistant", content: "Newer event reply" },
+      ]);
+    recovery.resolve([{ role: "assistant", content: "Older recovered reply" }]);
+    await send;
+    expect(service.getSnapshot().visibleMessages).toEqual([
+      { role: "assistant", content: "Newer event reply" },
+    ]);
+    service.stop();
+  });
+
+  it("late hydration preserves a saved theme while loading the untouched variant", async () => {
+    const testGateway = createGateway();
+    const settings =
+      Promise.withResolvers<
+        Awaited<ReturnType<ChatGateway["fetchSettings"]>>
+      >();
+    testGateway.gateway.fetchSettings = () => settings.promise;
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    const started = service.start();
+    expect(await service.changeTheme("alien")).toBe(true);
+    settings.resolve({ theme: "robot", variant: "einstein" });
+    await started;
+    expect(service.getSnapshot().settings).toEqual({
+      theme: "alien",
+      variant: "einstein",
+    });
+    service.stop();
+  });
+
+  it("late hydration preserves a saved variant while loading the untouched theme", async () => {
+    const testGateway = createGateway();
+    const settings =
+      Promise.withResolvers<
+        Awaited<ReturnType<ChatGateway["fetchSettings"]>>
+      >();
+    testGateway.gateway.fetchSettings = () => settings.promise;
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "einstein",
+    });
+    const started = service.start();
+    expect(await service.changeVariant("human")).toBe(true);
+    settings.resolve({ theme: "robot", variant: "einstein" });
+    await started;
+    expect(service.getSnapshot().settings).toEqual({
+      theme: "robot",
+      variant: "human",
+    });
+    service.stop();
+  });
+
   it("owns hydration and the main-process conversation projection outside React", async () => {
     const testGateway = createGateway();
     const service = new ChatService(testGateway.gateway, {
@@ -134,4 +303,45 @@ describe("ChatService", () => {
 
     service.stop();
   });
+});
+
+it("ignores hydration from a stopped React subscription after restart", async () => {
+  const testGateway = createGateway();
+  const oldSettings =
+    Promise.withResolvers<Awaited<ReturnType<ChatGateway["fetchSettings"]>>>();
+  let fetchCount = 0;
+  testGateway.gateway.fetchSettings = () =>
+    ++fetchCount === 1
+      ? oldSettings.promise
+      : Promise.resolve({ theme: "default", variant: "human" });
+  const service = new ChatService(testGateway.gateway, {
+    theme: "default",
+    variant: "human",
+  });
+  const firstStart = service.start();
+  service.stop();
+  await service.start();
+  oldSettings.resolve({ theme: "robot", variant: "einstein" });
+  await firstStart;
+  expect(service.getSnapshot().settings).toEqual({
+    theme: "default",
+    variant: "human",
+  });
+  service.stop();
+});
+
+it("ignores errors from hydration that completed after unmount", async () => {
+  const testGateway = createGateway();
+  const settings =
+    Promise.withResolvers<Awaited<ReturnType<ChatGateway["fetchSettings"]>>>();
+  testGateway.gateway.fetchSettings = () => settings.promise;
+  const service = new ChatService(testGateway.gateway, {
+    theme: "default",
+    variant: "human",
+  });
+  const started = service.start();
+  service.stop();
+  settings.reject(new Error("Late failure"));
+  await started;
+  expect(service.getSnapshot().error).toBeNull();
 });

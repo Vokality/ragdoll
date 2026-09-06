@@ -7,6 +7,10 @@
  * - setHeadPose: Rotate the character's head
  */
 
+import {
+  createExtension as defineExtension,
+  type RagdollExtension,
+} from "@vokality/ragdoll-extensions";
 import type {
   ExtensionHostEnvironment,
   ExtensionRuntimeContribution,
@@ -74,74 +78,63 @@ export interface CharacterToolHandler {
 // Validators
 // =============================================================================
 
-function validateSetMood(args: Record<string, unknown>): ValidationResult {
-  const mood = args.mood;
-  if (!mood || typeof mood !== "string") {
-    return { valid: false, error: "mood is required and must be a string" };
+function optionalNumber(
+  value: unknown,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < minimum ||
+    value > maximum
+  ) {
+    throw new Error(
+      `${name} must be a finite number between ${minimum} and ${maximum}`,
+    );
   }
-  if (!VALID_MOODS.includes(mood as CharacterMood)) {
-    return {
-      valid: false,
-      error: `Invalid mood '${mood}'. Valid: ${VALID_MOODS.join(", ")}`,
-    };
-  }
-  if (args.duration !== undefined) {
-    const d = args.duration;
-    if (typeof d !== "number" || d < 0 || d > 5) {
-      return {
-        valid: false,
-        error: "duration must be a number between 0 and 5",
-      };
-    }
-  }
-  return { valid: true };
+  return value;
 }
 
-function validateTriggerAction(
+function parseSetMood(args: Record<string, unknown>): SetMoodArgs {
+  const mood = VALID_MOODS.find((candidate) => candidate === args.mood);
+  if (!mood) throw new Error(`Invalid mood. Valid: ${VALID_MOODS.join(", ")}`);
+  return { mood, duration: optionalNumber(args.duration, "duration", 0, 5) };
+}
+
+function parseTriggerAction(args: Record<string, unknown>): TriggerActionArgs {
+  const action = VALID_ACTIONS.find((candidate) => candidate === args.action);
+  if (!action)
+    throw new Error(`Invalid action. Valid: ${VALID_ACTIONS.join(", ")}`);
+  return {
+    action,
+    duration: optionalNumber(args.duration, "duration", 0.2, 5),
+  };
+}
+
+function parseSetHeadPose(args: Record<string, unknown>): SetHeadPoseArgs {
+  return {
+    yawDegrees: optionalNumber(args.yawDegrees, "yawDegrees", -35, 35),
+    pitchDegrees: optionalNumber(args.pitchDegrees, "pitchDegrees", -20, 20),
+    duration: optionalNumber(args.duration, "duration", 0.1, 2),
+  };
+}
+
+function validateArguments<T>(
+  parse: (args: Record<string, unknown>) => T,
   args: Record<string, unknown>,
 ): ValidationResult {
-  const action = args.action;
-  if (!action || typeof action !== "string") {
-    return { valid: false, error: "action is required and must be a string" };
-  }
-  if (!VALID_ACTIONS.includes(action as CharacterAction)) {
+  try {
+    parse(args);
+    return { valid: true };
+  } catch (error) {
     return {
       valid: false,
-      error: `Invalid action '${action}'. Valid: ${VALID_ACTIONS.join(", ")}`,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
-  if (args.duration !== undefined) {
-    const d = args.duration;
-    if (typeof d !== "number" || d < 0.2 || d > 5) {
-      return {
-        valid: false,
-        error: "duration must be a number between 0.2 and 5",
-      };
-    }
-  }
-  return { valid: true };
-}
-
-function validateSetHeadPose(args: Record<string, unknown>): ValidationResult {
-  if (args.yawDegrees !== undefined) {
-    const y = args.yawDegrees;
-    if (typeof y !== "number" || y < -35 || y > 35) {
-      return { valid: false, error: "yawDegrees must be between -35 and 35" };
-    }
-  }
-  if (args.pitchDegrees !== undefined) {
-    const p = args.pitchDegrees;
-    if (typeof p !== "number" || p < -20 || p > 20) {
-      return { valid: false, error: "pitchDegrees must be between -20 and 20" };
-    }
-  }
-  if (args.duration !== undefined) {
-    const d = args.duration;
-    if (typeof d !== "number" || d < 0.1 || d > 2) {
-      return { valid: false, error: "duration must be between 0.1 and 2" };
-    }
-  }
-  return { valid: true };
 }
 
 // =============================================================================
@@ -176,8 +169,8 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
         },
       },
       handler: (args: Record<string, unknown>, _ctx) =>
-        handler.setMood(args as unknown as SetMoodArgs),
-      validate: validateSetMood,
+        handler.setMood(parseSetMood(args)),
+      validate: (args) => validateArguments(parseSetMood, args),
     },
     {
       definition: {
@@ -205,9 +198,8 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) =>
-        handler.triggerAction(args as unknown as TriggerActionArgs),
-      validate: validateTriggerAction,
+      handler: (args, _ctx) => handler.triggerAction(parseTriggerAction(args)),
+      validate: (args) => validateArguments(parseTriggerAction, args),
     },
     {
       definition: {
@@ -240,9 +232,8 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
           },
         },
       },
-      handler: (args, _ctx) =>
-        handler.setHeadPose(args as unknown as SetHeadPoseArgs),
-      validate: validateSetHeadPose,
+      handler: (args, _ctx) => handler.setHeadPose(parseSetHeadPose(args)),
+      validate: (args) => validateArguments(parseSetHeadPose, args),
     },
   ];
 }
@@ -251,10 +242,6 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
 // Extension Factory
 // =============================================================================
 
-import {
-  createExtension as defineExtension,
-  type RagdollExtension,
-} from "@vokality/ragdoll-extensions";
 
 const DEFAULT_EXTENSION_ID = "character";
 const CHARACTER_IPC_CHANNEL = `extension-tool:${DEFAULT_EXTENSION_ID}`;
@@ -281,12 +268,9 @@ function createRuntime(
   };
 
   const handler: CharacterToolHandler = {
-    setMood: (args) =>
-      forward("setMood", args as unknown as Record<string, unknown>),
-    triggerAction: (args) =>
-      forward("triggerAction", args as unknown as Record<string, unknown>),
-    setHeadPose: (args) =>
-      forward("setHeadPose", args as unknown as Record<string, unknown>),
+    setMood: (args) => forward("setMood", { ...args }),
+    triggerAction: (args) => forward("triggerAction", { ...args }),
+    setHeadPose: (args) => forward("setHeadPose", { ...args }),
   };
 
   return {

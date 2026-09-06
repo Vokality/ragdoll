@@ -26,6 +26,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Browser regressions
+        run: bun run test:browser
+
       - name: Type check
         run: bun run typecheck
 

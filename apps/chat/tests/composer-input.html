@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Composer input regression</title>
+  </head>
+  <body>
+    <p id="result">Running…</p>
+    <div id="root"></div>
+    <script type="module">
+      import React, { act, StrictMode } from "react";
+      import { createRoot } from "react-dom/client";
+      import { ChatInput } from "../src/components/chat-input.tsx";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const root = createRoot(document.getElementById("root"));
+      const sent = [];
+      const check = (condition, message) => {
+        if (!condition) throw new Error(message);
+      };
+      try {
+        await act(async () =>
+          root.render(
+            React.createElement(
+              StrictMode,
+              null,
+              React.createElement(ChatInput, {
+                onSend: async (message) => {
+                  sent.push(message);
+                  return true;
+                },
+                onStop() {},
+                isBusy: false,
+                placeholder: "Message",
+              }),
+            ),
+          ),
+        );
+        const input = document.querySelector("textarea");
+        const setValue = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          "value",
+        ).set;
+        await act(async () => {
+          setValue.call(input, "こんにちは");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const composing = new KeyboardEvent("keydown", {
+          key: "Enter",
+          isComposing: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => input.dispatchEvent(composing));
+        check(
+          sent.length === 0,
+          "Composition confirmation must not send a message",
+        );
+        check(
+          !composing.defaultPrevented,
+          "Composition confirmation must reach the input method",
+        );
+        check(
+          input.value === "こんにちは",
+          "Composed draft must remain in the input",
+        );
+        const multiline = new KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => input.dispatchEvent(multiline));
+        check(
+          sent.length === 0 && !multiline.defaultPrevented,
+          "Shift+Enter must remain available for a newline",
+        );
+        const submit = new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => input.dispatchEvent(submit));
+        check(
+          sent.length === 1 && sent[0] === "こんにちは",
+          "Normal Enter must send the completed draft once",
+        );
+        check(
+          input.value === "" && submit.defaultPrevented,
+          "Submission must clear the draft and prevent a newline",
+        );
+        await act(async () => root.unmount());
+        document.getElementById("result").textContent =
+          "PASS: IME confirmation, Shift+Enter, normal Enter, and draft preservation";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.message}`;
+        console.error(error);
+      }
+    </script>
+  </body>
+</html>

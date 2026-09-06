@@ -144,3 +144,43 @@ function createGateway(
     ...overrides,
   };
 }
+
+it("serializes toggles against persisted state so different extensions do not overwrite each other", async () => {
+  let disabled: string[] = [];
+  const writes: string[][] = [];
+  const service = new ExtensionManagementService(
+    createGateway({
+      getDisabledExtensions: async () => [...disabled],
+      setDisabledExtensions: async (ids) => {
+        writes.push([...ids]);
+        disabled = [...ids];
+        return { success: true };
+      },
+    }),
+  );
+  await Promise.all([service.toggle("spotify"), service.toggle("tasks")]);
+  expect(writes).toEqual([["spotify"], ["spotify", "tasks"]]);
+  await Promise.all([service.toggle("spotify"), service.toggle("spotify")]);
+  expect(disabled).toEqual(["tasks", "spotify"]);
+});
+
+it("a failed toggle does not poison later operations or overview loading", async () => {
+  let attempts = 0;
+  let disabled: string[] = [];
+  const service = new ExtensionManagementService(
+    createGateway({
+      getDisabledExtensions: async () => disabled,
+      setDisabledExtensions: async (ids) => {
+        if (++attempts === 1) return { success: false, error: "failed" };
+        disabled = ids;
+        return { success: true };
+      },
+    }),
+  );
+  const failed = service.toggle("spotify");
+  const successful = service.toggle("tasks");
+  const overview = service.loadOverview();
+  await expect(failed).rejects.toThrow("failed");
+  expect(await successful).toEqual(["tasks"]);
+  expect((await overview).disabled).toEqual(["tasks"]);
+});

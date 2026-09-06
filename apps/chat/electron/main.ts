@@ -3,9 +3,19 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LumenApplication } from "./lumen-application.js";
 import { createMainProcessConfig } from "./main-process-config.js";
+import { QuitCoordinator } from "./services/quit-coordinator.js";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 let application: LumenApplication | null = null;
+let initialization = Promise.resolve();
+const shutdown = new QuitCoordinator(
+  async () => {
+    await initialization;
+    await application?.destroy();
+  },
+  () => app.quit(),
+  (error) => reportFailure("Application shutdown failed", error),
+);
 
 function reportFailure(context: string, error: unknown): void {
   console.error(context, error);
@@ -14,20 +24,22 @@ function reportFailure(context: string, error: unknown): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  app.on("before-quit", shutdown.beforeQuit);
   app.on("second-instance", () => {
-    application?.focusWindow();
+    if (!shutdown.isQuitting) application?.focusWindow();
   });
 
-  void app
+  initialization = app
     .whenReady()
     .then(async () => {
       const config = createMainProcessConfig(app, moduleDirectory);
       app.dock?.setIcon(config.appIconPath);
       application = await LumenApplication.create(config);
+      if (shutdown.isQuitting) return;
       await application.createWindow();
 
       app.on("activate", () => {
-        if (!application?.hasWindow()) {
+        if (!shutdown.isQuitting && !application?.hasWindow()) {
           void application
             ?.createWindow()
             .catch((error: unknown) =>
@@ -44,12 +56,4 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
-});
-
-app.on("will-quit", () => {
-  void application
-    ?.destroy()
-    .catch((error: unknown) =>
-      reportFailure("Application shutdown failed", error),
-    );
 });

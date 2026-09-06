@@ -31,6 +31,19 @@ interface ToolEntry {
   tool: ExtensionTool;
 }
 
+class RegistrationCleanupError extends AggregateError {
+  constructor(
+    extensionId: string,
+    registrationError: unknown,
+    readonly cleanupError: unknown,
+  ) {
+    super(
+      [registrationError, cleanupError],
+      `Extension '${extensionId}' registration and cleanup failed.`,
+    );
+  }
+}
+
 interface ServiceEntry {
   extensionId: string;
   definition: ExtensionServiceDefinition;
@@ -261,12 +274,40 @@ export class ExtensionRegistry {
   private readonly slotIndex = new Map<string, SlotEntry>();
   private readonly eventBus: RegistryEventBus;
   private instanceCounter = 0;
+  private readonly pendingRegistrations = new Map<string, Promise<void>>();
+  private destroyed = false;
 
   constructor(private readonly dependencies: ExtensionRegistryDependencies) {
     this.eventBus = new RegistryEventBus(dependencies.onListenerError);
   }
 
-  async register(
+  register(
+    extension: RagdollExtension,
+    options: RegisterOptions,
+  ): Promise<void> {
+    if (this.destroyed)
+      return Promise.reject(new Error("Extension registry is destroyed"));
+    const id = extension.manifest?.id;
+    if (!id)
+      return Promise.reject(new Error("Extension manifest ID is required"));
+    if (this.pendingRegistrations.has(id)) {
+      return Promise.reject(
+        new Error(`Extension '${id}' registration is already in progress`),
+      );
+    }
+    const pending = Promise.resolve().then(() =>
+      this.registerRuntime(extension, options),
+    );
+    this.pendingRegistrations.set(id, pending);
+    const release = () => {
+      if (this.pendingRegistrations.get(id) === pending)
+        this.pendingRegistrations.delete(id);
+    };
+    void pending.then(release, release);
+    return pending;
+  }
+
+  private async registerRuntime(
     extension: RagdollExtension,
     options: RegisterOptions,
   ): Promise<void> {
@@ -301,7 +342,10 @@ export class ExtensionRegistry {
 
     let contribution: ExtensionRuntimeContribution | undefined;
     try {
+      if (this.destroyed) throw new Error("Extension registry is destroyed");
       contribution = await extension.activate(host, context);
+      if (this.destroyed)
+        throw new Error("Extension registry was destroyed during activation");
       assertValidContribution(extensionId, contribution);
       this.ensureNoConflicts(extensionId, contribution);
 
@@ -309,6 +353,11 @@ export class ExtensionRegistry {
         await this.unregister(extensionId);
       }
 
+      if (this.destroyed)
+        throw new Error("Extension registry was destroyed during registration");
+      // Replacement cleanup yields to user lifecycle callbacks. Recheck global
+      // capability ownership before committing after that asynchronous boundary.
+      this.ensureNoConflicts(extensionId, contribution);
       const capabilities = summarizeCapabilities(contribution);
       this.addContributionIndices(extensionId, contribution);
       this.extensions.set(extensionId, {
@@ -320,6 +369,9 @@ export class ExtensionRegistry {
         capabilities,
       });
 
+      // Registered-event listeners may synchronously start another lifecycle
+      // operation. The activation reservation is no longer needed after commit.
+      this.pendingRegistrations.delete(extensionId);
       await this.emitCapabilityEvents(
         "capability:registered",
         extensionId,
@@ -340,10 +392,7 @@ export class ExtensionRegistry {
         try {
           await deactivateExtension(extension, context, contribution);
         } catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
-            `Extension '${extensionId}' registration and cleanup failed.`,
-          );
+          throw new RegistrationCleanupError(extensionId, error, cleanupError);
         }
       }
       throw error;
@@ -568,8 +617,20 @@ export class ExtensionRegistry {
   }
 
   async destroy(): Promise<void> {
+    this.destroyed = true;
+    const registrations = await Promise.allSettled(
+      this.pendingRegistrations.values(),
+    );
     const ids = Array.from(this.extensions.keys());
     const errors: unknown[] = [];
+    for (const registration of registrations) {
+      if (
+        registration.status === "rejected" &&
+        registration.reason instanceof RegistrationCleanupError
+      ) {
+        errors.push(registration.reason.cleanupError);
+      }
+    }
     for (const id of ids) {
       try {
         await this.unregister(id);

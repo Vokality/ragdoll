@@ -35,13 +35,13 @@ function App() {
 - **Facial Expressions**: smile, frown, laugh, angry, sad, surprise, confusion, thinking
 - **Actions**: wink, talk, and shake animations
 - **Head Pose**: yaw and pitch control with smooth transitions
-- **Three.js renderer**: perspective WebGL canvas; outline paths extrude into a rounded head with sphere eyes (no SVG fallback)
+- **Three.js renderer**: perspective WebGL canvas; an anatomical mesh with integrated ears, nose, eyelids, and facial morph targets (no SVG fallback)
 - **Themes**: default, robot, alien, monochrome (or create your own)
 - **Idle Animations**: subtle breathing, blinking, micro-movements
 
 ## Architecture & DDD
 
-`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry still describes the face as outline paths; `RagdollCharacter` extrudes those paths onto a rounded perspective head with sphere eyes. Hosts can also subscribe to `CharacterController` events and render their own UI.
+`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry exposes outline paths for host renderers; `RagdollCharacter` maps expression values to anatomical facial morph targets. Hair roots are fitted to the neutral skull through a spatial index, and facial normal templates are reused between instances. The bundled mesh requires no runtime model download. Hosts can also subscribe to `CharacterController` events and render their own UI.
 
 ## API
 
@@ -192,3 +192,11 @@ import type {
 ## License
 
 MIT
+
+### Renderer visual review
+
+From the repository root, run `bunx --bun --no-install vite --port 5174`, then open
+`http://localhost:5174/packages/ragdoll/tests/renderers/preview.html`.
+The review page exercises both variants, themes, expressions, blinks, pitch, and
+front/profile/rear views without an Electron host. Geometry regression tests check
+closed edges and visibility around the full head.

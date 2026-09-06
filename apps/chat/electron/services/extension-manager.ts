@@ -110,6 +110,8 @@ export class ExtensionManager {
   private loader: ExtensionLoader;
   private config: ExtensionManagerConfig;
   private initialized = false;
+  private lifecycleQueue = Promise.resolve();
+  private destruction: Promise<void> | null = null;
   private slotStateUnsubscribers = new Map<string, () => void>();
   private registryUnsubscribers: Array<() => void> = [];
 
@@ -119,6 +121,71 @@ export class ExtensionManager {
   private packageInfoCache = new Map<string, ExtensionPackageDescriptor>();
   private loadedExtensions: ExtensionInfo[] = [];
   private disabledExtensions: Set<string>;
+
+  initialize(): Promise<void> {
+    return this.enqueueLifecycle(() => this.initializeRuntime());
+  }
+
+  async setConfigValues(
+    extensionId: string,
+    values: ConfigValues,
+  ): Promise<void> {
+    const changes = { ...values };
+    await this.enqueueLifecycle(() =>
+      this.setConfigValuesRuntime(extensionId, changes),
+    );
+  }
+
+  setDisabledExtensions(extensionIds: string[]): Promise<void> {
+    const ids = [...extensionIds];
+    return this.enqueueLifecycle(() => this.setDisabledExtensionsRuntime(ids));
+  }
+
+  discoverAndLoadPackages(): Promise<LoadResult[]> {
+    return this.enqueueLifecycle(() => this.discoverAndLoadPackagesRuntime());
+  }
+
+  async loadPackage(
+    packageName: string,
+    config?: Record<string, unknown>,
+  ): Promise<LoadResult> {
+    const values = structuredClone(config);
+    return this.enqueueLifecycle(() =>
+      this.loadPackageRuntime(packageName, values),
+    );
+  }
+
+  unloadPackage(packageName: string): Promise<boolean> {
+    return this.enqueueLifecycle(() => this.unloadPackageRuntime(packageName));
+  }
+
+  async reloadPackage(
+    packageName: string,
+    config?: Record<string, unknown>,
+  ): Promise<LoadResult> {
+    const values = structuredClone(config);
+    return this.enqueueLifecycle(() =>
+      this.reloadPackageRuntime(packageName, values),
+    );
+  }
+
+  destroy(): Promise<void> {
+    if (!this.destruction) {
+      this.destruction = this.enqueueLifecycle(() => this.destroyRuntime());
+    }
+    return this.destruction;
+  }
+
+  private enqueueLifecycle<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.destruction)
+      return Promise.reject(new Error("Extension manager is shutting down"));
+    const result = this.lifecycleQueue.then(operation);
+    this.lifecycleQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
 
   constructor(config: ExtensionManagerConfig) {
     this.config = config;
@@ -380,7 +447,7 @@ export class ExtensionManager {
     return this.configManagers.get(extensionId)?.getSchema() ?? null;
   }
 
-  async setConfigValues(
+  private async setConfigValuesRuntime(
     extensionId: string,
     values: ConfigValues,
   ): Promise<void> {
@@ -404,13 +471,13 @@ export class ExtensionManager {
 
     const loaded = this.loadedExtensions.some(({ id }) => id === extensionId);
     if (!manager.isConfigured() && loaded) {
-      await this.unloadPackage(descriptor.packageName);
+      await this.unloadPackageRuntime(descriptor.packageName);
     } else if (
       manager.isConfigured() &&
       !loaded &&
       !this.isExtensionDisabled(extensionId)
     ) {
-      const result = await this.loadPackage(descriptor.packageName);
+      const result = await this.loadPackageRuntime(descriptor.packageName);
       if (!result.success) {
         throw new Error(
           result.error ?? `Failed to activate extension '${extensionId}'`,
@@ -423,7 +490,7 @@ export class ExtensionManager {
   // Initialization
   // ===========================================================================
 
-  async initialize(): Promise<void> {
+  private async initializeRuntime(): Promise<void> {
     if (this.initialized) return;
 
     for (const definition of this.config.builtInExtensions) {
@@ -452,7 +519,7 @@ export class ExtensionManager {
       if (!result.success) throw new Error(result.error);
     }
 
-    await this.discoverAndLoadPackages();
+    await this.discoverAndLoadPackagesRuntime();
     this.initialized = true;
   }
 
@@ -537,7 +604,7 @@ export class ExtensionManager {
   // Package Discovery and Loading
   // ===========================================================================
 
-  async discoverAndLoadPackages(): Promise<LoadResult[]> {
+  private async discoverAndLoadPackagesRuntime(): Promise<LoadResult[]> {
     const packages = await this.loader.discoverPackages();
     const results: LoadResult[] = [];
 
@@ -563,7 +630,7 @@ export class ExtensionManager {
         continue;
       }
 
-      const result = await this.loadPackage(packageName);
+      const result = await this.loadPackageRuntime(packageName);
       results.push(result);
     }
 
@@ -682,7 +749,9 @@ export class ExtensionManager {
     return [...this.disabledExtensions];
   }
 
-  async setDisabledExtensions(extensionIds: string[]): Promise<void> {
+  private async setDisabledExtensionsRuntime(
+    extensionIds: string[],
+  ): Promise<void> {
     const next = new Set(extensionIds);
     const extensions = this.getDiscoveredExtensions();
     for (const extensionId of next) {
@@ -707,7 +776,10 @@ export class ExtensionManager {
         const isLoaded = this.loadedExtensions.some(
           ({ id }) => id === extension.id,
         );
-        if (isLoaded && !(await this.unloadPackage(extension.packageName))) {
+        if (
+          isLoaded &&
+          !(await this.unloadPackageRuntime(extension.packageName))
+        ) {
           throw new Error(`Failed to disable extension '${extension.id}'`);
         }
         if (isLoaded) unloaded.push(extension);
@@ -721,7 +793,7 @@ export class ExtensionManager {
         }
         if (!this.isConfigured(descriptor)) continue;
 
-        const result = await this.loadPackage(extension.packageName);
+        const result = await this.loadPackageRuntime(extension.packageName);
         if (!result.success) {
           throw new Error(
             result.error ?? `Failed to enable extension '${extension.id}'`,
@@ -732,12 +804,12 @@ export class ExtensionManager {
     } catch (error) {
       const rollbackErrors: string[] = [];
       for (const extension of loaded.reverse()) {
-        if (!(await this.unloadPackage(extension.packageName))) {
+        if (!(await this.unloadPackageRuntime(extension.packageName))) {
           rollbackErrors.push(`could not unload '${extension.id}'`);
         }
       }
       for (const extension of unloaded.reverse()) {
-        const result = await this.loadPackage(extension.packageName);
+        const result = await this.loadPackageRuntime(extension.packageName);
         if (!result.success) {
           rollbackErrors.push(
             result.error ?? `could not reload '${extension.id}'`,
@@ -787,7 +859,7 @@ export class ExtensionManager {
       .map(({ packageName }) => packageName);
   }
 
-  async loadPackage(
+  private async loadPackageRuntime(
     packageName: string,
     config?: Record<string, unknown>,
   ): Promise<LoadResult> {
@@ -838,7 +910,7 @@ export class ExtensionManager {
     return result;
   }
 
-  async unloadPackage(packageName: string): Promise<boolean> {
+  private async unloadPackageRuntime(packageName: string): Promise<boolean> {
     const extension = this.loadedExtensions.find(
       (ext) => ext.packageName === packageName,
     );
@@ -861,12 +933,12 @@ export class ExtensionManager {
     return success;
   }
 
-  async reloadPackage(
+  private async reloadPackageRuntime(
     packageName: string,
     config?: Record<string, unknown>,
   ): Promise<LoadResult> {
-    await this.unloadPackage(packageName);
-    return this.loadPackage(packageName, config);
+    await this.unloadPackageRuntime(packageName);
+    return this.loadPackageRuntime(packageName, config);
   }
 
   // ===========================================================================
@@ -1029,7 +1101,7 @@ export class ExtensionManager {
   // Lifecycle
   // ===========================================================================
 
-  async destroy(): Promise<void> {
+  private async destroyRuntime(): Promise<void> {
     for (const unsubscribe of this.slotStateUnsubscribers.values())
       unsubscribe();
     for (const unsubscribe of this.registryUnsubscribers) unsubscribe();

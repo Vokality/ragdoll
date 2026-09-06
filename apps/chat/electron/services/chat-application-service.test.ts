@@ -57,6 +57,110 @@ function createChat(agent = new StubAgentRunner()) {
 }
 
 describe("ChatApplicationService", () => {
+  it("shutdown saves partial text and rejects queued user turns", async () => {
+    let markStarted = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const agent: AgentRunner = {
+      runUserTurn: async (_key, _conversation, stream, signal) => {
+        stream("Partial answer");
+        markStarted();
+        await new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new Error("Aborted")),
+            { once: true },
+          );
+        });
+        return "Unreachable";
+      },
+      runEventTurn: async () => ({ disposition: "silent" }),
+    };
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      { getKey: async () => "key" },
+      agent,
+      () => {},
+      ignoreError,
+    );
+    const callbacks = { streamingText() {}, streamEnded() {} };
+    const first = chat.sendMessage("First", callbacks);
+    await started;
+    const second = chat.sendMessage("Queued", callbacks);
+    await chat.destroy();
+    expect(await first).toEqual({ success: true });
+    expect(await second).toMatchObject({ success: false });
+    expect(await chat.sendMessage("Late", callbacks)).toMatchObject({
+      success: false,
+    });
+    expect(await chat.clearConversation()).toMatchObject({ success: false });
+    expect(storage.snapshot().conversation).toEqual([
+      { role: "user", content: "First" },
+      { role: "assistant", content: "Partial answer" },
+    ]);
+  });
+
+  it("shutdown completes an active event and retains unstarted events for next launch", async () => {
+    let markStarted = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let finishEvent = () => {};
+    const eventGate = new Promise<void>((resolve) => {
+      finishEvent = resolve;
+    });
+    let calls = 0;
+    const agent: AgentRunner = {
+      runUserTurn: async () => "Hello",
+      runEventTurn: async () => {
+        calls += 1;
+        markStarted();
+        await eventGate;
+        return { disposition: "respond", content: "Finished" };
+      },
+    };
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      { getKey: async () => "key" },
+      agent,
+      () => {},
+      ignoreError,
+    );
+    const events = new ConversationEventService(storage, eventDependencies);
+    await events.publish("timer", {
+      type: "timer.first",
+      payload: {},
+      turnPolicy: "start-turn",
+    });
+    const second = await events.publish("timer", {
+      type: "timer.second",
+      payload: {},
+      turnPolicy: "start-turn",
+    });
+    const run = chat.schedulePendingEventTurns();
+    await started;
+    let stopped = false;
+    const stopping = chat.destroy().then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    finishEvent();
+    await Promise.all([run, stopping]);
+    await chat.schedulePendingEventTurns();
+    expect(calls).toBe(1);
+    expect(storage.snapshot().pendingAgentTurns).toMatchObject([
+      { triggerEventId: second.eventId },
+    ]);
+    expect(storage.snapshot().conversation.at(-1)).toEqual({
+      role: "assistant",
+      content: "Finished",
+    });
+  });
+
   it("owns user-message persistence and publishes the visible projection", async () => {
     const { chat, projections, storage } = createChat();
     const streamed: string[] = [];

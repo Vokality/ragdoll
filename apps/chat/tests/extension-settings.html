@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Extension installation regression</title></head>
+  <body>
+    <p id="result">Running…</p><div id="root"></div>
+    <script type="module">
+      import React, { act, StrictMode, useLayoutEffect } from "react";
+      import { createRoot } from "react-dom/client";
+      import { useExtensionSettings } from "../src/hooks/use-extension-settings.ts";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      let api;
+      let request;
+      const calls = [];
+      const operationCalls = [];
+      const requests = new Map();
+      const service = {
+        loadOverview: async () => ({ available: [], builtIn: [], configurable: [], disabled: [], installed: [] }),
+        install: (url) => { calls.push(url); return request.promise; },
+        update: (id) => { operationCalls.push(`update:${id}`); return requests.get(id).promise; },
+        uninstall: (id) => { operationCalls.push(`uninstall:${id}`); return requests.get(id).promise; },
+      };
+      function Sample() {
+        const state = useExtensionSettings(service, true);
+        useLayoutEffect(() => { api = state; });
+        return null;
+      }
+      const root = createRoot(document.getElementById("root"));
+      const check = (value, message) => { if (!value) throw new Error(message); };
+      try {
+        await act(async () => root.render(React.createElement(StrictMode, null, React.createElement(Sample))));
+        await act(async () => api.setInstallUrl("https://github.com/example/first"));
+        request = Promise.withResolvers();
+        let pending;
+        await act(async () => { pending = api.install(); void api.install(); });
+        check(calls.length === 1, "Duplicate install reached the service");
+        await act(async () => api.setInstallUrl("https://github.com/example/second"));
+        await act(async () => { request.resolve({ success: true }); await pending; });
+        check(api.installUrl === "https://github.com/example/second", "Install erased a newer URL");
+        check(!api.isInstalling, "Install remained busy");
+        request = Promise.withResolvers();
+        await act(async () => { pending = api.install(); });
+        await act(async () => { request.resolve({ success: false, error: "Install failed" }); await pending; });
+        check(api.installUrl.endsWith("/second"), "Failure erased the retry URL");
+        check(api.notice?.text === "Install failed", "Failure was not displayed");
+        request = Promise.withResolvers();
+        await act(async () => { pending = api.install(); });
+        await act(async () => { request.resolve({ success: true }); await pending; });
+        check(calls.length === 3 && api.installUrl === "", "Retry did not clear the submitted URL");
+        requests.set("first", Promise.withResolvers());
+        requests.set("second", Promise.withResolvers());
+        let first;
+        let second;
+        await act(async () => {
+          first = api.update("first");
+          second = api.uninstall("second");
+          void api.update("first");
+          void api.uninstall("first");
+          void api.update("second");
+        });
+        check(operationCalls.join(",") === "update:first,uninstall:second", "Conflicting operation reached service");
+        check(api.pendingOperations.get("first") === "update" && api.pendingOperations.get("second") === "uninstall", "Concurrent rows lost pending state");
+        await act(async () => { requests.get("first").resolve({ success: true }); await first; });
+        check(!api.pendingOperations.has("first") && api.pendingOperations.has("second"), "Completing one row cleared another row");
+        await act(async () => { requests.get("second").reject(new Error("Uninstall failed")); await second; });
+        check(api.pendingOperations.size === 0 && api.notice?.text === "Uninstall failed", "Failure did not release its row");
+        requests.set("second", Promise.withResolvers());
+        await act(async () => { second = api.uninstall("second"); });
+        await act(async () => { requests.get("second").resolve({ success: true }); await second; });
+        check(operationCalls.length === 3 && api.pendingOperations.size === 0, "Row could not retry after failure");
+        await act(async () => root.unmount());
+        document.getElementById("result").textContent = "PASS: install draft preservation, duplicate prevention, concurrent rows, conflicting actions, failure, and retry";
+      } catch (error) {
+        document.getElementById("result").textContent = `FAIL: ${error.stack ?? error}`;
+      }
+    </script>
+  </body>
+</html>

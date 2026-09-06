@@ -12,13 +12,16 @@ Run commands from the repository root unless a package-specific script is requir
 bun install --frozen-lockfile
 bun run build
 bun run test
+bun run test:browser
 bun run typecheck
 bun run lint
 ```
 
 Focused work uses workspace filters, for example `bun run --filter @vokality/ragdoll-extensions test`. Do not add npm, pnpm, or Yarn lockfiles or scripts. Do not execute tools by hardcoding paths under `node_modules`; use `bun run` for package scripts and `bunx --bun` for package binaries.
 
-CI on every push and pull request runs lint, test, typecheck, and `verify:packages` with Bun 1.4.2. Tag workflows (`chat-v*`, `emote-v*`) run the same checks before packaging.
+Browser regressions run in an isolated Electron profile. On headless Linux use `xvfb-run -a bun run test:browser`.
+
+CI on every push and pull request runs lint, test, browser regressions, typecheck, and `verify:packages` with Bun 1.4.2. Tag workflows (`chat-v*`, `emote-v*`) run the same checks before packaging.
 
 ## Boundaries
 

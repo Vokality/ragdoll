@@ -152,8 +152,7 @@ export function useSlotRegistry(registry: SlotRegistry): ExtensionUISlot[] {
  * This hook subscribes to each slot's state and returns only visible slots
  * sorted by priority (higher first).
  *
- * Uses a version-based caching strategy to maintain stable references
- * for useSyncExternalStore compatibility.
+ * Reuses the result when the visible slot objects and ordering are unchanged.
  *
  * @param slots - Array of slots to filter
  * @returns Visible slots sorted by priority
@@ -174,55 +173,25 @@ export function useSlotRegistry(registry: SlotRegistry): ExtensionUISlot[] {
  * ```
  */
 export function useVisibleSlots(slots: ExtensionUISlot[]): ExtensionUISlot[] {
-  // Version counter that increments when any slot's state changes
-  const versionRef = useRef(0);
-  // Cached result
   const cacheRef = useRef<ExtensionUISlot[]>([]);
-  const cachedSlotsRef = useRef<ExtensionUISlot[] | null>(null);
-  // Version when cache was last computed
-  const cachedVersionRef = useRef(-1);
-
-  // Subscribe to all slots' state changes
   const subscribe = useCallback(
     (callback: () => void) => {
-      const unsubscribes = slots.map((slot) =>
-        slot.state.subscribe(() => {
-          // Increment version on any change
-          versionRef.current++;
-          callback();
-        }),
-      );
-      return () => {
-        unsubscribes.forEach((unsub) => unsub());
-      };
+      const unsubscribes = slots.map((slot) => slot.state.subscribe(callback));
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
     },
     [slots],
   );
-
-  // Get snapshot with stable reference
   const getSnapshot = useCallback((): ExtensionUISlot[] => {
-    // Only recompute if version changed
+    // Read current state even before subscription; notifications are not a revision log.
+    const visible = slots
+      .filter((slot) => slot.state.getState().visible)
+      .sort((left, right) => right.priority - left.priority);
     if (
-      slots !== cachedSlotsRef.current ||
-      versionRef.current !== cachedVersionRef.current
+      cacheRef.current.length !== visible.length ||
+      cacheRef.current.some((slot, index) => slot !== visible[index])
     ) {
-      cachedSlotsRef.current = slots;
-      cachedVersionRef.current = versionRef.current;
-
-      const visible = slots
-        .filter((slot) => slot.state.getState().visible)
-        .sort((a, b) => b.priority - a.priority);
-
-      // Only update cache reference if the result actually changed
-      const cacheValid =
-        cacheRef.current.length === visible.length &&
-        cacheRef.current.every((slot, i) => slot.id === visible[i]?.id);
-
-      if (!cacheValid) {
-        cacheRef.current = visible;
-      }
+      cacheRef.current = visible;
     }
-
     return cacheRef.current;
   }, [slots]);
 

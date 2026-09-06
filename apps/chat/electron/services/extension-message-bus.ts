@@ -1,4 +1,10 @@
+import { z } from "zod";
 import type { HostIpcBridge } from "@vokality/ragdoll-extensions";
+
+const toolMessageSchema = z.object({
+  tool: z.string().min(1),
+  args: z.record(z.string(), z.unknown()),
+});
 
 type MessageListener = (payload: unknown) => void;
 
@@ -39,7 +45,9 @@ export class ExtensionMessageBus {
         this.listeners.set(topic, listeners);
         return () => {
           listeners.delete(listener);
-          if (listeners.size === 0) this.listeners.delete(topic);
+          if (listeners.size === 0 && this.listeners.get(topic) === listeners) {
+            this.listeners.delete(topic);
+          }
         };
       },
     };
@@ -53,13 +61,6 @@ export class ExtensionMessageBus {
     tool: string;
     args: Record<string, unknown>;
   } {
-    if (!payload || typeof payload !== "object") {
-      throw new Error("Extension tool message must be an object");
-    }
-    const { tool, args } = payload as Record<string, unknown>;
-    if (typeof tool !== "string" || !args || typeof args !== "object") {
-      throw new Error("Extension tool message is invalid");
-    }
-    return { tool, args: args as Record<string, unknown> };
+    return toolMessageSchema.parse(payload);
   }
 }

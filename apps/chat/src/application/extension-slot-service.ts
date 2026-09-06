@@ -41,6 +41,7 @@ export class ExtensionSlotService {
   private generation = 0;
   private loadRevision = 0;
   private startPromise: Promise<void> | null = null;
+  private loadingStates: Map<string, SerializedSlotState> | null = null;
 
   constructor(
     private readonly api: ExtensionSlotGateway,
@@ -59,7 +60,9 @@ export class ExtensionSlotService {
     const generation = ++this.generation;
     this.unsubscribe = this.api.onSlotStateChanged((event) => {
       if (generation !== this.generation) return;
+      this.loadingStates?.set(event.slotId, event.state);
       const store = this.stores.get(event.slotId);
+      if (!store && this.loadingStates) return;
       if (!store) {
         throw new Error(`Received state for unknown slot: ${event.slotId}`);
       }
@@ -68,9 +71,12 @@ export class ExtensionSlotService {
     this.unsubscribeFromSlotChanges = this.api.onExtensionSlotsChanged(() => {
       void this.reload(generation);
     });
-    this.startPromise = this.load(generation, ++this.loadRevision).catch(
+    const revision = ++this.loadRevision;
+    this.startPromise = this.load(generation, revision).catch(
       (error: unknown) => {
-        if (generation === this.generation) this.stop();
+        if (generation !== this.generation || revision !== this.loadRevision)
+          return;
+        this.stop();
         this.reportError(error);
       },
     );
@@ -86,55 +92,69 @@ export class ExtensionSlotService {
     this.unsubscribeFromSlotChanges = null;
     this.startPromise = null;
     this.stores.clear();
+    this.loadingStates = null;
     this.slots = [];
   }
 
   private async load(generation: number, revision: number): Promise<void> {
-    const metadata = await this.api.getExtensionSlots();
-    const duplicateIds = metadata.filter(
-      (slot, index) =>
-        metadata.findIndex((candidate) => candidate.slotId === slot.slotId) !==
-        index,
-    );
-    if (duplicateIds.length > 0) {
-      throw new Error(`Duplicate slot id: ${duplicateIds[0]?.slotId}`);
-    }
-
-    const states = await Promise.all(
-      metadata.map(async (slot) => {
-        const state = await this.api.getSlotState(slot.slotId);
-        if (!state) throw new Error(`Missing state for slot: ${slot.slotId}`);
-        return [slot, state] as const;
-      }),
-    );
-    if (generation !== this.generation || revision !== this.loadRevision)
-      return;
-
-    this.stores.clear();
-    for (const [slot, state] of states) {
-      this.stores.set(
-        slot.slotId,
-        createSlotState(
-          this.attachActionHandlers(slot.slotId, state),
-          this.reportError,
-        ),
+    const updates = new Map<string, SerializedSlotState>();
+    this.loadingStates = updates;
+    try {
+      const metadata = await this.api.getExtensionSlots();
+      const duplicateIds = metadata.filter(
+        (slot, index) =>
+          metadata.findIndex(
+            (candidate) => candidate.slotId === slot.slotId,
+          ) !== index,
       );
+      if (duplicateIds.length > 0) {
+        throw new Error(`Duplicate slot id: ${duplicateIds[0]?.slotId}`);
+      }
+
+      const states = await Promise.all(
+        metadata.map(async (slot) => {
+          const state = await this.api.getSlotState(slot.slotId);
+          if (!state) throw new Error(`Missing state for slot: ${slot.slotId}`);
+          return [slot, state] as const;
+        }),
+      );
+      if (generation !== this.generation || revision !== this.loadRevision)
+        return;
+
+      this.stores.clear();
+      for (const [slot, state] of states) {
+        this.stores.set(
+          slot.slotId,
+          createSlotState(
+            this.attachActionHandlers(
+              slot.slotId,
+              updates.get(slot.slotId) ?? state,
+            ),
+            this.reportError,
+          ),
+        );
+      }
+      this.slots = metadata.map((slot) => ({
+        id: slot.slotId,
+        label: slot.label,
+        icon: slot.icon,
+        priority: slot.priority,
+        state: this.requireStore(slot.slotId),
+      }));
+      for (const listener of this.listeners) listener();
+    } finally {
+      if (this.loadingStates === updates) this.loadingStates = null;
     }
-    this.slots = metadata.map((slot) => ({
-      id: slot.slotId,
-      label: slot.label,
-      icon: slot.icon,
-      priority: slot.priority,
-      state: this.requireStore(slot.slotId),
-    }));
-    for (const listener of this.listeners) listener();
   }
 
   private async reload(generation: number): Promise<void> {
+    if (generation !== this.generation) return;
+    const revision = ++this.loadRevision;
     try {
-      await this.load(generation, ++this.loadRevision);
+      await this.load(generation, revision);
     } catch (error) {
-      this.reportError(error);
+      if (generation === this.generation && revision === this.loadRevision)
+        this.reportError(error);
     }
   }
 
@@ -239,16 +259,14 @@ export class ExtensionSlotService {
     slotId: string,
     panel: SerializedCardsPanelConfig,
   ): CardsPanelConfig {
-    const actions = panel.actions?.map(
-      (action): PanelAction => ({
-        ...action,
-        onClick: () =>
-          this.executeAction(slotId, {
-            actionType: "panel-action",
-            actionId: action.id,
-          }),
-      }),
-    );
+    const actions = panel.actions?.map((action): PanelAction => ({
+      ...action,
+      onClick: () =>
+        this.executeAction(slotId, {
+          actionType: "panel-action",
+          actionId: action.id,
+        }),
+    }));
 
     if (panel.card.face === "front") {
       if (!panel.answerInput) {
@@ -303,4 +321,3 @@ export class ExtensionSlotService {
       });
   }
 }
-

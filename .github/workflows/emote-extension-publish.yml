@@ -33,6 +33,10 @@ jobs:
         working-directory: .
         run: bun run test
 
+      - name: Browser regressions
+        working-directory: .
+        run: xvfb-run -a bun run test:browser
+
       - name: Type check
         working-directory: .
         run: bun run typecheck

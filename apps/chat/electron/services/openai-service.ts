@@ -318,6 +318,28 @@ export class OpenAIAgentRunner implements AgentRunner {
 
       if (completion.toolCalls.length === 0) {
         this.assertFinishedWithoutTools(completion);
+        if (!response.trim() && completion.finishReason === "stop") {
+          // Recover text once without replaying tools that may already have acted.
+          const finalText = await completionSession.complete({
+            messages: [
+              ...messages,
+              {
+                role: "system",
+                content:
+                  "Provide a short text response to the user based on the conversation and completed tool results. Do not call tools again.",
+              },
+            ],
+            tools: [],
+            toolChoice: "none",
+            onStreamingText,
+            signal,
+          });
+          this.assertFinishedWithoutTools(finalText);
+          if (finalText.toolCalls.length || !finalText.content.trim()) {
+            throw new Error("The agent returned an empty response");
+          }
+          return finalText.content;
+        }
         return response;
       }
 

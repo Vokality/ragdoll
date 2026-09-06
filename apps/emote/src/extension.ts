@@ -6,7 +6,9 @@ import { McpSetupService } from "./mcp-setup-service";
 import { RagdollPanel } from "./ragdoll-panel";
 import { SocketCommandServer } from "./socket-command-server";
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<void> {
   const logger = new EmoteLogger(context);
   const settings = new EmoteSettings();
   const commands = new EmoteCommandService(context.extensionUri, settings);
@@ -74,8 +76,18 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  socketServer.start();
   context.subscriptions.push(socketServer);
+  try {
+    await socketServer.start();
+  } catch (error) {
+    logger.error("Could not start Emote command server", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    logger.notifyErrorOnce(
+      "socket-server-error",
+      "Emote could not start the command server. Check the Emote output channel for details.",
+    );
+  }
   logger.info("Emote extension activated");
 }
 

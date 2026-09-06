@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Visible slot regression</title>
+  </head>
+  <body>
+    <p id="result">Running…</p>
+    <div id="root"></div>
+    <script type="module">
+      import React, { act, useLayoutEffect } from "react";
+      import { createRoot } from "react-dom/client";
+      import { useVisibleSlots } from "../../../packages/ragdoll-extensions/src/ui/hooks.ts";
+      import { createSlotState } from "../../../packages/ragdoll-extensions/src/slots.ts";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const state = () =>
+        createSlotState(
+          {
+            badge: null,
+            visible: true,
+            panel: { type: "list", title: "Tasks", items: [] },
+          },
+          (error) => {
+            throw error;
+          },
+        );
+      const root = createRoot(document.getElementById("root"));
+      let visible;
+      function Sample({ slots, hideBeforeSubscribe = false }) {
+        const value = useVisibleSlots(slots);
+        useLayoutEffect(() => {
+          visible = value;
+        });
+        useLayoutEffect(() => {
+          if (hideBeforeSubscribe)
+            slots[0].state.replaceState({
+              ...slots[0].state.getState(),
+              visible: false,
+            });
+        }, [slots, hideBeforeSubscribe]);
+        return null;
+      }
+      const check = (condition, message) => {
+        if (!condition) throw new Error(message);
+      };
+      try {
+        const old = {
+          id: "tasks",
+          label: "Old",
+          icon: "checklist",
+          priority: 1,
+          state: state(),
+        };
+        await act(async () =>
+          root.render(React.createElement(Sample, { slots: [old] })),
+        );
+        const replacement = { ...old, label: "New", state: state() };
+        await act(async () =>
+          root.render(React.createElement(Sample, { slots: [replacement] })),
+        );
+        check(
+          visible[0] === replacement,
+          "Same-id replacement retained the old slot",
+        );
+        await act(async () =>
+          replacement.state.replaceState({
+            ...replacement.state.getState(),
+            visible: false,
+          }),
+        );
+        check(visible.length === 0, "Replacement state changes were missed");
+        const early = { ...old, state: state() };
+        await act(async () =>
+          root.render(
+            React.createElement(Sample, {
+              key: "early",
+              slots: [early],
+              hideBeforeSubscribe: true,
+            }),
+          ),
+        );
+        check(
+          visible.length === 0,
+          "Pre-subscription visibility update was missed",
+        );
+        document.getElementById("result").textContent =
+          "PASS: slot replacement, live visibility, and pre-subscription updates";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.message}`;
+        throw error;
+      } finally {
+        await act(async () => root.unmount());
+      }
+    </script>
+  </body>
+</html>

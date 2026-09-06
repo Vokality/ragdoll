@@ -43,7 +43,14 @@ export interface PreparedExtensionUpdate {
 export class ExtensionInstaller {
   constructor(private readonly config: ExtensionInstallerConfig) {}
 
-  async installFromGitHub(sourceUrl: string): Promise<InstallResult> {
+  installFromGitHub(sourceUrl: string): Promise<InstallResult> {
+    return this.installPackage(sourceUrl, { kind: "install" });
+  }
+
+  private async installPackage(
+    sourceUrl: string,
+    target: { kind: "install" } | { kind: "update"; extensionId: string },
+  ): Promise<InstallResult> {
     let temporaryPath: string | null = null;
     try {
       const release = await this.config.releases.resolve(sourceUrl);
@@ -65,6 +72,11 @@ export class ExtensionInstaller {
       );
       const metadata = manifest.ragdollExtension;
       if (!metadata) throw new Error("Package is not a Ragdoll extension");
+      if (target.kind === "update" && metadata.id !== target.extensionId) {
+        throw new Error(
+          `Update package id '${metadata.id}' does not match '${target.extensionId}'`,
+        );
+      }
       const packageVersion = this.parseVersion(manifest.version);
       if (packageVersion !== releaseVersion) {
         throw new Error(
@@ -74,6 +86,11 @@ export class ExtensionInstaller {
 
       const finalPath = join(this.config.extensionsPath, metadata.id);
       const existing = await this.config.repository.get(metadata.id);
+      if (existing && target.kind === "install") {
+        throw new Error(
+          `Extension '${metadata.id}' is already installed; use update`,
+        );
+      }
       if (!existing && (await this.pathExists(finalPath))) {
         throw new Error(
           `Extension directory already exists for '${metadata.id}'`,
@@ -98,7 +115,7 @@ export class ExtensionInstaller {
         if (existing) await rename(backupPath, finalPath);
         throw error;
       }
-      if (existing) await rm(backupPath, { recursive: true });
+      if (existing) await this.removeGarbage(backupPath);
 
       return {
         success: true,
@@ -138,7 +155,7 @@ export class ExtensionInstaller {
       await rename(backupPath, extension.path);
       throw error;
     }
-    await rm(backupPath, { recursive: true });
+    await this.removeGarbage(backupPath);
     return { success: true };
   }
 
@@ -173,29 +190,62 @@ export class ExtensionInstaller {
       join(this.config.extensionsPath, ".update-"),
     );
     const snapshotPath = join(snapshotRoot, "package");
-    await cp(extension.path, snapshotPath, { recursive: true });
-    const result = await this.installFromGitHub(extension.repoUrl);
+    let result: InstallResult;
+    try {
+      await cp(extension.path, snapshotPath, { recursive: true });
+      result = await this.installPackage(extension.repoUrl, {
+        kind: "update",
+        extensionId,
+      });
+    } catch (error) {
+      await this.removeGarbage(snapshotRoot);
+      throw error;
+    }
     if (!result.success) {
-      await rm(snapshotRoot, { recursive: true });
+      await this.removeGarbage(snapshotRoot);
       return result;
     }
-    let settled = false;
+    let state: "pending" | "settling" | "settled" = "pending";
     return {
       result,
       commit: async () => {
-        if (settled) throw new Error("Extension update transaction is settled");
-        settled = true;
-        await rm(snapshotRoot, { recursive: true });
+        if (state !== "pending")
+          throw new Error(
+            "Extension update transaction is settled or settling",
+          );
+        state = "settled";
+        await this.removeGarbage(snapshotRoot);
       },
       rollback: async () => {
-        if (settled) throw new Error("Extension update transaction is settled");
-        settled = true;
-        await rm(extension.path, { recursive: true, force: true });
-        await rename(snapshotPath, extension.path);
-        await this.config.repository.set(extension);
-        await rm(snapshotRoot, { recursive: true });
+        if (state !== "pending")
+          throw new Error(
+            "Extension update transaction is settled or settling",
+          );
+        state = "settling";
+        try {
+          await rm(extension.path, { recursive: true, force: true });
+          // Keep the recovery copy until both files and repository are restored.
+          await cp(snapshotPath, extension.path, { recursive: true });
+          await this.config.repository.set(extension);
+          state = "settled";
+        } catch (error) {
+          state = "pending";
+          throw error;
+        }
+        await this.removeGarbage(snapshotRoot);
       },
     };
+  }
+
+  private async removeGarbage(path: string): Promise<void> {
+    try {
+      await rm(path, { recursive: true, force: true });
+    } catch (error) {
+      this.config.logger.error("Failed to remove obsolete extension files", {
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private parseVersion(value: string): string {

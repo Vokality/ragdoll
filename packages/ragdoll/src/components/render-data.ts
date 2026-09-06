@@ -1,5 +1,6 @@
 import type { CharacterController } from "../controllers/character-controller";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
+import type { CharacterAppearance } from "../variants/types";
 import type { RagdollTheme } from "../themes/types";
 
 export function applyIdleToExpression(
@@ -46,6 +47,7 @@ function creasePath(
 }
 
 export interface RenderData {
+  appearance: CharacterAppearance;
   dims: ReturnType<CharacterController["getGeometry"]>["dimensions"];
   expression: ExpressionConfig;
   yaw: number;
@@ -98,10 +100,15 @@ export function computeRenderData(controller: CharacterController): RenderData {
   const pitch = state.headPose.pitch + (idleState.headMicroY * Math.PI) / 180;
   const breathingOffsetY = -idleState.breathAmount * dims.headHeight * 0.25;
   const breathingScale = 1 + idleState.breathAmount * 0.4;
-  const headRoll = ((idleState.headMicroX * 0.35) * Math.PI) / 180;
+  const headRoll = (idleState.headMicroX * 0.35 * Math.PI) / 180;
 
   return {
     dims,
+    appearance: {
+      hairStyle: geometry.variant.hairStyle ?? "default",
+      mustacheStyle: geometry.variant.mustacheStyle ?? "none",
+      age: geometry.variant.ageModifier ?? 0.5,
+    },
     expression,
     yaw,
     pitch,

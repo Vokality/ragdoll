@@ -33,10 +33,11 @@
     "preview": "bun run ../../scripts/run-js-bin.ts vite preview",
     "electron": "bunx --bun --no-install electron .",
     "electron:dev": "bunx --bun --no-install concurrently -n VITE,ELECTRON -c cyan,yellow \"bun run ../../scripts/run-js-bin.ts vite\" \"bunx --bun --no-install wait-on http://localhost:5173 && bunx --bun --no-install electron .\"",
-    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.electron.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.preload.json --noEmit",
+    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.electron.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.preload.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.browser-tests.json --noEmit",
     "lint": "bun run ../../scripts/run-js-bin.ts oxlint .",
     "test": "bun test src/**/*.test.ts electron/**/*.test.ts",
-    "clean": "bun run ../../scripts/clean.ts dist"
+    "clean": "bun run ../../scripts/clean.ts dist",
+    "test:browser": "bun run scripts/test-browser.ts"
   },
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",

@@ -207,3 +207,154 @@ describe("OAuthManager", () => {
     manager.destroy();
   });
 });
+
+function createLifecycleFixture(overrides: Partial<OAuthManagerConfig> = {}) {
+  const clock = { now: 0 };
+  const activeTimers = new Map<symbol, () => void>();
+  const delays: number[] = [];
+  const saved: OAuthTokens[] = [];
+  const failures: string[] = [];
+  const manager = new OAuthManager({
+    extensionId: "example",
+    oauthConfig,
+    getClientId: () => "client-id",
+    redirects: {
+      createSession: async () => {
+        throw new Error("Unexpected authorization");
+      },
+      destroy() {},
+    },
+    loadTokens: async () => ({
+      accessToken: "old",
+      refreshToken: "refresh",
+      expiresAt: 120_000,
+    }),
+    saveTokens: async (tokens) => {
+      saved.push(tokens);
+    },
+    clearTokens: async () => {},
+    openExternal: async () => {},
+    events: {
+      connected() {},
+      failed(error) {
+        failures.push(error);
+      },
+    },
+    logger: noOpLogger,
+    fetch: async () => {
+      throw new Error("Unexpected token request");
+    },
+    now: () => clock.now,
+    timers: {
+      setTimeout(callback, delay) {
+        const handle = Symbol();
+        activeTimers.set(handle, callback);
+        delays.push(delay);
+        return handle;
+      },
+      clearTimeout(handle) {
+        if (typeof handle === "symbol") activeTimers.delete(handle);
+      },
+      setInterval() {
+        throw new Error("Unexpected interval");
+      },
+      clearInterval() {},
+    },
+    ...overrides,
+  });
+  return { manager, clock, activeTimers, delays, saved, failures };
+}
+
+it("schedules short-lived tokens before expiry without an immediate refresh loop", async () => {
+  const fixture = createLifecycleFixture();
+  await fixture.manager.initialize();
+  expect(fixture.delays).toEqual([60_000]);
+  fixture.manager.destroy();
+  expect(fixture.activeTimers.size).toBe(0);
+});
+
+it("does not save or reschedule a refresh response received after destruction", async () => {
+  const response = deferred<Response>();
+  let requestSignal: AbortSignal | null | undefined;
+  const fixture = createLifecycleFixture({
+    fetch: async (_url, request) => {
+      requestSignal = request?.signal;
+      return response.promise;
+    },
+  });
+  await fixture.manager.initialize();
+  fixture.clock.now = 100_000;
+  const access = fixture.manager.getAccessToken();
+  fixture.manager.destroy();
+  expect(requestSignal?.aborted).toBe(true);
+  response.resolve(Response.json({ access_token: "new", expires_in: 120 }));
+  await expect(access).rejects.toThrow("destroyed");
+  expect(fixture.saved).toEqual([]);
+  expect(fixture.failures).toEqual([]);
+  expect(fixture.activeTimers.size).toBe(0);
+  expect(fixture.manager.isAuthenticated()).toBe(false);
+});
+
+it("disconnect removes a refresh timer created while it was waiting for a request", async () => {
+  const response = deferred<Response>();
+  const fixture = createLifecycleFixture({
+    fetch: async () => response.promise,
+  });
+  await fixture.manager.initialize();
+  fixture.clock.now = 100_000;
+  const access = fixture.manager.getAccessToken();
+  const disconnect = fixture.manager.disconnect();
+  response.resolve(Response.json({ access_token: "new", expires_in: 120 }));
+  await Promise.all([access, disconnect]);
+  expect(fixture.activeTimers.size).toBe(0);
+  expect(fixture.manager.getState().status).toBe("disconnected");
+  expect(await fixture.manager.getAccessToken()).toBeNull();
+  fixture.manager.destroy();
+});
+
+it("cancels authorization whose callback listener finishes starting after disconnect", async () => {
+  const callback = deferred<OAuthCallbackResult>();
+  const listener =
+    Promise.withResolvers<
+      Awaited<ReturnType<OAuthRedirectService["createSession"]>>
+    >();
+  let closed = false;
+  let opened = false;
+  const fixture = createLifecycleFixture({
+    redirects: { createSession: () => listener.promise, destroy() {} },
+    openExternal: async () => {
+      opened = true;
+    },
+  });
+  const start = fixture.manager.startFlow();
+  await fixture.manager.disconnect();
+  listener.resolve({
+    redirectUri: "http://127.0.0.1:43123/callback",
+    result: callback.promise,
+    close() {
+      closed = true;
+      callback.reject(new Error("cancelled"));
+    },
+  });
+  await expect(start).rejects.toThrow("cancelled");
+  expect(closed).toBe(true);
+  expect(opened).toBe(false);
+  expect(fixture.manager.getState().status).toBe("disconnected");
+  fixture.manager.destroy();
+});
+
+it("ignores stored tokens loaded after destruction", async () => {
+  const tokens = deferred<OAuthTokens | null>();
+  const fixture = createLifecycleFixture({ loadTokens: () => tokens.promise });
+  const initialize = fixture.manager.initialize();
+  fixture.manager.destroy();
+  tokens.resolve({
+    accessToken: "old",
+    refreshToken: "refresh",
+    expiresAt: 120_000,
+  });
+  await initialize;
+  expect(fixture.manager.isAuthenticated()).toBe(false);
+  expect(fixture.activeTimers.size).toBe(0);
+  expect(fixture.failures).toEqual([]);
+});

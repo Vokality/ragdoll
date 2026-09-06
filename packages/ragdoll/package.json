@@ -36,7 +36,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "src/renderers/three/assets/LICENSE.txt"
   ],
   "scripts": {
     "prebuild": "bun run clean",
