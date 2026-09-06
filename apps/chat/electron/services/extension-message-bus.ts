@@ -2,6 +2,14 @@ import type { HostIpcBridge } from "@vokality/ragdoll-extensions";
 
 type MessageListener = (payload: unknown) => void;
 
+function assertOwnedTopic(extensionId: string, topic: string): void {
+  if (topic === `extension-tool:${extensionId}`) return;
+  if (topic.startsWith(`${extensionId}:`)) return;
+  throw new Error(
+    `Extension '${extensionId}' cannot use IPC topic '${topic}'. Publish and subscribe only to 'extension-tool:${extensionId}' or topics prefixed with '${extensionId}:'.`,
+  );
+}
+
 export class ExtensionMessageBus {
   private readonly listeners = new Map<string, Set<MessageListener>>();
 
@@ -15,6 +23,7 @@ export class ExtensionMessageBus {
   forExtension(extensionId: string): HostIpcBridge {
     return {
       publish: (topic, payload) => {
+        assertOwnedTopic(extensionId, topic);
         if (topic === `extension-tool:${extensionId}`) {
           const toolCall = this.parseToolCall(payload);
           this.onToolExecution(toolCall.tool, toolCall.args);
@@ -24,6 +33,7 @@ export class ExtensionMessageBus {
         }
       },
       subscribe: (topic, listener) => {
+        assertOwnedTopic(extensionId, topic);
         const listeners = this.listeners.get(topic) ?? new Set();
         listeners.add(listener);
         this.listeners.set(topic, listeners);

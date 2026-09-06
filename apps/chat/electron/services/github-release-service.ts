@@ -6,6 +6,7 @@ const releaseSchema = z.object({
     z.object({
       name: z.string().min(1),
       browser_download_url: z.url(),
+      digest: z.string().min(1).optional(),
     }),
   ),
 });
@@ -14,6 +15,16 @@ export interface ExtensionRelease {
   repoUrl: string;
   tag: string;
   downloadUrl: string;
+  sha256?: string;
+}
+
+function parseSha256Digest(digest: string | undefined): string | undefined {
+  if (!digest) return undefined;
+  const match = /^sha256:([a-fA-F0-9]{64})$/.exec(digest);
+  if (!match) {
+    throw new Error(`Unsupported GitHub asset digest '${digest}'`);
+  }
+  return match[1].toLowerCase();
 }
 
 interface GitHubRepository {
@@ -54,6 +65,7 @@ export class GitHubReleaseService {
       repoUrl: `https://github.com/${repository.owner}/${repository.repo}`,
       tag: release.tag_name,
       downloadUrl: asset.browser_download_url,
+      sha256: parseSha256Digest(asset.digest),
     };
   }
 

@@ -19,6 +19,7 @@ import {
   type NotificationCallback,
   type ExtensionManifest,
   type HostTimersCapability,
+  type HostSchedulerCapability,
   type ConfigSchema,
   type ConfigValues,
   type ConversationEventInput,
@@ -79,6 +80,7 @@ export interface ExtensionManagerConfig {
   conversationEvents: ExtensionConversationEventPublisher;
   logger: ServiceLogger;
   timers: HostTimersCapability;
+  scheduler: HostSchedulerCapability;
   request: typeof fetch;
   now(): number;
 }
@@ -208,9 +210,13 @@ export class ExtensionManager {
     const timers = requestedCapabilities.has("timers")
       ? this.config.timers
       : undefined;
+    const scheduler = requestedCapabilities.has("scheduler")
+      ? this.config.scheduler
+      : undefined;
     if (storage) capabilities.add("storage");
     if (ipc) capabilities.add("ipc");
     if (timers) capabilities.add("timers");
+    if (scheduler) capabilities.add("scheduler");
     if (logger) capabilities.add("logger");
     const conversationEvents = canPublishConversationEvents
       ? {
@@ -241,6 +247,7 @@ export class ExtensionManager {
       logger,
       ipc,
       timers,
+      scheduler,
       oauth,
       config,
     };
@@ -818,7 +825,11 @@ export class ExtensionManager {
     );
     if (builtIn) return this.loadBuiltInExtension(builtIn);
 
-    const result = await this.loader.loadPackage(packageName, config);
+    const hostConfig = this.configManagers.get(info.extensionId)?.getValues();
+    const result = await this.loader.loadPackage(
+      packageName,
+      config ?? hostConfig,
+    );
 
     if (result.success && result.packageInfo) {
       this.recordLoadedExtension(result.packageName, result.packageInfo);

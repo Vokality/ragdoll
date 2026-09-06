@@ -1,4 +1,5 @@
-import { mkdir, open } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, open, readFile } from "node:fs/promises";
 import { extract } from "tar";
 
 export class ExtensionArchiveService {
@@ -9,6 +10,7 @@ export class ExtensionArchiveService {
     downloadUrl: string,
     archivePath: string,
     destinationPath: string,
+    expectedSha256?: string,
   ): Promise<void> {
     const response = await this.request(downloadUrl, {
       headers: { "User-Agent": "Lumen-Extension-Installer" },
@@ -32,6 +34,16 @@ export class ExtensionArchiveService {
       }
     } finally {
       await archive.close();
+    }
+    if (expectedSha256) {
+      const actualSha256 = createHash("sha256")
+        .update(await readFile(archivePath))
+        .digest("hex");
+      if (actualSha256 !== expectedSha256) {
+        throw new Error(
+          "Extension archive digest does not match the GitHub asset digest",
+        );
+      }
     }
     await extract({
       cwd: destinationPath,

@@ -2,8 +2,10 @@
  * Extension Loader - Discovers and loads extensions from package directories.
  *
  * Extension packages:
- * 1. Have `"ragdollExtension": true` in their package.json
- * 2. Export a `createExtension(config?)` function that returns a RagdollExtension
+ * 1. Declare a `ragdollExtension` object in package.json (id, entry, capabilities,
+ *    required/optional host capabilities, and config/OAuth schemas when applicable)
+ * 2. Export a `createExtension(config?)` factory. The loader does not accept a
+ *    bare extension object; register those objects through the registry instead.
  *
  * @example
  * ```ts

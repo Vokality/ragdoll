@@ -23,6 +23,13 @@ export type ExtensionHostCapability =
   | "oauth"
   | "config";
 
+/** Persisted conversation events use `domain.event` names. */
+export const CONVERSATION_EVENT_TYPE_PATTERN =
+  /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/;
+
+/** Tool names required by an event turn use `snake_case`. */
+export const REQUIRED_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
+
 /**
  * Notification payload forwarded to the host.
  */
@@ -184,3 +191,22 @@ export interface ExtensionHostEnvironment {
    */
   readonly config?: HostConfigCapability;
 }
+
+/**
+ * Host environment field that implements each advertised capability.
+ * A host must both list the capability in `capabilities` and provide this field.
+ */
+export const HOST_CAPABILITY_FIELDS = {
+  storage: "storage",
+  notifications: "notifications",
+  conversationEvents: "conversationEvents",
+  timers: "timers",
+  scheduler: "scheduler",
+  ipc: "ipc",
+  logger: "logger",
+  oauth: "oauth",
+  config: "config",
+} as const satisfies Record<
+  ExtensionHostCapability,
+  keyof ExtensionHostEnvironment
+>;

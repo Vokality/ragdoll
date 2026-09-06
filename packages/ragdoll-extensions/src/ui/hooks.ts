@@ -1,7 +1,7 @@
 /**
  * React hooks for consuming extension UI slots.
  *
- * These hooks use React 18's useSyncExternalStore for efficient
+ * These hooks use React's useSyncExternalStore for efficient
  * subscription to external slot state.
  *
  * IMPORTANT: All getSnapshot functions must return stable references

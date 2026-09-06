@@ -149,7 +149,7 @@ const state = createSlotState(
 const payload = serializeSlotState(state.getState());
 ```
 
-Serialization removes callbacks while preserving `canClick` and `canToggle`. The host routes action IDs back to the owning slot; executable functions never cross IPC.
+Serialization removes callbacks while preserving `canClick`, `canToggle`, and `canSubmit`. The host routes action IDs back to the owning slot; executable functions never cross IPC.
 
 ## Events and cleanup
 
