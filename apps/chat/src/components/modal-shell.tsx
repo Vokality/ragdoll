@@ -91,7 +91,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "20px 24px",
+    padding: "12px 18px",
     borderBottom: "1px solid var(--border)",
     flexShrink: 0,
   },

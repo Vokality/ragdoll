@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Character card regression</title>
+  </head>
+  <body>
+    <p
+      id="result"
+      style="
+        position: fixed;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 10;
+        font-size: 10px;
+      "
+    >
+      Running…
+    </p>
+    <div id="root"></div>
+    <script type="module">
+      import React, { act, StrictMode } from "react";
+      import { createRoot } from "react-dom/client";
+      import {
+        ControlledSlotBar,
+        createSlotState,
+        useActiveSlot,
+      } from "@vokality/ragdoll-extensions/ui";
+      import { CharacterView } from "../src/components/character-view.tsx";
+      import "../src/styles/global.css";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      let actions = 0;
+      const reportError = (error) => {
+        throw error;
+      };
+      const ready = () => {};
+      const state = createSlotState(
+        {
+          visible: true,
+          badge: null,
+          panel: {
+            type: "list",
+            title: "Tasks",
+            items: [
+              {
+                id: "one",
+                label: "Example task",
+                onClick: () => {
+                  actions++;
+                },
+              },
+            ],
+          },
+        },
+        reportError,
+      );
+      const listPanel = state.getState().panel;
+      const slots = [
+        { id: "tasks", label: "Tasks", icon: "checklist", priority: 0, state },
+      ];
+      function Sample({ height }) {
+        const [id, setId, slot] = useActiveSlot(slots);
+        return React.createElement(
+          "main",
+          {
+            style: {
+              height,
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+            },
+          },
+          React.createElement(
+            "header",
+            { style: { padding: 16, flexShrink: 0 } },
+            React.createElement(ControlledSlotBar, {
+              slots,
+              activeSlotId: id,
+              onSlotClick: setId,
+            }),
+          ),
+          React.createElement(CharacterView, {
+            activeSlot: slot,
+            onClosePanel: () => setId(null),
+            messages: [
+              { role: "assistant", content: "Your conversation stays here." },
+            ],
+            isStreaming: false,
+            themeId: "default",
+            variantId: "human",
+            onControllerReady: ready,
+            onEventSubscriberError: reportError,
+          }),
+          React.createElement("textarea", {
+            id: "composer",
+            "aria-label": "Message",
+            style: { height: 64, flexShrink: 0, margin: 16 },
+          }),
+        );
+      }
+      const root = createRoot(document.getElementById("root"));
+      const check = (ok, message) => {
+        if (!ok) throw new Error(message);
+      };
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 460));
+      try {
+        for (const height of [800, 600]) {
+          await act(async () => state.setState({ panel: listPanel }));
+          document.getElementById("root").style.width =
+            height === 800 ? "480px" : "400px";
+          await act(async () =>
+            root.render(
+              React.createElement(
+                StrictMode,
+                null,
+                React.createElement(Sample, { height }),
+              ),
+            ),
+          );
+          const canvas = document.querySelector("canvas");
+          check(!!canvas, "Character did not render");
+          const large = canvas.getBoundingClientRect().width;
+          await act(async () =>
+            document.querySelector('button[aria-label="Tasks"]').click(),
+          );
+          await settle();
+          const card = document.querySelector(".inline-slot-panel");
+          check(
+            !!card && !document.querySelector("dialog[open]"),
+            "Card opened a modal sheet",
+          );
+          check(
+            document.querySelector("canvas") === canvas,
+            "Opening reloaded the character",
+          );
+          const miniature = canvas.getBoundingClientRect();
+          const bounds = card.getBoundingClientRect();
+          check(
+            miniature.width < large / 2 &&
+              miniature.left < bounds.left + 85 &&
+              miniature.top < bounds.top + 30,
+            "Character did not move into card corner",
+          );
+          const composer = document.getElementById("composer");
+          composer.focus();
+          check(document.activeElement === composer, "Card made chat inert");
+          const conversation = document.querySelector('[aria-live="polite"]');
+          check(
+            conversation.clientHeight > 60 &&
+              conversation.getBoundingClientRect().bottom <=
+                composer.getBoundingClientRect().top,
+            "Chat was covered by card",
+          );
+          await act(async () =>
+            [...card.querySelectorAll("button")]
+              .find((b) => b.textContent.includes("Example task"))
+              .click(),
+          );
+          check(
+            actions === (height === 800 ? 1 : 2),
+            "Card action did not execute",
+          );
+          await act(async () =>
+            state.setState({
+              panel: {
+                type: "grid",
+                title: "Game",
+                columns: 3,
+                cells: Array.from({ length: 9 }, (_, i) => ({
+                  id: String(i),
+                  label: "X",
+                  onClick: () => {},
+                })),
+                actions: [{ id: "new", label: "New game", onClick: () => {} }],
+              },
+            }),
+          );
+          const gridBody = document.querySelector(".slot-panel-grid-content");
+          const cells = [...gridBody.querySelectorAll(".slot-panel-grid-cell")];
+          const gridBottom = Math.max(
+            ...cells.map((cell) => cell.getBoundingClientRect().bottom),
+          );
+          const footer = [...card.querySelectorAll("footer button")].find(
+            (button) => button.textContent === "New game",
+          );
+          check(
+            gridBottom <= footer.getBoundingClientRect().top,
+            "Grid overlaps its actions",
+          );
+          gridBody.scrollTop = gridBody.scrollHeight;
+          check(
+            footer.getBoundingClientRect().bottom <= bounds.bottom + 1,
+            "Grid actions are clipped",
+          );
+          await act(async () =>
+            state.setState({
+              panel: {
+                type: "list",
+                title: "Tasks",
+                items: Array.from({ length: 30 }, (_, i) => ({
+                  id: String(i),
+                  label: `Task ${i}`,
+                })),
+                actions: [{ id: "add", label: "Add task", onClick: () => {} }],
+              },
+            }),
+          );
+          const listBody = card.querySelector(".slot-panel-body");
+          const listFooter = card.querySelector("footer");
+          const footerTop = listFooter.getBoundingClientRect().top;
+          listBody.scrollTop = listBody.scrollHeight;
+          check(
+            listBody.scrollTop > 0 &&
+              listFooter.getBoundingClientRect().top === footerTop,
+            "List scrolling moves the footer",
+          );
+          check(
+            listBody.getBoundingClientRect().bottom <= footerTop,
+            "List overlaps controls",
+          );
+          await act(async () =>
+            state.setState({
+              panel: {
+                type: "cards",
+                title: "Flash Cards",
+                progress: { current: 1, total: 8, label: "Review" },
+                card: {
+                  id: "c",
+                  attemptId: "one",
+                  front: "A long study prompt. ".repeat(60),
+                  back: "Answer",
+                  face: "front",
+                },
+                answerInput: { id: "one" },
+                onSubmitAnswer: () => {},
+                actions: [{ id: "end", label: "End", onClick: () => {} }],
+              },
+            }),
+          );
+          const answer = card.querySelector('input[aria-label="Answer"]');
+          const cardsFooter = card.querySelector("footer");
+          check(
+            cardsFooter.contains(answer),
+            "Answer field is not in the controls region",
+          );
+          check(
+            cardsFooter.getBoundingClientRect().bottom <= bounds.bottom + 1,
+            "Study controls leave the card",
+          );
+          const prompt = card.querySelector(".slot-panel-flip-front");
+          prompt.scrollTop = prompt.scrollHeight;
+          check(prompt.scrollTop > 0, "Long study prompt cannot scroll");
+          check(
+            card.querySelector('[role="progressbar"]').closest("header"),
+            "Study progress is outside header",
+          );
+          await act(async () =>
+            card.querySelector('button[aria-label="Close"]').click(),
+          );
+          await settle();
+          check(
+            document.querySelector("canvas") === canvas &&
+              canvas.getBoundingClientRect().width > large * 0.95,
+            "Closing reloaded or failed to restore character",
+          );
+        }
+        await act(async () => root.unmount());
+        document.getElementById("result").textContent =
+          "PASS: in-place card, persistent miniature, working controls, visible interactive chat, and restoration at 480×800 / 400×600";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.stack ?? error}`;
+      }
+    </script>
+  </body>
+</html>

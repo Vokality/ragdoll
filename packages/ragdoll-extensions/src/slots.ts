@@ -105,21 +105,34 @@ export interface ListPanelSection {
   defaultCollapsed?: boolean;
 }
 
+/** Shared card regions. The host owns dimensions and the leading avatar area. */
+export interface PanelFrame {
+  /** Stable identity in the fixed header. */
+  title: string;
+  /** Optional concise state shown below the title, never as a body item. */
+  status?: PanelStatus;
+  /** Optional progress in the header. */
+  progress?: PanelProgress;
+  /** Ordered controls in the fixed footer; section actions stay with their section. */
+  actions?: PanelAction[];
+}
+
+export interface PanelStatus {
+  label: string;
+  tone?: ItemStatus;
+}
+
 /**
  * Configuration for a list-based panel (React-free version)
  */
-export interface ListPanelConfig {
+export interface ListPanelConfig extends PanelFrame {
   type: "list";
-  /** Panel title */
-  title: string;
   /** Message to show when list is empty */
   emptyMessage?: string;
   /** Flat list of items (use this OR sections, not both) */
   items?: ListPanelItem[];
   /** Grouped sections (use this OR items, not both) */
   sections?: ListPanelSection[];
-  /** Panel-level actions (shown in header or footer) */
-  actions?: PanelAction[];
 }
 
 /**
@@ -157,10 +170,8 @@ export interface GridPanelResult {
 /**
  * Configuration for a grid-based panel (React-free version)
  */
-export interface GridPanelConfig {
+export interface GridPanelConfig extends PanelFrame {
   type: "grid";
-  /** Panel title */
-  title: string;
   /** Message to show when the grid is empty */
   emptyMessage?: string;
   /** Column count for CSS grid layout */
@@ -169,15 +180,13 @@ export interface GridPanelConfig {
   cells: GridPanelCell[];
   /** Terminal state shown in place of the grid */
   result?: GridPanelResult;
-  /** Panel-level actions (shown in header or footer) */
-  actions?: PanelAction[];
 }
 
-/** Progress indicator for a cards study panel */
-export interface CardsPanelProgress {
-  /** 1-based index of the current card */
+/** Progress displayed in the shared panel header. */
+export interface PanelProgress {
+  /** Current completed units or position, between zero and total. */
   current: number;
-  /** Total cards in the session (must be > 0) */
+  /** Total units (must be > 0). */
   total: number;
   /** Optional progress label */
   label?: string;
@@ -220,10 +229,9 @@ export interface CardsAnswerInput {
 }
 
 /** Cards panel before the learner submits an answer */
-export interface CardsPanelFront {
+export interface CardsPanelFront extends PanelFrame {
   type: "cards";
-  title: string;
-  progress: CardsPanelProgress;
+  progress: PanelProgress;
   card: CardsPanelCardBase & { face: "front" };
   answerInput: CardsAnswerInput;
   result?: never;
@@ -232,10 +240,9 @@ export interface CardsPanelFront {
 }
 
 /** Cards panel after grading, with the back face revealed */
-export interface CardsPanelRevealed {
+export interface CardsPanelRevealed extends PanelFrame {
   type: "cards";
-  title: string;
-  progress: CardsPanelProgress;
+  progress: PanelProgress;
   card: CardsPanelCardBase & { face: "back" };
   answerInput?: never;
   result: CardsPanelResult;
@@ -406,7 +413,9 @@ function canSubmitCardsAnswer(panel: CardsPanelConfig): boolean {
   );
 }
 
-function serializeCardsPanel(panel: CardsPanelConfig): SerializedCardsPanelConfig {
+function serializeCardsPanel(
+  panel: CardsPanelConfig,
+): SerializedCardsPanelConfig {
   const { onSubmitAnswer: _onSubmitAnswer, actions, ...rest } = panel;
   return {
     ...rest,
@@ -673,7 +682,7 @@ export function createCardsSlotState(
   options: {
     badge?: number | string | null;
     visible?: boolean;
-    progress?: CardsPanelProgress;
+    progress?: PanelProgress;
     answerInput?: Omit<CardsAnswerInput, "id">;
     actions?: PanelAction[];
     onSubmitAnswer?: (answer: string) => void | Promise<void>;

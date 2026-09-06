@@ -276,6 +276,7 @@ export class ExtensionSlotService {
       const front: CardsPanelFront = {
         type: "cards",
         title: panel.title,
+        status: panel.status,
         progress: panel.progress,
         card: panel.card,
         answerInput,
@@ -299,6 +300,7 @@ export class ExtensionSlotService {
     return {
       type: "cards",
       title: panel.title,
+      status: panel.status,
       progress: panel.progress,
       card: panel.card,
       result: panel.result,

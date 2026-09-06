@@ -56,7 +56,9 @@ export type {
   ListPanelSection,
   GridPanelCell,
   GridPanelResult,
-  CardsPanelProgress,
+  PanelProgress,
+  PanelFrame,
+  PanelStatus,
   CardsPanelResult,
   CardsPanelCardBase,
   CardsAnswerInput,
@@ -122,7 +124,7 @@ export {
 // =============================================================================
 
 export { SlotButton, SlotButtonStateless } from "./slot-button.js";
-export { SlotPanel, SlotPanelBase } from "./slot-panel.js";
+export { SlotPanel, SlotPanelBase, InlineSlotPanel } from "./slot-panel.js";
 export {
   SlotBar,
   ControlledSlotBar,

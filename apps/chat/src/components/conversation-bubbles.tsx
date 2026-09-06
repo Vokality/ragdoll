@@ -131,10 +131,10 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     minHeight: 0,
     width: "100%",
-    maxWidth: "440px",
+    maxWidth: "var(--chat-content-width)",
     overflowY: "auto",
     marginTop: "8px",
-    padding: "4px 12px 16px",
+    padding: "4px 0 12px",
   },
   list: {
     display: "flex",

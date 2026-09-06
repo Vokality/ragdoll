@@ -35,7 +35,7 @@
   "ragdollExtension": {
     "id": "spotify",
     "name": "Spotify",
-    "description": "Spotify playback controls with host-local search resolution",
+    "description": "Find music and control Spotify playback",
     "capabilities": [
       "tools"
     ],

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useState, useId, type CSSProperties, type FormEvent } from "react";
 
 interface ApiKeyInputProps {
   onSubmit: (key: string) => void;
@@ -7,26 +7,35 @@ interface ApiKeyInputProps {
 }
 
 export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
+  const inputId = useId();
   const [key, setKey] = useState("");
   const [showKey, setShowKey] = useState(false);
 
+  const normalizedKey = key.trim();
+  const isValid = normalizedKey.startsWith("sk-") && normalizedKey.length > 20;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (key.trim() && !isLoading) {
-      onSubmit(key.trim());
+    if (isValid && !isLoading) {
+      onSubmit(normalizedKey);
     }
   };
 
-  const isValid = key.startsWith("sk-") && key.length > 20;
-
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
+      <label htmlFor={inputId} style={styles.label}>
+        OpenAI API key
+      </label>
       <div
-        key={error ?? "ok"}
         className={error ? "animate-shake" : undefined}
         style={styles.inputWrapper}
       >
         <input
+          id={inputId}
+          aria-describedby={`${inputId}-privacy${error ? ` ${inputId}-error` : ""}`}
+          aria-invalid={!!error}
+          spellCheck={false}
+          autoCapitalize="none"
           type={showKey ? "text" : "password"}
           value={key}
           onChange={(e) => setKey(e.target.value)}
@@ -43,14 +52,19 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
           onClick={() => setShowKey(!showKey)}
           style={styles.toggleButton}
           aria-label={showKey ? "Hide API key" : "Show API key"}
-          tabIndex={-1}
+          aria-pressed={showKey}
         >
           {showKey ? <EyeOffIcon /> : <EyeIcon />}
         </button>
       </div>
 
       {error && (
-        <p className="animate-fadeIn" role="alert" style={styles.error}>
+        <p
+          id={`${inputId}-error`}
+          className="animate-fadeIn"
+          role="alert"
+          style={styles.error}
+        >
           {error}
         </p>
       )}
@@ -61,7 +75,7 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
         </p>
       )}
 
-      <p style={styles.hint}>
+      <p id={`${inputId}-privacy`} style={styles.hint}>
         Your key is encrypted and stored locally on your device.
       </p>
 
@@ -136,10 +150,11 @@ function ArrowIcon() {
 }
 
 const styles: Record<string, CSSProperties> = {
+  label: { fontSize: "13px", fontWeight: "500", marginBottom: "-4px" },
   form: {
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
+    gap: "12px",
     width: "100%",
   },
   inputWrapper: {
@@ -149,8 +164,8 @@ const styles: Record<string, CSSProperties> = {
   },
   input: {
     width: "100%",
-    padding: "14px 48px 14px 16px",
-    fontSize: "15px",
+    padding: "10px 44px 10px 12px",
+    fontSize: "14px",
     fontFamily: "var(--font-mono)",
     letterSpacing: "0.5px",
     background: "var(--bg-secondary)",

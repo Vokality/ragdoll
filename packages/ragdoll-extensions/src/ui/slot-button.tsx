@@ -16,7 +16,11 @@ import {
   StarIcon,
   TimerIcon,
 } from "./icons.js";
-import type { ExtensionUISlot, PresetIconName, SlotButtonProps } from "./types.js";
+import type {
+  ExtensionUISlot,
+  PresetIconName,
+  SlotButtonProps,
+} from "./types.js";
 
 /**
  * Button component for an extension UI slot.
@@ -213,8 +217,8 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "40px",
-    height: "40px",
+    width: "var(--slot-button-size, 40px)",
+    height: "var(--slot-button-size, 40px)",
     borderRadius: "var(--radius-md, 10px)",
     background: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",

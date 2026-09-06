@@ -36,6 +36,10 @@ export function ExtensionConfigModal({
 
   if (!isOpen) return null;
 
+  const isLoading =
+    !configuration.error &&
+    ((hasConfig && !configuration.schema) ||
+      (hasOAuth && !configuration.oauth));
   const missingFields = new Set(configuration.status?.missingFields ?? []);
   const isConfigComplete = !hasConfig || configuration.status?.isConfigured;
   const isOAuthComplete = !hasOAuth || configuration.oauth?.isAuthenticated;
@@ -48,10 +52,16 @@ export function ExtensionConfigModal({
       onClose={onClose}
     >
       {configuration.error && (
-        <div style={styles.errorBanner}>
+        <div role="alert" style={styles.errorBanner}>
           <ErrorIcon />
           <span>{configuration.error}</span>
         </div>
+      )}
+
+      {isLoading && (
+        <p role="status" style={styles.statusText}>
+          Loading settings…
+        </p>
       )}
 
       {/* Config Fields */}
@@ -95,29 +105,29 @@ export function ExtensionConfigModal({
       )}
 
       {/* Status Summary */}
-      <section style={styles.section}>
-        <div style={styles.statusSummary}>
-          {isFullyConfigured ? (
-            <>
-              <CheckCircleIcon />
-              <span style={styles.statusText}>
-                Extension is fully configured
-              </span>
-            </>
-          ) : (
-            <>
-              <WarningIcon />
-              <span style={styles.statusText}>
-                {!isConfigComplete && !isOAuthComplete
-                  ? "Configuration and authentication required"
-                  : !isConfigComplete
-                    ? "Configuration required"
-                    : "Authentication required"}
-              </span>
-            </>
-          )}
-        </div>
-      </section>
+      {!isLoading && (
+        <section style={styles.section}>
+          <div style={styles.statusSummary}>
+            {isFullyConfigured ? (
+              <>
+                <CheckCircleIcon />
+                <span style={styles.statusText}>Ready to use</span>
+              </>
+            ) : (
+              <>
+                <WarningIcon />
+                <span style={styles.statusText}>
+                  {!isConfigComplete && !isOAuthComplete
+                    ? "Configuration and authentication required"
+                    : !isConfigComplete
+                      ? "Configuration required"
+                      : "Authentication required"}
+                </span>
+              </>
+            )}
+          </div>
+        </section>
+      )}
     </ModalShell>
   );
 }
@@ -144,6 +154,10 @@ function ConfigFieldInput({
         return (
           <input
             id={inputId}
+            aria-describedby={
+              field.description ? `${inputId}-description` : undefined
+            }
+            aria-invalid={isMissing || undefined}
             type={field.secret ? "password" : "text"}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
@@ -163,6 +177,10 @@ function ConfigFieldInput({
         return (
           <input
             id={inputId}
+            aria-describedby={
+              field.description ? `${inputId}-description` : undefined
+            }
+            aria-invalid={isMissing || undefined}
             type="number"
             value={typeof value === "number" ? value : ""}
             onChange={(e) =>
@@ -188,6 +206,10 @@ function ConfigFieldInput({
       case "boolean":
         return (
           <button
+            id={inputId}
+            aria-describedby={
+              field.description ? `${inputId}-description` : undefined
+            }
             type="button"
             onClick={() => onChange(value !== true)}
             className={`switch${value === true ? " on" : ""}`}
@@ -202,6 +224,10 @@ function ConfigFieldInput({
         return (
           <select
             id={inputId}
+            aria-describedby={
+              field.description ? `${inputId}-description` : undefined
+            }
+            aria-invalid={isMissing || undefined}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
             style={{
@@ -231,7 +257,9 @@ function ConfigFieldInput({
           {field.required && <span style={styles.required}>*</span>}
         </label>
         {field.description && (
-          <span style={styles.fieldDescription}>{field.description}</span>
+          <span id={`${inputId}-description`} style={styles.fieldDescription}>
+            {field.description}
+          </span>
         )}
       </div>
       {renderInput()}
@@ -276,11 +304,6 @@ function OAuthStatusCard({
       <div style={styles.oauthStatus}>
         <span style={{ ...styles.statusDot, backgroundColor: status.color }} />
         <span style={styles.statusLabel}>{status.label}</span>
-        {state?.expiresAt && state.status === "connected" && (
-          <span style={styles.expiresAt}>
-            Expires: {new Date(state.expiresAt).toLocaleString()}
-          </span>
-        )}
       </div>
 
       {state?.error && <div style={styles.oauthError}>{state.error}</div>}
@@ -299,11 +322,11 @@ function OAuthStatusCard({
           <button
             type="button"
             onClick={onConnect}
-            disabled={isConnecting}
+            disabled={!state || isConnecting}
             className="btn-primary"
             style={styles.oauthButton}
           >
-            {isConnecting ? "Opening browser..." : "Connect Account"}
+            {isConnecting ? "Opening browser…" : "Connect account"}
           </button>
         )}
       </div>
@@ -449,10 +472,10 @@ const styles: Record<string, CSSProperties> = {
   saveButton: {
     width: "100%",
     marginTop: "16px",
-    padding: "12px 16px",
+    padding: "8px 12px",
   },
   oauthCard: {
-    padding: "16px",
+    padding: "12px",
     background: "var(--bg-secondary)",
     borderRadius: "var(--radius-md)",
     border: "1px solid var(--border)",
@@ -473,11 +496,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: "500",
     color: "var(--text-primary)",
   },
-  expiresAt: {
-    fontSize: "11px",
-    color: "var(--text-dim)",
-    marginLeft: "auto",
-  },
   oauthError: {
     fontSize: "12px",
     color: "var(--error)",
@@ -491,15 +509,14 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
   },
   oauthButton: {
-    flex: 1,
-    padding: "10px 16px",
+    padding: "8px 12px",
     fontSize: "13px",
   },
   statusSummary: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    padding: "14px 16px",
+    padding: "10px 12px",
     background: "var(--bg-secondary)",
     borderRadius: "var(--radius-md)",
   },

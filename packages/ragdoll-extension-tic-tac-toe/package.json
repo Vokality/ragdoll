@@ -35,7 +35,7 @@
   "ragdollExtension": {
     "id": "tic-tac-toe",
     "name": "Tic-Tac-Toe",
-    "description": "Play tic-tac-toe with the agent on a shared board",
+    "description": "Play a game of tic-tac-toe with your assistant",
     "capabilities": [
       "tools",
       "slots"

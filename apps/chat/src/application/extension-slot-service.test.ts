@@ -158,6 +158,7 @@ describe("ExtensionSlotService", () => {
       panel: {
         type: "cards",
         title: "Review",
+        status: { label: "Studying", tone: "active" },
         progress: { current: 1, total: 1 },
         card: {
           id: "card-1",
@@ -183,6 +184,7 @@ describe("ExtensionSlotService", () => {
 
     const slot = service.getSnapshot()[0];
     const panel = slot?.state.getState().panel;
+    expect(panel?.status).toEqual({ label: "Studying", tone: "active" });
     expect(panel?.type).toBe("cards");
     if (panel?.type !== "cards" || panel.card.face !== "front") {
       throw new Error("expected front cards panel");

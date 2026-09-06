@@ -244,14 +244,14 @@ export function createTicTacToeTools(
   ];
 }
 
-function panelTitle(snapshot: GameSnapshot): string {
+function panelStatus(snapshot: GameSnapshot): string {
   switch (snapshot.status) {
     case "idle":
-      return "Tic-Tac-Toe";
+      return "Ready to play";
     case "won":
-      return "Tic-Tac-Toe";
+      return "Game complete";
     case "draw":
-      return "Tic-Tac-Toe";
+      return "Game complete";
     case "in_progress":
       return snapshot.currentPlayer === "user" ? "Your turn" : "Agent's turn";
   }
@@ -368,7 +368,8 @@ function deriveSlotState(
     visible: true,
     panel: {
       type: "grid",
-      title: panelTitle(snapshot),
+      title: "Tic-Tac-Toe",
+      status: { label: panelStatus(snapshot) },
       columns: 3,
       emptyMessage: "Start a game to play",
       cells,
@@ -549,7 +550,7 @@ export function createExtension(): RagdollExtension {
     id: DEFAULT_EXTENSION_ID,
     name: "Tic-Tac-Toe",
     version: "0.1.0",
-    description: "Play tic-tac-toe with the agent on a shared board",
+    description: "Play a game of tic-tac-toe with your assistant",
     requiredCapabilities: REQUIRED_HOST_CAPABILITIES,
     optionalCapabilities: [],
     createRuntime: (host) => createRuntime(host),

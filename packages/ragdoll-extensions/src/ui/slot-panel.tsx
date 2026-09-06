@@ -12,12 +12,14 @@ import {
   useCallback,
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { usePanelAction } from "./use-panel-action.js";
 import { useSlotState } from "./hooks.js";
 import type {
   SlotPanelProps,
   PanelConfig,
+  PanelFrame,
   ListPanelConfig,
   GridPanelConfig,
   CardsPanelConfig,
@@ -50,6 +52,120 @@ export function SlotPanel({ slot, onClose }: SlotPanelProps) {
   const state = useSlotState(slot);
 
   return <SlotPanelBase isOpen={true} onClose={onClose} panel={state.panel} />;
+}
+
+/** Panel content for hosts that place extension controls inside their own layout. */
+export function InlineSlotPanel({ slot, onClose }: SlotPanelProps) {
+  const state = useSlotState(slot);
+  return (
+    <section
+      className="inline-slot-panel"
+      aria-label={state.panel.title}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !event.defaultPrevented) {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <style>{panelStyles}</style>
+      <PanelContent panel={state.panel} onClose={onClose} />
+    </section>
+  );
+}
+
+function PanelContent({
+  panel,
+  onClose,
+}: {
+  panel: PanelConfig;
+  onClose: () => void;
+}) {
+  return panel.type === "list" ? (
+    <ListPanel config={panel} onClose={onClose} />
+  ) : panel.type === "grid" ? (
+    <GridPanel config={panel} onClose={onClose} />
+  ) : (
+    <CardsPanel config={panel} onClose={onClose} />
+  );
+}
+
+/** One layout owns all fixed regions; renderers contribute only body and input. */
+function PanelLayout({
+  panel,
+  onClose,
+  children,
+  input,
+  pending = false,
+}: {
+  panel: PanelFrame;
+  onClose: () => void;
+  children: ReactNode;
+  input?: ReactNode;
+  pending?: boolean;
+}) {
+  const progress = panel.progress;
+  return (
+    <>
+      <header className="slot-panel-header" style={styles.header}>
+        <div className="slot-panel-heading">
+          <h2 style={styles.title}>{panel.title}</h2>
+          {panel.status && (
+            <span
+              className={`slot-panel-status slot-panel-status-${panel.status.tone ?? "default"}`}
+              role="status"
+            >
+              {panel.status.label}
+            </span>
+          )}
+          {progress && (
+            <div
+              className="slot-panel-progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.current}
+              aria-label={progress.label ?? "Progress"}
+            >
+              <span>
+                {progress.label ?? "Progress"} · {progress.current}/
+                {progress.total}
+              </span>
+              <span className="slot-panel-progress-track">
+                <span
+                  style={{
+                    width: `${progress.total > 0 ? Math.min(100, Math.max(0, (progress.current / progress.total) * 100)) : 0}%`,
+                  }}
+                />
+              </span>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={styles.closeButton}
+          className="slot-panel-close"
+          aria-label="Close"
+        >
+          <CloseIcon />
+        </button>
+      </header>
+      {children}
+      {(input || !!panel.actions?.length) && (
+        <footer className="slot-panel-footer" aria-label="Panel controls">
+          {input}
+          {panel.actions?.map((action) => (
+            <ActionButton
+              key={action.id}
+              action={action}
+              forceDisabled={pending}
+            />
+          ))}
+        </footer>
+      )}
+    </>
+  );
 }
 
 // =============================================================================
@@ -128,13 +244,7 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
           <div style={styles.handle} />
         </div>
 
-        {panel.type === "list" ? (
-          <ListPanel config={panel} onClose={handleClose} />
-        ) : panel.type === "grid" ? (
-          <GridPanel config={panel} onClose={handleClose} />
-        ) : (
-          <CardsPanel config={panel} onClose={handleClose} />
-        )}
+        <PanelContent panel={panel} onClose={handleClose} />
       </dialog>
     </>
   );
@@ -150,7 +260,7 @@ interface CardsPanelProps {
 }
 
 function CardsPanel({ config, onClose }: CardsPanelProps) {
-  const { title, progress, card, actions } = config;
+  const { card } = config;
   const [form, setForm] = useState({
     attemptId: card.attemptId,
     draft: "",
@@ -209,84 +319,14 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
     }
   };
 
-  const progressRatio =
-    progress.total > 0
-      ? Math.min(1, Math.max(0, progress.current / progress.total))
-      : 0;
-
   return (
-    <>
-      <div style={styles.header}>
-        <h2 style={styles.title}>{title}</h2>
-        <button
-          onClick={onClose}
-          style={styles.closeButton}
-          className="slot-panel-close"
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </div>
-
-      <div style={styles.cardsContent}>
-        <div style={styles.cardsProgress}>
-          <div style={styles.cardsProgressMeta}>
-            <span style={styles.cardsProgressLabel}>
-              {progress.label ?? "Progress"}
-            </span>
-            <span style={styles.cardsProgressCount}>
-              {progress.current}/{progress.total}
-            </span>
-          </div>
-          <div
-            style={styles.cardsProgressTrack}
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={progress.total}
-            aria-valuenow={progress.current}
-            aria-label={progress.label ?? "Review progress"}
-          >
-            <div
-              style={{
-                ...styles.cardsProgressFill,
-                width: `${progressRatio * 100}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        <div
-          key={card.attemptId}
-          className={`slot-panel-flip-scene ${card.face === "back" ? "flipped" : ""}`}
-          style={styles.flipScene}
-        >
-          <div className="slot-panel-flip-card" style={styles.flipCard}>
-            <div
-              className="slot-panel-flip-face slot-panel-flip-front"
-              style={styles.flipFace}
-              aria-hidden={card.face !== "front"}
-            >
-              <p style={styles.cardFaceText}>{card.front}</p>
-            </div>
-            <div
-              className="slot-panel-flip-face slot-panel-flip-back"
-              style={{ ...styles.flipFace, ...styles.flipFaceBack }}
-              aria-hidden={card.face !== "back"}
-            >
-              <p style={styles.cardFaceText}>{card.back}</p>
-            </div>
-          </div>
-        </div>
-
-        {card.face === "back" && config.result ? (
-          <CardsResultBanner result={config.result} />
-        ) : null}
-
-        {card.face === "front" && config.answerInput ? (
+    <PanelLayout
+      panel={config}
+      onClose={onClose}
+      pending={pending}
+      input={
+        card.face === "front" && config.answerInput ? (
           <form style={styles.answerForm} onSubmit={handleSubmit}>
-            {form.attemptId === card.attemptId && form.error ? (
-              <p role="alert">{form.error}</p>
-            ) : null}
             <input
               type="text"
               value={draft}
@@ -318,21 +358,46 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
               {config.answerInput.submitLabel ?? "Check"}
             </button>
           </form>
+        ) : null
+      }
+    >
+      <div
+        className="slot-panel-body slot-panel-cards-content"
+        style={styles.cardsContent}
+      >
+        {form.attemptId === card.attemptId && form.error ? (
+          <p role="alert">{form.error}</p>
         ) : null}
-
-        {actions && actions.length > 0 && (
-          <div style={{ ...styles.actions, ...styles.cardsActions }}>
-            {actions.map((action) => (
-              <ActionButton
-                key={action.id}
-                action={action}
-                forceDisabled={pending}
-              />
-            ))}
+        <div
+          key={card.attemptId}
+          className={`slot-panel-flip-scene ${card.face === "back" ? "flipped" : ""}`}
+          style={styles.flipScene}
+        >
+          <div className="slot-panel-flip-card" style={styles.flipCard}>
+            <div
+              className="slot-panel-flip-face slot-panel-flip-front"
+              style={styles.flipFace}
+              tabIndex={card.face === "front" ? 0 : -1}
+              aria-hidden={card.face !== "front"}
+            >
+              <p style={styles.cardFaceText}>{card.front}</p>
+            </div>
+            <div
+              className="slot-panel-flip-face slot-panel-flip-back"
+              style={{ ...styles.flipFace, ...styles.flipFaceBack }}
+              tabIndex={card.face === "back" ? 0 : -1}
+              aria-hidden={card.face !== "back"}
+            >
+              <p style={styles.cardFaceText}>{card.back}</p>
+            </div>
           </div>
-        )}
+        </div>
+
+        {card.face === "back" && config.result ? (
+          <CardsResultBanner result={config.result} />
+        ) : null}
       </div>
-    </>
+    </PanelLayout>
   );
 }
 
@@ -366,25 +431,16 @@ interface GridPanelProps {
 }
 
 function GridPanel({ config, onClose }: GridPanelProps) {
-  const { title, emptyMessage, columns, cells, result, actions } = config;
+  const { emptyMessage, columns, cells, result } = config;
   const hasCells = cells.length > 0;
 
   return (
-    <>
-      <div style={styles.header}>
-        <h2 style={styles.title}>{title}</h2>
-        <button
-          onClick={onClose}
-          style={styles.closeButton}
-          className="slot-panel-close"
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </div>
-
-      <div style={styles.gridContent}>
-        <div style={styles.gridViewport}>
+    <PanelLayout panel={config} onClose={onClose}>
+      <div
+        className="slot-panel-body slot-panel-grid-content"
+        style={styles.gridContent}
+      >
+        <div className="slot-panel-grid-viewport" style={styles.gridViewport}>
           {result ? (
             <GridResult result={result} />
           ) : !hasCells ? (
@@ -396,6 +452,7 @@ function GridPanel({ config, onClose }: GridPanelProps) {
               style={{
                 ...styles.grid,
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                width: `min(100cqw, calc(100cqh * ${columns} / ${Math.ceil(cells.length / columns)}), 300px)`,
               }}
             >
               {cells.map((cell, index) => (
@@ -404,16 +461,8 @@ function GridPanel({ config, onClose }: GridPanelProps) {
             </div>
           )}
         </div>
-
-        {actions && actions.length > 0 && (
-          <div style={{ ...styles.actions, ...styles.gridActions }}>
-            {actions.map((action) => (
-              <ActionButton key={action.id} action={action} />
-            ))}
-          </div>
-        )}
       </div>
-    </>
+    </PanelLayout>
   );
 }
 
@@ -495,29 +544,16 @@ interface ListPanelProps {
 }
 
 function ListPanel({ config, onClose }: ListPanelProps) {
-  const { title, emptyMessage, items, sections, actions } = config;
+  const { emptyMessage, items, sections } = config;
 
   const hasItems =
     (items && items.length > 0) ||
     (sections && sections.some((s) => s.items.length > 0));
 
   return (
-    <>
-      {/* Header */}
-      <div style={styles.header}>
-        <h2 style={styles.title}>{title}</h2>
-        <button
-          onClick={onClose}
-          style={styles.closeButton}
-          className="slot-panel-close"
-          aria-label="Close"
-        >
-          <CloseIcon />
-        </button>
-      </div>
-
+    <PanelLayout panel={config} onClose={onClose}>
       {/* Content */}
-      <div style={styles.content}>
+      <div className="slot-panel-body" style={styles.content}>
         {!hasItems ? (
           <div style={styles.emptyState}>
             <p style={styles.emptyText}>{emptyMessage ?? "No items"}</p>
@@ -535,17 +571,8 @@ function ListPanel({ config, onClose }: ListPanelProps) {
             ))}
           </ul>
         ) : null}
-
-        {/* Panel-level actions */}
-        {actions && actions.length > 0 && (
-          <div style={styles.actions}>
-            {actions.map((action) => (
-              <ActionButton key={action.id} action={action} />
-            ))}
-          </div>
-        )}
       </div>
-    </>
+    </PanelLayout>
   );
 }
 
@@ -910,6 +937,45 @@ const panelStyles = `
     }
   }
 
+  .inline-slot-panel {
+  --slot-panel-title-size: 16px;
+  --slot-panel-content-padding: 12px 14px;
+  --slot-panel-action-padding: 8px 12px;
+  --slot-panel-action-font-size: 13px;
+  --slot-panel-action-flex: 0 1 auto;
+  --slot-panel-result-padding: 12px;
+  --slot-panel-result-symbol-size: 48px;
+  --slot-panel-result-icon-size: 28px;
+  --slot-panel-result-title-size: 20px;
+  --slot-panel-result-gap: 10px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+
+  .slot-panel-heading { min-width: 0; flex: 1; }
+  .slot-panel-heading h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot-panel-header { gap: 12px; }
+  .slot-panel-close { flex-shrink: 0; }
+  .slot-panel-status { display: block; font-size: 12px; color: var(--text-muted, #94a3b8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot-panel-status-success { color: var(--success, #4ade80); }
+  .slot-panel-status-warning { color: var(--warning, #fbbf24); }
+  .slot-panel-status-error { color: var(--error, #f87171); }
+  .slot-panel-progress { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted, #94a3b8); }
+  .slot-panel-progress-track { height: 3px; width: 64px; background: var(--bg-tertiary, #334155); border-radius: 4px; overflow: hidden; }
+  .slot-panel-progress-track > span { display: block; height: 100%; background: var(--accent, #5a9bc4); }
+  .slot-panel-body { min-width: 0; overscroll-behavior: contain; }
+  .slot-panel-grid-viewport { container-type: size; }
+  .slot-panel-grid-cell { min-width: 0; min-height: 0; }
+  .slot-panel-footer { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border, #334155); overflow-x: auto; }
+  .slot-panel-footer > .slot-panel-action { flex: 0 0 auto; white-space: nowrap; }
+  .slot-panel-footer .slot-panel-action { padding: 7px 10px; min-height: 32px; font-size: 13px; }
+  .slot-panel-footer [role="alert"] { font-size: 12px; min-width: 140px; }
+  .slot-panel-cards-content { overflow: hidden; }
+  .slot-panel-cards-result { flex-shrink: 0; max-height: 45%; overflow: auto; }
+
   .slot-panel-sheet::backdrop {
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
@@ -965,7 +1031,7 @@ const panelStyles = `
   .slot-panel-flip-card {
     position: relative;
     width: 100%;
-    min-height: 160px;
+    height: 100%;
     transform-style: preserve-3d;
     transition: transform 400ms cubic-bezier(0.32, 0.72, 0, 1);
   }
@@ -978,14 +1044,15 @@ const panelStyles = `
     position: absolute;
     inset: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: safe center;
+    justify-content: safe center;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     border-radius: var(--radius-lg, 16px);
     border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
     background: var(--bg-glass, rgba(30, 41, 59, 0.9));
-    padding: 24px;
+    padding: 12px;
+    overflow: auto;
   }
 
   .slot-panel-flip-back {
@@ -1120,12 +1187,12 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "8px 20px 16px",
+    padding: "var(--slot-panel-header-padding, 8px 20px 16px)",
     borderBottom: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
     flexShrink: 0,
   },
   title: {
-    fontSize: "18px",
+    fontSize: "var(--slot-panel-title-size, 18px)",
     fontWeight: "600",
     color: "var(--text-primary, #f1f5f9)",
     margin: 0,
@@ -1145,9 +1212,10 @@ const styles: Record<string, CSSProperties> = {
     padding: 0,
   },
   content: {
+    minHeight: 0,
     flex: 1,
     overflow: "auto",
-    padding: "16px 20px 24px",
+    padding: "var(--slot-panel-content-padding, 16px 20px 24px)",
   },
   gridContent: {
     flex: 1,
@@ -1155,14 +1223,14 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    padding: "16px 20px 20px",
+    padding: "var(--slot-panel-content-padding, 16px 20px 20px)",
   },
   gridViewport: {
     flex: 1,
     minHeight: 0,
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
   gridResult: {
     width: "100%",
@@ -1171,25 +1239,25 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     textAlign: "center",
-    padding: "24px 20px",
+    padding: "var(--slot-panel-result-padding, 24px 20px)",
   },
   gridResultSymbol: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "72px",
-    height: "72px",
+    width: "var(--slot-panel-result-symbol-size, 72px)",
+    height: "var(--slot-panel-result-symbol-size, 72px)",
     border: "2px solid",
     borderRadius: "50%",
-    fontSize: "42px",
+    fontSize: "var(--slot-panel-result-icon-size, 42px)",
     fontWeight: "500",
     lineHeight: 1,
-    marginBottom: "18px",
+    marginBottom: "var(--slot-panel-result-gap, 18px)",
   },
   gridResultTitle: {
     margin: 0,
     color: "var(--text-primary, #f1f5f9)",
-    fontSize: "26px",
+    fontSize: "var(--slot-panel-result-title-size, 26px)",
     fontWeight: "650",
     lineHeight: 1.2,
   },
@@ -1205,7 +1273,7 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    padding: "40px 20px",
+    padding: "16px",
     textAlign: "center",
   },
   emptyText: {
@@ -1215,7 +1283,7 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
   },
   section: {
-    marginBottom: "24px",
+    marginBottom: "12px",
   },
   sectionHeader: {
     display: "flex",
@@ -1258,7 +1326,6 @@ const styles: Record<string, CSSProperties> = {
   grid: {
     display: "grid",
     gap: "8px",
-    width: "min(100%, 300px, calc(70vh - 190px))",
     margin: "0 auto",
   },
   gridCell: {
@@ -1267,7 +1334,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     aspectRatio: "1 / 1",
-    padding: "12px 8px",
+    padding: "4px",
     backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
     borderRadius: "var(--radius-md, 10px)",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
@@ -1351,17 +1418,7 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-muted, #94a3b8)",
     marginTop: "4px",
   },
-  actions: {
-    display: "flex",
-    gap: "12px",
-    marginTop: "20px",
-    paddingTop: "16px",
-    borderTop: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
-  },
-  gridActions: {
-    flexShrink: 0,
-    marginTop: "16px",
-  },
+
   cardsContent: {
     flex: 1,
     minHeight: 0,
@@ -1369,56 +1426,26 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: "column",
     gap: "16px",
     overflow: "auto",
-    padding: "16px 20px 24px",
+    padding: "var(--slot-panel-content-padding, 16px 20px 24px)",
   },
-  cardsProgress: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
-  cardsProgressMeta: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardsProgressLabel: {
-    fontSize: "12px",
-    fontWeight: "600",
-    color: "var(--text-dim, #64748b)",
-    textTransform: "uppercase",
-    letterSpacing: "0.4px",
-  },
-  cardsProgressCount: {
-    fontSize: "12px",
-    color: "var(--text-muted, #94a3b8)",
-  },
-  cardsProgressTrack: {
-    height: "6px",
-    borderRadius: "999px",
-    backgroundColor: "var(--bg-tertiary, #334155)",
-    overflow: "hidden",
-  },
-  cardsProgressFill: {
-    height: "100%",
-    borderRadius: "999px",
-    backgroundColor: "var(--accent, #5a9bc4)",
-    transition: "width 200ms ease",
-  },
+
   flipScene: {
+    flex: 1,
     width: "100%",
-    minHeight: "160px",
+    minHeight: 0,
   },
   flipCard: {
+    height: "100%",
     width: "100%",
-    minHeight: "160px",
+    minHeight: 0,
   },
   flipFace: {
-    minHeight: "160px",
+    minHeight: 0,
   },
   flipFaceBack: {},
   cardFaceText: {
     margin: 0,
-    fontSize: "22px",
+    fontSize: "18px",
     fontWeight: "600",
     lineHeight: 1.35,
     textAlign: "center",
@@ -1426,14 +1453,16 @@ const styles: Record<string, CSSProperties> = {
     wordBreak: "break-word",
   },
   answerForm: {
+    flex: 1,
+    minWidth: 0,
     display: "flex",
-    gap: "12px",
+    gap: "8px",
     alignItems: "center",
   },
   answerInput: {
     flex: 1,
     minWidth: 0,
-    padding: "12px 14px",
+    padding: "8px 10px",
     borderRadius: "var(--radius-md, 10px)",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
     backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
@@ -1444,9 +1473,10 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "4px",
-    padding: "12px 14px",
+    padding: "8px 10px",
     borderRadius: "var(--radius-md, 10px)",
-    border: "1px solid",
+    borderWidth: "1px",
+    borderStyle: "solid",
   },
   cardsResultTitle: {
     fontSize: "14px",
@@ -1456,13 +1486,11 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     color: "var(--text-muted, #94a3b8)",
   },
-  cardsActions: {
-    marginTop: "auto",
-  },
+
   actionButton: {
-    flex: 1,
-    padding: "12px 16px",
-    fontSize: "14px",
+    flex: "var(--slot-panel-action-flex, 1)",
+    padding: "var(--slot-panel-action-padding, 12px 16px)",
+    fontSize: "var(--slot-panel-action-font-size, 14px)",
     fontWeight: "500",
     borderRadius: "var(--radius-md, 10px)",
     border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",

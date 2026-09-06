@@ -9,6 +9,8 @@ describe("serializeSlotState", () => {
       panel: {
         type: "list",
         title: "Tasks",
+        status: { label: "Ready", tone: "success" },
+        progress: { current: 2, total: 3 },
         items: [
           {
             id: "a",
@@ -25,6 +27,11 @@ describe("serializeSlotState", () => {
       },
     });
 
+    expect(serialized.panel.status).toEqual({
+      label: "Ready",
+      tone: "success",
+    });
+    expect(serialized.panel.progress).toEqual({ current: 2, total: 3 });
     expect(serialized.panel.type).toBe("list");
     if (serialized.panel.type !== "list") throw new Error("expected list");
     expect(serialized.panel.items).toEqual([

@@ -93,6 +93,8 @@ The loader resolves package exports, constructs the extension by calling `create
 
 ### UI slots and IPC
 
+All panel kinds share `PanelFrame`: fixed identity/status/progress in the header, bounded content, and fixed footer controls. The host supplies card bounds and avatar space; the shared renderer owns sizing and scrolling. See [extension card layout](docs/extension-card-layout.md) for region and authoring rules.
+
 Extensions contribute React-free observable slot state. Panel configurations are `list`, `grid`, or `cards`. `serializeSlotState` removes callbacks while preserving action availability as `canClick`, `canToggle`, and `canSubmit`. The renderer hydrates callbacks that send a discriminated action request back to the Electron owner (`panel-action`, `section-action`, `item-click`, `item-toggle`, `cell-click`, or `answer-submit` with a required string payload). The main process invokes only the callback belonging to the identified slot, section, item, cell, or cards answer submit.
 
 This keeps functions and React objects out of IPC payloads.

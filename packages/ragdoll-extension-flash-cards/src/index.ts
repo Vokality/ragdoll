@@ -386,7 +386,7 @@ function deriveSlotState(
     panel: {
       type: "list",
       title: "Flash Cards",
-      emptyMessage: "No decks yet. Ask the agent to addDeck / addCard.",
+      emptyMessage: "No cards yet. Ask Lumen to create a deck on a topic you want to learn.",
       items,
       actions,
     },
@@ -691,7 +691,7 @@ export function createExtension(): RagdollExtension {
     id: DEFAULT_EXTENSION_ID,
     name: "Flash Cards",
     version: "0.1.0",
-    description: "Decks, typed-answer review, and simple spaced repetition",
+    description: "Learn with study decks and spaced repetition",
     requiredCapabilities: REQUIRED_HOST_CAPABILITIES,
     optionalCapabilities: [],
     createRuntime: (host) => createRuntime(host),

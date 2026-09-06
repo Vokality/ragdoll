@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Compact forms regression</title>
+  </head>
+  <body>
+    <p
+      id="result"
+      style="position: fixed; bottom: 0; pointer-events: none; z-index: 100"
+    >
+      Running…
+    </p>
+    <div id="root" style="width: 400px; height: 600px"></div>
+    <script type="module">
+      import React, { act } from "react";
+      import { createRoot } from "react-dom/client";
+      import { SetupScreen } from "../src/screens/setup-screen.tsx";
+      import { ExtensionConfigModal } from "../src/components/extension-config-modal.tsx";
+      import "../src/styles/global.css";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const root = createRoot(document.getElementById("root"));
+      const check = (ok, message) => {
+        if (!ok) throw new Error(message);
+      };
+      const setup = {
+        configureApiKey: async () => ({
+          success: false,
+          error: "Example validation failure",
+        }),
+        openApiKeyPage: async () => ({ success: true }),
+      };
+      try {
+        await act(async () =>
+          root.render(
+            React.createElement(SetupScreen, {
+              service: setup,
+              onComplete: () => {},
+              reportError: (error) => {
+                throw error;
+              },
+            }),
+          ),
+        );
+        const input = document.querySelector("input");
+        check(
+          input.labels[0]?.textContent === "OpenAI API key",
+          "Key field has no visible label",
+        );
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          ).set.call(input, "sk-example-key-for-local-ui-test");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const reveal = document.querySelector('[aria-label="Show API key"]');
+        check(
+          reveal.tabIndex >= 0,
+          "Reveal control is excluded from keyboard navigation",
+        );
+        await act(async () => reveal.click());
+        check(
+          input.type === "text" &&
+            reveal.getAttribute("aria-pressed") === "true",
+          "Reveal state is incorrect",
+        );
+        await act(async () =>
+          document
+            .querySelector("form")
+            .dispatchEvent(
+              new Event("submit", { bubbles: true, cancelable: true }),
+            ),
+        );
+        check(
+          document.querySelector("input") === input,
+          "Validation failure recreated the input",
+        );
+        check(
+          input.value === "sk-example-key-for-local-ui-test",
+          "Validation failure erased input",
+        );
+        check(
+          input.getAttribute("aria-invalid") === "true",
+          "Invalid input is not announced",
+        );
+        const alert = document.querySelector('[role="alert"]');
+        check(
+          input.getAttribute("aria-describedby").split(" ").includes(alert.id),
+          "Error is not associated with the input",
+        );
+        const container = document.getElementById("root").firstElementChild;
+        check(
+          [...container.querySelectorAll("input, button, .card")].every(
+            (element) => {
+              const bounds = element.getBoundingClientRect();
+              const outer = container.getBoundingClientRect();
+              return bounds.left >= outer.left && bounds.right <= outer.right;
+            },
+          ),
+          "Setup overflows horizontally",
+        );
+        check(
+          container.querySelector("canvas").getBoundingClientRect().top >= 0,
+          "Setup starts above its scrollable area",
+        );
+        container.scrollTop = container.scrollHeight;
+        check(
+          [...container.querySelectorAll("button")]
+            .at(-1)
+            .getBoundingClientRect().bottom <=
+            container.getBoundingClientRect().bottom,
+          "Setup help is unreachable at compact height",
+        );
+
+        const pending = Promise.withResolvers();
+        const service = {
+          loadConfiguration: () => pending.promise,
+          getOAuthState: async () => ({
+            status: "disconnected",
+            isAuthenticated: false,
+          }),
+          onOAuthConnected: () => () => {},
+          onOAuthFailed: () => () => {},
+        };
+        await act(async () =>
+          root.render(
+            React.createElement(ExtensionConfigModal, {
+              isOpen: true,
+              onClose: () => {},
+              extensionId: "example",
+              extensionName: "Example",
+              hasConfig: true,
+              hasOAuth: true,
+              service,
+            }),
+          ),
+        );
+        check(
+          document.querySelector('[role="status"]')?.textContent ===
+            "Loading settings…",
+          "Configuration has no loading feedback",
+        );
+        check(
+          [...document.querySelectorAll("button")].find(
+            (b) => b.textContent === "Connect account",
+          )?.disabled,
+          "Connect is available before loading finishes",
+        );
+        await act(async () =>
+          pending.resolve({
+            schema: {
+              name: {
+                type: "string",
+                label: "Name",
+                description: "Your display name",
+                required: true,
+              },
+              enabled: {
+                type: "boolean",
+                label: "Enabled",
+                description: "Enable this feature",
+              },
+            },
+            status: {
+              isConfigured: false,
+              missingFields: ["name"],
+              values: {},
+            },
+            values: {},
+          }),
+        );
+        for (const field of document.querySelectorAll("input, [role=switch]")) {
+          check(
+            document.querySelector(`label[for="${field.id}"]`),
+            "Configuration control has no label",
+          );
+          check(
+            document.getElementById(field.getAttribute("aria-describedby")),
+            "Configuration description is not associated",
+          );
+        }
+        check(
+          !document.querySelector('[role="status"]'),
+          "Loading feedback did not clear",
+        );
+        document.getElementById("result").textContent =
+          "PASS: compact setup, key validation recovery, keyboard reveal, and configuration loading and labels";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.message}`;
+        throw error;
+      } finally {
+        await act(async () => root.unmount());
+      }
+    </script>
+  </body>
+</html>

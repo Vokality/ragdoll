@@ -35,7 +35,7 @@
   "ragdollExtension": {
     "id": "tasks",
     "name": "Task Manager",
-    "description": "Task tracking and management tools",
+    "description": "Keep track of tasks and mark them complete",
     "capabilities": [
       "tools",
       "stateChannels",

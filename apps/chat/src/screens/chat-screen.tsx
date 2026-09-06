@@ -1,6 +1,15 @@
-import { useState, useCallback, useEffect, type CSSProperties } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
 import type { CharacterController } from "@vokality/ragdoll";
-import { SlotBar } from "@vokality/ragdoll-extensions/ui";
+import {
+  ControlledSlotBar,
+  useActiveSlot,
+} from "@vokality/ragdoll-extensions/ui";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
 import { SettingsModal } from "../components/settings-modal";
@@ -58,6 +67,15 @@ export function ChatScreen({
 
   // Get extension slots from extensions
   const extensionSlots = useExtensionSlots(extensionSlotService);
+  const [activeSlotId, setActiveSlotId, activeSlot] =
+    useActiveSlot(extensionSlots);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const closePanel = useCallback(() => {
+    dockRef.current
+      ?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+      ?.focus({ preventScroll: true });
+    setActiveSlotId(null);
+  }, [setActiveSlotId]);
 
   useEffect(() => {
     if (!controller) return;
@@ -147,10 +165,7 @@ export function ChatScreen({
           <SettingsIcon />
         </button>
 
-        <div
-          className={`status-pill${isLoading ? " busy" : ""}`}
-          role="status"
-        >
+        <div className={`status-pill${isLoading ? " busy" : ""}`} role="status">
           <span className={`status-dot${isLoading ? " busy" : ""}`} />
           <span className="label">{isLoading ? "Thinking…" : "Ready"}</span>
         </div>
@@ -172,12 +187,22 @@ export function ChatScreen({
       )}
 
       {extensionSlots.length > 0 && (
-        <div style={styles.extensionDock}>
-          <SlotBar slots={extensionSlots} />
+        <div
+          ref={dockRef}
+          className="extension-dock"
+          style={styles.extensionDock}
+        >
+          <ControlledSlotBar
+            slots={extensionSlots}
+            activeSlotId={activeSlotId}
+            onSlotClick={setActiveSlotId}
+          />
         </div>
       )}
 
       <CharacterView
+        activeSlot={activeSlot}
+        onClosePanel={closePanel}
         messages={visibleMessages}
         isStreaming={isStreaming}
         themeId={settings.theme}
@@ -282,12 +307,15 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 10,
   },
   header: {
+    width: "100%",
+    maxWidth: "var(--chat-shell-width)",
+    alignSelf: "center",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 16px",
     borderBottom: "1px solid var(--border-light)",
-    paddingTop: "40px", // Account for drag region on macOS
+    paddingTop: "36px", // Account for drag region on macOS
     position: "relative",
     zIndex: 1,
   },
@@ -295,11 +323,12 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     minWidth: 0,
   },
-  // No z-index here: the SlotBar's bottom sheet is position:fixed and must
-  // stack in the root context so it covers the composer and character.
   extensionDock: {
+    width: "100%",
+    maxWidth: "var(--chat-shell-width)",
+    alignSelf: "center",
     display: "flex",
     justifyContent: "flex-end",
-    padding: "12px 20px 0",
+    padding: "8px 20px 0",
   },
 };

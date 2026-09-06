@@ -403,11 +403,11 @@ function createRuntime(
 
     items.push({
       id: "status",
-      label: getPhaseLabel(),
-      sublabel:
+      label:
         phase !== "idle"
-          ? `${formatTime(remainingMs)} remaining`
-          : `${manager.getSessionDurationMinutes()} min session`,
+          ? formatTime(remainingMs)
+          : `${manager.getSessionDurationMinutes()} min`,
+      sublabel: phase !== "idle" ? "Remaining" : "Focus session",
       status: getPhaseStatus(),
     });
 
@@ -471,7 +471,8 @@ function createRuntime(
       visible: true,
       panel: {
         type: "list" as const,
-        title: isBreak ? "Break Time" : "Focus Timer",
+        title: "Focus Timer",
+        status: { label: getPhaseLabel(), tone: getPhaseStatus() },
         items,
         actions,
       },

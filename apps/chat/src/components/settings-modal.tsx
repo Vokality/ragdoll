@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { ExtensionConfigModal } from "./extension-config-modal";
 import { useTimedConfirm } from "../hooks/use-timed-confirm";
 import type {
@@ -130,7 +130,7 @@ function ApiKeySection({ onChangeApiKey }: { onChangeApiKey: () => void }) {
     <section style={styles.section}>
       <h3 style={styles.sectionTitle}>API Key</h3>
       <div style={styles.apiKeyDisplay}>
-        <span style={styles.maskedKey}>sk-****...****</span>
+        <span style={styles.maskedKey}>API key connected</span>
         <button
           type="button"
           onClick={handleClick}
@@ -204,26 +204,24 @@ function FeatureTogglesSection({
               <div style={styles.extensionInfo}>
                 <div style={styles.extensionNameRow}>
                   <span style={styles.extensionName}>{extension.name}</span>
-                  {!canToggle && (
-                    <span style={styles.requiredBadge}>Required</span>
-                  )}
                 </div>
                 <span style={styles.extensionDescription}>
                   {extension.description}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  canToggle && void extensions.toggle(extension.id)
-                }
-                disabled={!canToggle}
-                className={`switch${isDisabled ? "" : " on"}`}
-                aria-pressed={!isDisabled}
-                aria-label={`${isDisabled ? "Enable" : "Disable"} ${extension.name}`}
-              >
-                <span className="switch-knob" />
-              </button>
+              {canToggle ? (
+                <button
+                  type="button"
+                  onClick={() => void extensions.toggle(extension.id)}
+                  className={`switch${isDisabled ? "" : " on"}`}
+                  aria-pressed={!isDisabled}
+                  aria-label={`${isDisabled ? "Enable" : "Disable"} ${extension.name}`}
+                >
+                  <span className="switch-knob" />
+                </button>
+              ) : (
+                <span style={styles.requiredBadge}>Always on</span>
+              )}
             </div>
           );
         })}
@@ -276,10 +274,11 @@ function ExtensionLibrarySection({
   extensions: ExtensionSettings;
   onConfigure: (extension: ExtensionInfo) => void;
 }) {
+  const installInputId = useId();
   return (
     <section style={styles.section}>
       <div style={styles.sectionHeader}>
-        <h3 style={styles.sectionTitle}>Extensions</h3>
+        <h3 style={styles.sectionTitle}>Extension library</h3>
         <button
           type="button"
           onClick={() => void extensions.checkUpdates()}
@@ -292,15 +291,20 @@ function ExtensionLibrarySection({
         </button>
       </div>
 
-      {/* Install new extension */}
+      <label htmlFor={installInputId} style={styles.installLabel}>
+        GitHub repository URL
+      </label>
       <div style={styles.installSection}>
         <input
-          type="text"
+          id={installInputId}
+          type="url"
+          spellCheck={false}
+          autoCapitalize="none"
           value={extensions.installUrl}
           onChange={(e) => {
             extensions.setInstallUrl(e.target.value);
           }}
-          placeholder="GitHub URL (e.g., github.com/owner/repo)"
+          placeholder="https://github.com/owner/repo"
           aria-label="Extension GitHub URL"
           style={styles.installInput}
           onKeyDown={(e) => {
@@ -322,6 +326,7 @@ function ExtensionLibrarySection({
       </div>
       {extensions.notice && (
         <div
+          role={extensions.notice.tone === "error" ? "alert" : "status"}
           style={
             extensions.notice.tone === "error"
               ? styles.installError
@@ -346,7 +351,7 @@ function ExtensionLibrarySection({
         </div>
       ) : (
         <div style={styles.emptyState}>
-          No extensions installed. Enter a GitHub URL above to install one.
+          Add more features by installing an extension from GitHub.
         </div>
       )}
     </section>
@@ -524,7 +529,7 @@ function ErrorIcon() {
 
 const styles: Record<string, CSSProperties> = {
   section: {
-    marginBottom: "24px",
+    marginBottom: "20px",
   },
   sectionTitle: {
     fontSize: "12px",
@@ -532,7 +537,7 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-dim)",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
-    margin: "0 0 12px 0",
+    margin: "0 0 8px 0",
   },
   apiKeyDisplay: {
     display: "flex",
@@ -541,16 +546,15 @@ const styles: Record<string, CSSProperties> = {
     gap: "12px",
   },
   maskedKey: {
-    fontFamily: "var(--font-mono)",
     fontSize: "13px",
     color: "var(--text-muted)",
-    padding: "10px 14px",
+    padding: "8px 10px",
     background: "var(--bg-secondary)",
     borderRadius: "var(--radius-sm)",
     flex: 1,
   },
   smallButton: {
-    padding: "10px 16px",
+    padding: "8px 12px",
     fontSize: "13px",
     width: "auto",
     flexShrink: 0,
@@ -563,7 +567,7 @@ const styles: Record<string, CSSProperties> = {
   optionGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "10px",
+    gap: "8px",
   },
   optionName: {
     fontSize: "14px",
@@ -584,7 +588,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: "12px",
-    padding: "12px 14px",
+    padding: "9px 12px",
     background: "var(--bg-secondary)",
     borderRadius: "var(--radius-md)",
   },
@@ -610,8 +614,7 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--bg-tertiary)",
     borderRadius: "var(--radius-sm)",
     color: "var(--text-dim)",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
+    whiteSpace: "nowrap",
   },
   confirmActions: {
     display: "flex",
@@ -639,6 +642,12 @@ const styles: Record<string, CSSProperties> = {
     padding: "6px 10px",
     fontSize: "11px",
   },
+  installLabel: {
+    display: "block",
+    fontSize: "12px",
+    color: "var(--text-muted)",
+    marginBottom: "6px",
+  },
   installSection: {
     display: "flex",
     gap: "8px",
@@ -655,7 +664,7 @@ const styles: Record<string, CSSProperties> = {
     outline: "none",
   },
   installButton: {
-    padding: "10px 16px",
+    padding: "8px 12px",
     fontSize: "13px",
     flexShrink: 0,
   },

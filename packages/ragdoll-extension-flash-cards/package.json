@@ -35,7 +35,7 @@
   "ragdollExtension": {
     "id": "flash-cards",
     "name": "Flash Cards",
-    "description": "Decks, typed-answer review, and simple spaced repetition",
+    "description": "Learn with study decks and spaced repetition",
     "capabilities": [
       "tools",
       "slots"

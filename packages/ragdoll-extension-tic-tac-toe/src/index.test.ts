@@ -470,7 +470,8 @@ describe("Tic-tac-toe conversation events", () => {
 
     const restoredPanel = slot.state.getState().panel;
     if (restoredPanel.type !== "grid") throw new Error("expected grid");
-    expect(restoredPanel.title).toBe("Your turn");
+    expect(restoredPanel.title).toBe("Tic-Tac-Toe");
+    expect(restoredPanel.status?.label).toBe("Your turn");
     expect(restoredPanel.cells[0]?.label).toBe("");
     expect(restoredPanel.cells.every((cell) => !cell.disabled)).toBe(true);
     expect(

@@ -611,7 +611,7 @@ export function createExtension(): RagdollExtension {
     id: DEFAULT_EXTENSION_ID,
     name: "Task Manager",
     version: "0.1.0",
-    description: "Task tracking and management tools",
+    description: "Keep track of tasks and mark them complete",
     requiredCapabilities: REQUIRED_HOST_CAPABILITIES,
     optionalCapabilities: [],
     createRuntime: (host) => createRuntime(host),

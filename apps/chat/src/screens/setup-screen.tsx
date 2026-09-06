@@ -109,7 +109,7 @@ export function SetupScreen({
         className="btn-ghost no-drag enter-3"
       >
         <KeyIcon />
-        Get an API key from platform.openai.com
+        Get an OpenAI API key
         <ExternalIcon />
       </button>
     </div>
@@ -153,13 +153,14 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "safe center",
     height: "100%",
     width: "100%",
-    padding: "24px",
+    padding: "36px 20px 20px",
     background: "var(--bg-primary)",
     position: "relative",
-    overflow: "hidden",
+    overflowY: "auto",
+    overflowX: "hidden",
   },
   dragRegion: {
     position: "absolute",
@@ -169,19 +170,21 @@ const styles: Record<string, CSSProperties> = {
     height: "32px",
   },
   characterContainer: {
-    width: "280px",
-    height: "320px",
+    width: "240px",
+    height: "clamp(140px, 26vh, 220px)",
+    flexShrink: 0,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: "24px",
+    marginBottom: "12px",
     position: "relative",
     zIndex: 1,
   },
   card: {
     width: "100%",
     maxWidth: "360px",
-    padding: "32px",
+    padding: "22px",
+    flexShrink: 0,
     position: "relative",
     zIndex: 1,
   },
@@ -196,11 +199,11 @@ const styles: Record<string, CSSProperties> = {
   subtitle: {
     fontSize: "14px",
     color: "var(--text-muted)",
-    margin: "0 0 24px 0",
+    margin: "0 0 18px 0",
     textAlign: "center",
   },
   helpLink: {
-    marginTop: "24px",
+    marginTop: "16px",
     fontSize: "13px",
     position: "relative",
     zIndex: 1,

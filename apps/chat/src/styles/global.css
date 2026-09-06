@@ -5,6 +5,8 @@
    ============================================================ */
 
 :root {
+  --chat-content-width: 560px;
+  --chat-shell-width: 600px;
   /* Surfaces */
   --bg-primary: #0a101f;
   --bg-secondary: #101828;
@@ -66,8 +68,7 @@
 
   /* Type */
   --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -457,11 +458,11 @@ button:disabled {
   resize: none;
   border: none;
   background: transparent;
-  padding: 12px 0;
+  padding: 8px 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
-  min-height: 44px;
+  min-height: 36px;
   max-height: 120px;
 }
 
@@ -478,8 +479,8 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, var(--accent), var(--accent-strong));
@@ -561,7 +562,7 @@ button:disabled {
 .bubble {
   max-width: 320px;
   min-width: 80px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   font-family: var(--font-sans);
   font-size: 13.5px;
   line-height: 1.55;
@@ -687,8 +688,8 @@ button:disabled {
    so restore it: auto margins are what center a modal in its inset: 0 box. */
 dialog.modal-card {
   margin: auto;
-  width: calc(100% - 48px);
-  max-height: calc(100vh - 96px);
+  width: calc(100% - 32px);
+  max-height: calc(100vh - 64px);
   padding: 0;
   color: var(--text-primary);
   overflow: hidden;
@@ -709,7 +710,7 @@ dialog.modal-card::backdrop {
 
 .modal-card .modal-body {
   overflow-y: auto;
-  padding: 20px 24px 24px;
+  padding: 16px 18px 20px;
 }
 
 @keyframes modalIn {
@@ -729,7 +730,7 @@ dialog.modal-card::backdrop {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 12px 14px;
+  padding: 9px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -754,7 +755,7 @@ dialog.modal-card::backdrop {
 .option-card.selected {
   border-color: var(--accent);
   background: var(--accent-dim);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  box-shadow: 0 0 0 1px var(--accent-dim) inset;
 }
 
 /* Switch */
@@ -1032,4 +1033,87 @@ dialog.modal-card::backdrop {
     animation-duration: 0.9s !important;
     animation-iteration-count: infinite !important;
   }
+}
+
+/* Extension controls share the character stage; conversation stays available. */
+.character-stage {
+  position: relative;
+  width: 100%;
+  max-width: var(--chat-content-width);
+  height: clamp(260px, 36vh, 320px);
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  isolation: isolate;
+}
+.character-portrait {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transform-origin: top left;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+  transition:
+    left 420ms var(--ease-out),
+    top 420ms var(--ease-out),
+    transform 420ms var(--ease-out);
+}
+.character-stage[data-panel-open="true"] .character-portrait {
+  left: 6px;
+  top: 0;
+  transform: translate(0, 0) scale(0.2);
+}
+.character-extension-card {
+  --slot-panel-header-padding: 10px 12px 10px 70px;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: scale(0.94);
+  pointer-events: none;
+  transition:
+    opacity 220ms ease,
+    transform 360ms var(--ease-out);
+}
+.character-stage[data-panel-open="true"] .character-extension-card {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.character-avatar-halo {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  opacity: 0;
+  transition: opacity 280ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.character-stage[data-panel-open="true"] .character-avatar-halo {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .character-portrait,
+  .character-extension-card,
+  .character-avatar-halo {
+    transition: none;
+  }
+}
+
+.extension-dock {
+  --slot-button-size: 36px;
 }

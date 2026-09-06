@@ -30,11 +30,6 @@ export function ChatInput({
     textareaRef.current?.focus();
   }, []);
 
-  // Re-focus once a pending response finishes
-  useEffect(() => {
-    if (!isBusy) textareaRef.current?.focus();
-  }, [isBusy]);
-
   // Cmd/Ctrl+K focuses the composer from anywhere
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent) => {
@@ -100,7 +95,10 @@ export function ChatInput({
           <button
             type="button"
             className="send-btn stop"
-            onClick={onStop}
+            onClick={() => {
+              textareaRef.current?.focus();
+              onStop();
+            }}
             aria-label="Stop generating"
             title="Stop generating"
           >
@@ -151,10 +149,13 @@ function StopIcon() {
 
 const styles: Record<string, CSSProperties> = {
   form: {
+    width: "100%",
+    maxWidth: "var(--chat-shell-width)",
+    alignSelf: "center",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    padding: "16px 20px 14px",
+    gap: "6px",
+    padding: "10px 20px 10px",
     position: "relative",
     zIndex: 1,
   },
