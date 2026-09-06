@@ -1,6 +1,6 @@
 {
   "name": "Ragdoll",
-  "snapshot": "snapshot-20260906-d0955e1a-7888-4c99-a263-ef430d038bbb",
+  "snapshot": "snapshot-20260906-b0132cf8-1682-4f3d-bad2-8e559159d039",
   "install": "bash .cursor/install.sh",
   "terminals": [
     {
