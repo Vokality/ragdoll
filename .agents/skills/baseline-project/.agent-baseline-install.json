@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "package_version": "0.2.0",
+  "files": {
+    "SKILL.md": "6e3ca77277b9c8769b1720f4836192c8e1d0af44f2ff9c9fd14f71fadfb84ec6",
+    "references/evaluate.md": "a15b114721f9cbb8341f26e53f7ce5540052078e99c9504900ae3bd6aa7fe894",
+    "references/project-record.md": "ce2fac197e4f88969f720bb4b05f62cb694dd78c4bd07307fb72d3a118013587"
+  }
+}
