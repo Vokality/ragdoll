@@ -4,8 +4,19 @@
 
 import { type CSSProperties } from "react";
 import { useSlotState } from "./hooks.js";
-import { getSlotIcon } from "./slot-icons.js";
-import type { ExtensionUISlot, SlotButtonProps } from "./types.js";
+import {
+  BellIcon,
+  BookmarkIcon,
+  CalendarIcon,
+  ChecklistIcon,
+  FlagIcon,
+  GridIcon,
+  MusicIcon,
+  SettingsIcon,
+  StarIcon,
+  TimerIcon,
+} from "./icons.js";
+import type { ExtensionUISlot, PresetIconName, SlotButtonProps } from "./types.js";
 
 /**
  * Button component for an extension UI slot.
@@ -92,6 +103,31 @@ interface SlotButtonViewProps {
   onClick?: () => void;
 }
 
+function SlotIcon({ name, size }: { name: PresetIconName; size: number }) {
+  switch (name) {
+    case "checklist":
+      return <ChecklistIcon size={size} />;
+    case "timer":
+      return <TimerIcon size={size} />;
+    case "calendar":
+      return <CalendarIcon size={size} />;
+    case "bell":
+      return <BellIcon size={size} />;
+    case "settings":
+      return <SettingsIcon size={size} />;
+    case "bookmark":
+      return <BookmarkIcon size={size} />;
+    case "flag":
+      return <FlagIcon size={size} />;
+    case "star":
+      return <StarIcon size={size} />;
+    case "music":
+      return <MusicIcon size={size} />;
+    case "grid":
+      return <GridIcon size={size} />;
+  }
+}
+
 function SlotButtonView({
   icon,
   label,
@@ -99,7 +135,6 @@ function SlotButtonView({
   isActive,
   onClick,
 }: SlotButtonViewProps) {
-  const IconComponent = getSlotIcon(icon);
   const hasBadge = badge !== null && badge !== undefined && badge !== 0;
 
   return (
@@ -161,7 +196,7 @@ function SlotButtonView({
         aria-pressed={isActive}
         title={label}
       >
-        <IconComponent size={20} />
+        <SlotIcon name={icon} size={20} />
         {hasBadge && (
           <span style={styles.badge} className="extension-slot-badge">
             {formatBadge(badge)}

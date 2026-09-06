@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /** Floor speed so the reveal always reads as motion, never a crawl. */
 const MIN_CHARS_PER_SECOND = 40;
@@ -10,8 +10,22 @@ interface RevealState {
   count: number;
 }
 
-function prefersReducedMotion(): boolean {
+function subscribeReducedMotion(onStoreChange: () => void): () => void {
+  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+  media.addEventListener("change", onStoreChange);
+  return () => media.removeEventListener("change", onStoreChange);
+}
+
+function getReducedMotionSnapshot(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    () => false,
+  );
 }
 
 /**
@@ -28,31 +42,41 @@ export function useSmoothText(
   resetKey: string | number,
   live: boolean,
 ): string {
+  const reducedMotion = usePrefersReducedMotion();
+  const shouldAnimate = live && !reducedMotion;
   const [state, setState] = useState<RevealState>(() => ({
     key: resetKey,
-    count: live ? 0 : target.length,
+    count: shouldAnimate ? 0 : target.length,
   }));
   const fractionRef = useRef(0);
 
-  // Adjust state when the tracked message changes (React's documented
-  // "derive state during render" pattern — no effect round-trip flash).
+  // Adjust state when the tracked message or motion preference changes
+  // (React's documented "adjust state during render" pattern).
   if (state.key !== resetKey) {
-    fractionRef.current = 0;
-    setState({ key: resetKey, count: live ? 0 : target.length });
+    setState({
+      key: resetKey,
+      count: shouldAnimate ? 0 : target.length,
+    });
   } else if (state.count > target.length) {
-    // Target shrank (cleared or replaced) — never index past the end.
+    setState({ key: resetKey, count: target.length });
+  } else if (reducedMotion && state.count < target.length) {
     setState({ key: resetKey, count: target.length });
   }
 
-  const isCaughtUp = state.count >= target.length;
+  const revealCount =
+    state.key === resetKey
+      ? Math.min(state.count, target.length)
+      : shouldAnimate
+        ? 0
+        : target.length;
+  const isCaughtUp = revealCount >= target.length;
 
   useEffect(() => {
-    if (isCaughtUp) return;
+    fractionRef.current = 0;
+  }, [resetKey]);
 
-    if (prefersReducedMotion()) {
-      setState({ key: resetKey, count: target.length });
-      return;
-    }
+  useEffect(() => {
+    if (reducedMotion || isCaughtUp) return;
 
     let frame = 0;
     let lastTime = performance.now();
@@ -62,6 +86,7 @@ export function useSmoothText(
       lastTime = now;
 
       setState((current) => {
+        if (current.key !== resetKey) return current;
         const backlog = target.length - current.count;
         if (backlog <= 0) return current;
 
@@ -85,7 +110,7 @@ export function useSmoothText(
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [target, resetKey, isCaughtUp]);
+  }, [target, resetKey, isCaughtUp, reducedMotion]);
 
-  return target.slice(0, state.count);
+  return target.slice(0, revealCount);
 }

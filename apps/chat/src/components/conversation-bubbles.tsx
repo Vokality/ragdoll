@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type UIEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type UIEvent } from "react";
 import { useSmoothText } from "../hooks/use-smooth-text";
 
 interface Message {
@@ -20,11 +20,7 @@ export function ConversationBubbles({
 }: ConversationBubblesProps) {
   // Messages present on first render (a restored conversation) get a gentle
   // staggered entrance; everything after animates individually on arrival.
-  const initialCountRef = useRef<number | null>(null);
-  if (initialCountRef.current === null) {
-    initialCountRef.current = messages.length;
-  }
-  const initialCount = initialCountRef.current;
+  const [initialCount] = useState(() => messages.length);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Whether the user is at (or near) the bottom. Starts pinned.
@@ -42,7 +38,8 @@ export function ConversationBubbles({
     isStreaming && liveAssistant !== null,
   );
   const isRevealing =
-    liveAssistant !== null && smoothedContent.length < liveAssistant.content.length;
+    liveAssistant !== null &&
+    smoothedContent.length < liveAssistant.content.length;
 
   // Follow new content only while the user hasn't scrolled up to read;
   // their own new message always snaps the view back down.
@@ -54,7 +51,13 @@ export function ConversationBubbles({
       const bottom = container.scrollHeight - container.clientHeight;
       if (container.scrollTop < bottom) container.scrollTop = bottom;
     }
-  }, [messages.length, lastContent, smoothedContent, isStreaming, lastMessage?.role]);
+  }, [
+    messages.length,
+    lastContent,
+    smoothedContent,
+    isStreaming,
+    lastMessage?.role,
+  ]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
