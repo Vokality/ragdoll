@@ -54,6 +54,15 @@ The maintained package shape is [`examples/extension-weather`](./examples/extens
 - Add regression coverage for lifecycle, loading, and IPC behavior changes.
 - Keep changes scoped; remove stale paths, commands, and docs instead of retaining compatibility guidance.
 
+## Cursor Cloud specific instructions
+
+The Cloud Agent environment is defined by [.cursor/environment.json](./.cursor/environment.json):
+
+- `install` runs `.cursor/install.sh`, which installs the pinned Bun toolchain when missing, then `bun install --frozen-lockfile` and `bun run build`.
+- The `lumen-renderer` terminal runs `.cursor/start-lumen-renderer.sh` (the Vite dev server on `http://localhost:5173`).
+
+To run the `lumen` Electron desktop app in the headless VM, use `bash .cursor/run-lumen-headless.sh`. A headless container has no OS keyring, so a plain `electron .` makes `safeStorage.isEncryptionAvailable()` return `false` and saving the OpenAI API key fails with "Secure credential storage is unavailable on this system". The launcher runs Electron inside a D-Bus session with an unlocked `gnome-keyring` and `--password-store=gnome-libsecret`. Keep this keyring workaround out of the cross-platform `dev:chat` script, where the OS keychain already backs `safeStorage`.
+
 ## Task routing
 
 - Character framework: `packages/ragdoll`

@@ -1,0 +1,18 @@
+{
+  "name": "Ragdoll",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "lumen-renderer",
+      "command": "bash .cursor/start-lumen-renderer.sh",
+      "description": "Vite dev server for the Lumen (apps/chat) Electron renderer on http://localhost:5173. Required before launching the desktop app with .cursor/run-lumen-headless.sh."
+    }
+  ],
+  "chromeExecutablePath": "/usr/local/bin/google-chrome",
+  "ports": [
+    {
+      "name": "lumen-renderer",
+      "port": 5173
+    }
+  ]
+}
