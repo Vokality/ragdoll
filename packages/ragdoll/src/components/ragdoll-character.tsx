@@ -24,13 +24,6 @@ const wrapperStyle: React.CSSProperties = {
   maxHeight: "380px",
 };
 
-function toRenderError(error: unknown): Error {
-  if (error instanceof Error) return error;
-  return new Error("Failed to create the WebGL character renderer.", {
-    cause: error,
-  });
-}
-
 export function RagdollCharacter({
   onControllerReady,
   onEventSubscriberError,
@@ -47,16 +40,11 @@ export function RagdollCharacter({
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const appliedThemeRef = useRef(theme);
-  const [rendererError, setRendererError] = useState<Error | null>(null);
+  const [appliedTheme, setAppliedTheme] = useState(theme);
 
-  if (appliedThemeRef.current !== theme) {
-    appliedThemeRef.current = theme;
+  if (appliedTheme !== theme) {
     controller.setTheme(theme.id);
-  }
-
-  if (rendererError) {
-    throw rendererError;
+    setAppliedTheme(theme);
   }
 
   useEffect(() => {
@@ -68,13 +56,7 @@ export function RagdollCharacter({
     const wrapper = wrapperRef.current;
     if (!canvas || !wrapper) return;
 
-    let scene: CharacterScene;
-    try {
-      scene = new CharacterScene(canvas);
-    } catch (error) {
-      setRendererError(toRenderError(error));
-      return;
-    }
+    const scene = new CharacterScene(canvas);
 
     const resize = () => {
       const rect = wrapper.getBoundingClientRect();

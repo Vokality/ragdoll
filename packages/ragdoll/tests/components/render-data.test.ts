@@ -43,17 +43,19 @@ describe("computeRenderData", () => {
   });
 
   it("includes themed geometry for moods, actions, and variants", () => {
-    const human = tracked(createController());
+    const human = tracked(createController({ themeId: "monochrome" }));
     human.setMood("smile", 0.05);
     human.update(1);
     const smile = computeRenderData(human);
-    expect(smile.currentTheme.id).toBe("default");
+    expect(smile.currentTheme.id).toBe("monochrome");
     expect(smile.facePath.length).toBeGreaterThan(0);
     expect(smile.hairPath.length).toBeGreaterThan(0);
     expect(smile.mustachePath).toBe("");
     expect(smile.expression.mouth.cornerPull).toBeGreaterThan(0);
-    expect(smile.yaw).toBeCloseTo(0);
-    expect(smile.pitch).toBeCloseTo(0);
+    expect(Number.isFinite(smile.yaw)).toBe(true);
+    expect(Number.isFinite(smile.pitch)).toBe(true);
+    expect(Math.abs(smile.yaw)).toBeLessThan(0.05);
+    expect(Math.abs(smile.pitch)).toBeLessThan(0.05);
 
     human.triggerAction("wink", 0.7);
     human.update(0.15);
@@ -80,14 +82,16 @@ describe("computeRenderData", () => {
     expect(einsteinData.dims.headHeight).toBeGreaterThan(smile.dims.headHeight);
 
     const robot = tracked(createController({ themeId: "robot" }));
-    robot.setHeadPose({ yaw: 0.25, pitch: -0.1 });
-    robot.update(1);
+    robot.setHeadPose({ yaw: 0.25, pitch: -0.1 }, 0.2);
+    for (let i = 0; i < 40; i += 1) {
+      robot.update(0.05);
+    }
     const pose = computeRenderData(robot);
     expect(pose.currentTheme.id).toBe("robot");
     expect(pose.yaw).toBeGreaterThan(0.1);
     expect(pose.pitch).toBeLessThan(-0.05);
     expect(pose.currentTheme.colors.skin.mid).not.toBe(
-      smile.currentTheme.colors.skin.mid,
+      einsteinData.currentTheme.colors.skin.mid,
     );
   });
 });

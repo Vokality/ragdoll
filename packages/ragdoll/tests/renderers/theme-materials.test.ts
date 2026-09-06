@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Color } from "three";
-import { getTheme } from "../../src/themes";
+import { defaultTheme, robotTheme } from "../../src/themes/default-themes";
 import {
   applyThemeToMaterials,
   createThemeMaterials,
@@ -24,8 +24,6 @@ describe("theme materials", () => {
   });
 
   it("maps default and robot palettes onto distinct materials", () => {
-    const defaultTheme = getTheme("default");
-    const robotTheme = getTheme("robot");
     const materials = createThemeMaterials(defaultTheme);
 
     expect(materials.skin.color.getHexString()).toBe(
