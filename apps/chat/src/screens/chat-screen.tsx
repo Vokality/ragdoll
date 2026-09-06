@@ -166,10 +166,25 @@ export function ChatScreen({
           <SettingsIcon />
         </button>
 
-        <div className={`status-pill${isLoading ? " busy" : ""}`} role="status">
-          <span className={`status-dot${isLoading ? " busy" : ""}`} />
-          <span className="label">{isLoading ? "Thinking…" : "Ready"}</span>
-        </div>
+        {isLoading && (
+          <div className="status-pill busy" role="status">
+            <span className="status-dot busy" />
+            <span className="label">Thinking…</span>
+          </div>
+        )}
+        {extensionSlots.length > 0 && (
+          <div
+            ref={dockRef}
+            className="extension-dock"
+            style={styles.extensionDock}
+          >
+            <ControlledSlotBar
+              slots={extensionSlots}
+              activeSlotId={activeSlotId}
+              onSlotClick={setActiveSlotId}
+            />
+          </div>
+        )}
       </header>
 
       {visibleError && (
@@ -184,20 +199,6 @@ export function ChatScreen({
           >
             <CloseIcon />
           </button>
-        </div>
-      )}
-
-      {extensionSlots.length > 0 && (
-        <div
-          ref={dockRef}
-          className="extension-dock"
-          style={styles.extensionDock}
-        >
-          <ControlledSlotBar
-            slots={extensionSlots}
-            activeSlotId={activeSlotId}
-            onSlotClick={setActiveSlotId}
-          />
         </div>
       )}
 
@@ -314,8 +315,9 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "12px 16px",
-    paddingTop: "36px", // Account for drag region on macOS
+    gap: "12px",
+    flexWrap: "wrap",
+    padding: "36px 20px 12px", // Account for drag region on macOS
     position: "relative",
     zIndex: 1,
   },
@@ -324,11 +326,8 @@ const styles: Record<string, CSSProperties> = {
     minWidth: 0,
   },
   extensionDock: {
-    width: "100%",
-    maxWidth: "var(--chat-shell-width)",
-    alignSelf: "center",
+    marginLeft: "auto",
     display: "flex",
     justifyContent: "flex-end",
-    padding: "8px 20px 0",
   },
 };

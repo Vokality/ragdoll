@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import {
   getTheme,
   getDefaultTheme,
@@ -9,10 +9,6 @@ import {
 import type { RagdollTheme } from "../../src/themes/types";
 
 describe("Theme Registry", () => {
-  beforeEach(() => {
-    // Reset registry state by not modifying it
-  });
-
   describe("getTheme", () => {
     it("should get theme by ID", () => {
       const theme = getTheme("default");
@@ -68,15 +64,9 @@ describe("Theme Registry", () => {
   describe("registerTheme", () => {
     it("should register custom theme", () => {
       const customTheme: RagdollTheme = {
+        ...structuredClone(getDefaultTheme()),
         id: "test-theme",
         name: "Test Theme",
-        colors: {
-          skin: "#FF0000",
-          hair: "#00FF00",
-          eye: "#0000FF",
-          mouth: "#FFFF00",
-          background: "#FFFFFF",
-        },
       };
       registerTheme(customTheme);
       const theme = getTheme("test-theme");
@@ -85,19 +75,20 @@ describe("Theme Registry", () => {
 
     it("should override existing theme", () => {
       const customTheme: RagdollTheme = {
+        ...structuredClone(getDefaultTheme()),
         id: "default",
         name: "Custom Default",
-        colors: {
-          skin: "#FF0000",
-          hair: "#00FF00",
-          eye: "#0000FF",
-          mouth: "#FFFF00",
-          background: "#FFFFFF",
-        },
       };
-      registerTheme(customTheme);
-      const theme = getTheme("default");
-      expect(theme.name).toBe("Custom Default");
+      const original = getTheme("default");
+      try {
+        registerTheme(customTheme);
+        const theme = getTheme("default");
+        expect(theme.name).toBe("Custom Default");
+        expect(theme).toBe(customTheme);
+      } finally {
+        registerTheme(original);
+      }
+      expect(getTheme("default")).toBe(original);
     });
   });
 
@@ -115,15 +106,9 @@ describe("Theme Registry", () => {
 
     it("should return true for registered custom theme", () => {
       const customTheme: RagdollTheme = {
+        ...structuredClone(getDefaultTheme()),
         id: "custom-test",
         name: "Custom Test",
-        colors: {
-          skin: "#FF0000",
-          hair: "#00FF00",
-          eye: "#0000FF",
-          mouth: "#FFFF00",
-          background: "#FFFFFF",
-        },
       };
       registerTheme(customTheme);
       expect(hasTheme("custom-test")).toBe(true);
@@ -138,18 +123,18 @@ describe("Theme Registry", () => {
       expect(theme.colors).toBeDefined();
       expect(theme.colors.skin).toBeDefined();
       expect(theme.colors.hair).toBeDefined();
-      expect(theme.colors.eye).toBeDefined();
-      expect(theme.colors.mouth).toBeDefined();
-      expect(theme.colors.background).toBeDefined();
+      expect(theme.colors.eyes).toBeDefined();
+      expect(theme.colors.lips).toBeDefined();
+      expect(theme.colors.teeth).toBeDefined();
     });
 
     it("should have valid colors", () => {
       const theme = getTheme("default");
-      expect(typeof theme.colors.skin).toBe("string");
-      expect(typeof theme.colors.hair).toBe("string");
-      expect(typeof theme.colors.eye).toBe("string");
-      expect(typeof theme.colors.mouth).toBe("string");
-      expect(typeof theme.colors.background).toBe("string");
+      expect(typeof theme.colors.skin.mid).toBe("string");
+      expect(typeof theme.colors.hair.dark).toBe("string");
+      expect(typeof theme.colors.eyes.iris).toBe("string");
+      expect(typeof theme.colors.lips.upperDark).toBe("string");
+      expect(typeof theme.colors.teeth).toBe("string");
     });
   });
 });
