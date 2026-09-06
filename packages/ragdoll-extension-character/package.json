@@ -23,6 +23,7 @@
     "build": "bun run ../../scripts/run-typescript.ts -p tsconfig.json",
     "dev": "bun run ../../scripts/run-typescript.ts -w -p tsconfig.json",
     "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit -p tsconfig.json",
+    "test": "bun test src",
     "clean": "bun run ../../scripts/clean.ts dist"
   },
   "dependencies": {

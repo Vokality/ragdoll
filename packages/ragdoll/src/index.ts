@@ -71,7 +71,6 @@ export type {
   Vector3Like,
 } from "./types";
 
-// Animation utilities (only the pure functions that don't depend on three.js)
 export * from "./animation/easing";
 
 // Plugins

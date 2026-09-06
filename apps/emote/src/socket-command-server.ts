@@ -1,30 +1,38 @@
 import * as fs from "node:fs";
 import * as net from "node:net";
+import * as path from "node:path";
 import type { Disposable } from "vscode";
 import { validateCommand, type RawCommand } from "./command-validator";
 import type { EmoteCommandService } from "./emote-command-service";
 import type { EmoteLogger } from "./emote-logger";
-import { EMOTE_IPC_DIRECTORY, EMOTE_SOCKET_PATH } from "./ipc-path";
+import { EMOTE_SOCKET_PATH } from "./ipc-path";
+
+type CommandExecutor = Pick<EmoteCommandService, "executeRaw">;
+type CommandLogger = Pick<
+  EmoteLogger,
+  "info" | "warn" | "error" | "notifyErrorOnce"
+>;
 
 export class SocketCommandServer implements Disposable {
   private server: net.Server | null = null;
 
   constructor(
-    private readonly commands: EmoteCommandService,
-    private readonly logger: EmoteLogger,
+    private readonly commands: CommandExecutor,
+    private readonly logger: CommandLogger,
+    private readonly socketPath = EMOTE_SOCKET_PATH,
   ) {}
 
   start(): void {
     if (this.server) throw new Error("Emote command server is already started");
     if (process.platform !== "win32") {
-      fs.mkdirSync(EMOTE_IPC_DIRECTORY, { recursive: true });
-      if (fs.existsSync(EMOTE_SOCKET_PATH)) fs.unlinkSync(EMOTE_SOCKET_PATH);
+      fs.mkdirSync(path.dirname(this.socketPath), { recursive: true });
+      if (fs.existsSync(this.socketPath)) fs.unlinkSync(this.socketPath);
     }
 
     this.server = net.createServer((socket) => this.handleSocket(socket));
     this.server.on("error", (error: NodeJS.ErrnoException) => {
       if (error.code === "EADDRINUSE") {
-        this.logger.warn("Socket already in use", { path: EMOTE_SOCKET_PATH });
+        this.logger.warn("Socket already in use", { path: this.socketPath });
         return;
       }
       this.logger.error("Socket server error", { error: error.message });
@@ -33,16 +41,16 @@ export class SocketCommandServer implements Disposable {
         "Emote could not start the command server. Check the Emote output channel for details.",
       );
     });
-    this.server.listen(EMOTE_SOCKET_PATH, () => {
-      this.logger.info("Socket server listening", { path: EMOTE_SOCKET_PATH });
+    this.server.listen(this.socketPath, () => {
+      this.logger.info("Socket server listening", { path: this.socketPath });
     });
   }
 
   dispose(): void {
     this.server?.close();
     this.server = null;
-    if (process.platform !== "win32" && fs.existsSync(EMOTE_SOCKET_PATH)) {
-      fs.unlinkSync(EMOTE_SOCKET_PATH);
+    if (process.platform !== "win32" && fs.existsSync(this.socketPath)) {
+      fs.unlinkSync(this.socketPath);
     }
     this.logger.info("Socket server stopped");
   }

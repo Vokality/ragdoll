@@ -41,7 +41,7 @@ bun run package
 | ----------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | Activation  | Launch VS Code → run `Emote: Show Character`.                      | Panel opens beside editor, overlay disappears once MCP command arrives. |
 | MCP loop    | From MCP client, call `setMood`, `setSpeechBubble`, `setHeadPose`. | Character mirrors each call, speech bubble truncates after 240 chars.   |
-| Error paths | Write malformed JSON into `/tmp/ragdoll-vscode/command.json`.      | Extension logs warning once, throttles polling, panel stays responsive. |
+| Error paths | Send malformed JSON to the Emote Unix socket.                      | Extension logs a warning, rejects the command, panel stays responsive.  |
 | Theme sync  | Run `Emote: Set Theme` then toggle panel.                          | Panel reopens with persisted theme, runbook screenshot matches.         |
 | Installer   | Delete `~/.emote/mcp-server.js` and reload window.                 | Extension reinstalls helper and logs success.                           |
 

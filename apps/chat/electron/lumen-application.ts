@@ -19,6 +19,7 @@ import { ExtensionMessageBus } from "./services/extension-message-bus.js";
 import { ExtensionOperationsService } from "./services/extension-operations-service.js";
 import { ExternalNavigationService } from "./services/external-navigation-service.js";
 import { GitHubReleaseService } from "./services/github-release-service.js";
+import { createHostSchedulerCapability } from "./services/host-scheduler-capability.js";
 import { createHostTimersCapability } from "./services/host-timers-capability.js";
 import { OAuthLoopbackService } from "./services/oauth-loopback-service.js";
 import {
@@ -54,6 +55,7 @@ export class LumenApplication {
       now: Date.now,
     });
     const timers = createHostTimersCapability();
+    const scheduler = createHostSchedulerCapability(timers);
     this.oauthRedirects = new OAuthLoopbackService(
       config.oauth.callbackTimeoutMs,
       timers,
@@ -70,6 +72,7 @@ export class LumenApplication {
       conversationEvents: this.conversationEvents,
       logger: console,
       timers,
+      scheduler,
       request: fetch,
       now: Date.now,
       hostData: new ExtensionHostDataRepository(storage, safeStorage),

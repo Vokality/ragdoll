@@ -21,8 +21,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as net from "net";
 import { EMOTE_SOCKET_PATH } from "./ipc-path";
-import { VALID_ACTIONS, VALID_MOODS, VALID_THEMES, VALID_TONES } from "./types";
-import type { ActionId, ThemeId } from "./types";
+import { VALID_ACTIONS, VALID_MOODS, VALID_THEMES, VALID_TONES, VALID_VARIANTS } from "./types";
+import type { ActionId, ThemeId, VariantId } from "./types";
+import { EMOTE_VERSION } from "./version";
 
 const SOCKET_TIMEOUT_MS = 3000;
 
@@ -41,7 +42,8 @@ type CommandPayload =
       duration?: number;
     }
   | { type: "setSpeechBubble"; text: string | null; tone: ToneId }
-  | { type: "setTheme"; themeId: ThemeId };
+  | { type: "setTheme"; themeId: ThemeId }
+  | { type: "setVariant"; variantId: VariantId };
 
 function log(
   level: "info" | "error" | "warn",
@@ -225,7 +227,7 @@ async function getHealthReport(): Promise<{
 const server = new Server(
   {
     name: "emote",
-    version: "0.2.0",
+    version: EMOTE_VERSION,
   },
   {
     capabilities: {
@@ -358,8 +360,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "setVariant",
+      description: "Change the character variant (human or einstein)",
+      inputSchema: {
+        type: "object",
+        properties: {
+          variantId: {
+            type: "string",
+            enum: [...VALID_VARIANTS],
+          },
+        },
+        required: ["variantId"],
+      },
+    },
+    {
       name: "health",
-      description: "Report MCP server readiness and IPC file status",
+      description:
+        "Report MCP server readiness and Unix socket / named-pipe connectivity",
       inputSchema: {
         type: "object",
         properties: {},
@@ -434,6 +451,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return successResponse(
           `Theme changed to: ${(args as { themeId: ThemeId }).themeId}`,
+        );
+
+      case "setVariant":
+        await sendCommand({
+          type: "setVariant",
+          variantId: (args as { variantId: VariantId }).variantId,
+        });
+        return successResponse(
+          `Variant changed to: ${(args as { variantId: VariantId }).variantId}`,
         );
 
       case "health": {

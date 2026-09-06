@@ -24,7 +24,7 @@
       "tools"
     ],
     "requiredCapabilities": [],
-    "optionalCapabilities": [],
+    "optionalCapabilities": ["config"],
     "entry": "./dist/index.js",
     "canDisable": true,
     "configSchema": {
@@ -50,6 +50,7 @@
     "build": "bun run ../../scripts/run-typescript.ts",
     "dev": "bun run ../../scripts/run-typescript.ts --watch",
     "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit",
+    "test": "bun test src",
     "clean": "bun run ../../scripts/clean.ts dist"
   },
   "dependencies": {

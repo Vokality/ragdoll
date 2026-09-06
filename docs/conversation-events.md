@@ -18,14 +18,21 @@ interface ConversationEventInput {
   type: string;
   payload: Record<string, JsonValue>;
   turnPolicy: EventTurnPolicy;
+  requiredToolName?: string;
   deduplicationKey?: string;
 }
 ```
 
-The extension supplies the event type, JSON payload, turn policy, and optional
-deduplication key. Core supplies the event ID, source extension ID, and
-timestamp. Event types are local to their source extension; the stored source
-identity prevents collisions and spoofing.
+The extension supplies the event type, JSON payload, turn policy, optional
+required tool name, and optional deduplication key. Core supplies the event ID,
+source extension ID, and timestamp. Event types are local to their source
+extension; the stored source identity prevents collisions and spoofing.
+
+Lumen requires `type` to match `domain.event`
+(`CONVERSATION_EVENT_TYPE_PATTERN` from `@vokality/ragdoll-extensions`).
+`requiredToolName` is allowed only with `turnPolicy: "start-turn"` and must name
+a tool owned by the publishing extension. The event turn cannot finish until
+that tool succeeds.
 
 `record-only` and `start-turn` have deliberately narrow meanings:
 
@@ -82,12 +89,16 @@ Hosts that do not provide the capability reject the extension during loading.
 The host validates every request at runtime and controls model configuration,
 conversation ownership, scheduling, persistence, and presentation.
 
-## Pomodoro behavior
+## First-party behavior
 
-The Pomodoro extension publishes `timer.completed` for completed focus and
-break phases with `turnPolicy: "start-turn"`. Desktop notifications remain a
-separate presentation concern. The event turn decides whether an additional
-assistant message is useful.
+- Pomodoro publishes `timer.completed` for completed focus and break phases
+  with `turnPolicy: "start-turn"`. Desktop notifications remain a separate
+  presentation concern.
+- Flash cards publishes `review.completed` when a review finishes.
+- Tic-tac-toe publishes `game.started`, `game.reset`, `game.move`, and
+  `game.ended`. User-finished games use `start-turn`; a user move can set
+  `requiredToolName: "tic_tac_toe_place"` so the agent must play before the
+  turn ends. Agent-finished games use `record-only`.
 
 ## Acceptance criteria
 
@@ -97,7 +108,9 @@ assistant message is useful.
   turns.
 - Only `start-turn` schedules immediate evaluation.
 - Event evaluation can finish silently or append a visible assistant response.
+- `requiredToolName` is rejected unless the policy is `start-turn` and the tool
+  belongs to the source extension.
 - Duplicate completion callbacks do not create duplicate events or turns.
 - Pending event turns survive process restart.
-- Pomodoro focus and break completion use the core capability.
+- Pomodoro, flash-cards, and tic-tac-toe use the core capability.
 - Type checks, package tests, chat tests, and production builds pass.

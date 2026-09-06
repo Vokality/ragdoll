@@ -377,4 +377,51 @@ describe("ExtensionLoader", () => {
     );
     expect(loader.isPackageLoaded("cleanup-package")).toBe(false);
   });
+
+  it("rejects packages that export an extension object instead of createExtension", async () => {
+    const packageJson = JSON.stringify({
+      name: "object-package",
+      version: "1.0.0",
+      ragdollExtension: packageManifest("object-package", ["tools"]),
+    });
+    const objectExtension = {
+      manifest: {
+        id: "object-package",
+        name: "object-package",
+        version: "1.0.0",
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
+      activate: () => ({
+        tools: [
+          {
+            definition: {
+              type: "function" as const,
+              function: {
+                name: "objectTool",
+                description: "object",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+            handler: () => ({ success: true }),
+          },
+        ],
+      }),
+    };
+    const loader = createLoader(createRegistry(registryDependencies), {
+      packageRoots: [{ path: "/extensions", layout: "packages" }],
+      hostEnvironment: host,
+      fileSystem: {
+        pathExists: async (path) =>
+          path === "/extensions/object-package/package.json",
+        readFile: async () => packageJson,
+        readDirectory: async () => [],
+      },
+      importModule: async () => ({ default: objectExtension }),
+    });
+
+    const result = await loader.loadPackage("object-package");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("createExtension(config?) factory");
+  });
 });

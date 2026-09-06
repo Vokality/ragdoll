@@ -19,9 +19,10 @@ import type {
   ToolResult,
   ValidationResult,
 } from "./types.js";
-import type {
-  ExtensionHostCapability,
-  ExtensionHostEnvironment,
+import {
+  HOST_CAPABILITY_FIELDS,
+  type ExtensionHostCapability,
+  type ExtensionHostEnvironment,
 } from "./types/host-environment.js";
 import type { ExtensionSlot } from "./slots.js";
 
@@ -117,14 +118,18 @@ function ensureHostCapabilities(
   required: ReadonlyArray<ExtensionHostCapability>,
   host: ExtensionHostEnvironment,
 ): void {
-  if (required.length === 0) {
-    return;
-  }
-  const available = host.capabilities;
   for (const capability of required) {
-    if (!available.has(capability)) {
+    if (!host.capabilities.has(capability)) {
       throw new Error(
         `Extension '${extensionId}' requires missing host capability '${capability}'. Update the host environment to provide it.`,
+      );
+    }
+  }
+  for (const capability of host.capabilities) {
+    const field = HOST_CAPABILITY_FIELDS[capability];
+    if (host[field] === undefined) {
+      throw new Error(
+        `Extension '${extensionId}' was offered host capability '${capability}' without an implementation.`,
       );
     }
   }

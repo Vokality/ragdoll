@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted for implementation. Spotify is the first proving extension, but no
-Spotify-specific behavior belongs in the host.
+Implemented in the Lumen Electron host. Spotify is the first proving
+extension, but no Spotify-specific behavior belongs in the host.
 
 ## Goals
 

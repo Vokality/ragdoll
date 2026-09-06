@@ -16,6 +16,7 @@ import { ExtensionMessageBus } from "./extension-message-bus.js";
 import type { ExtensionConversationEventPublisher } from "./conversation-event-service.js";
 import type { ExtensionHostDataStore } from "../infrastructure/extension-host-data-repository.js";
 import type { OAuthRedirectService } from "./oauth-loopback-service.js";
+import { createHostSchedulerCapability } from "./host-scheduler-capability.js";
 import { createHostTimersCapability } from "./host-timers-capability.js";
 
 const host: ExtensionHostEnvironment = { capabilities: new Set() };
@@ -94,6 +95,7 @@ function createManager(
       error: () => undefined,
     },
     timers: createHostTimersCapability(),
+    scheduler: createHostSchedulerCapability(createHostTimersCapability()),
     request: fetch,
     now: Date.now,
     hostData: hostDataStore,
@@ -646,6 +648,79 @@ describe("ExtensionManager built-in boundaries", () => {
       { extensionId: "publisher", type: "test.completed" },
     ]);
     expect(undeclaredCapabilityWasPresent).toBe(false);
+    await manager.destroy();
+  });
+
+  it("grants scheduler when declared and withholds it otherwise", async () => {
+    let scheduled = false;
+    let undeclaredSchedulerWasPresent = false;
+    const tool = {
+      definition: {
+        type: "function" as const,
+        function: {
+          name: "noop",
+          description: "No operation",
+          parameters: { type: "object" as const, properties: {} },
+        },
+      },
+      handler: () => ({ success: true }),
+    };
+    const manager = createManager(undefined, [
+      {
+        descriptor: descriptor("scheduled", ["tools"], {
+          name: "Scheduled",
+          requiredCapabilities: ["scheduler"],
+        }),
+        createExtension: () =>
+          createExtension({
+            id: "scheduled",
+            name: "Scheduled",
+            version: "1.0.0",
+            requiredCapabilities: ["scheduler"],
+            tools: [tool],
+            onInitialize: async (_context, hostEnvironment) => {
+              if (!hostEnvironment.scheduler) {
+                throw new Error("scheduler was not granted");
+              }
+              await hostEnvironment.scheduler.schedule(() => {
+                scheduled = true;
+              });
+            },
+          }),
+      },
+      {
+        descriptor: descriptor("unscheduled", ["tools"], {
+          name: "Unscheduled",
+        }),
+        createExtension: () =>
+          createExtension({
+            id: "unscheduled",
+            name: "Unscheduled",
+            version: "1.0.0",
+            tools: [
+              {
+                ...tool,
+                definition: {
+                  ...tool.definition,
+                  function: {
+                    ...tool.definition.function,
+                    name: "otherNoop",
+                  },
+                },
+              },
+            ],
+            onInitialize: (_context, hostEnvironment) => {
+              undeclaredSchedulerWasPresent = Boolean(
+                hostEnvironment.scheduler,
+              );
+            },
+          }),
+      },
+    ]);
+
+    await manager.initialize();
+    expect(scheduled).toBe(true);
+    expect(undeclaredSchedulerWasPresent).toBe(false);
     await manager.destroy();
   });
 

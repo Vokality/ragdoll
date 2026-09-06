@@ -1,17 +1,29 @@
 import { $ } from "bun";
 
 const rootDirectory = `${import.meta.dir}/..`;
+const rootPackage = (await Bun.file(`${rootDirectory}/package.json`).json()) as {
+  workspaces: { catalog: { react: string } };
+};
+const reactVersion = rootPackage.workspaces.catalog.react.replace(/^\^/, "");
+
 const packageDirectories = [
   "packages/ragdoll",
   "packages/ragdoll-extensions",
-  "packages/ragdoll-extension-character",
-  "packages/ragdoll-extension-tasks",
-  "packages/ragdoll-extension-pomodoro",
-  "packages/ragdoll-extension-spotify",
-  "packages/ragdoll-extension-tic-tac-toe",
-  "packages/ragdoll-extension-flash-cards",
-  "examples/extension-weather",
-] as const;
+  ...(
+    await Array.fromAsync(
+      new Bun.Glob("packages/ragdoll-extension-*/package.json").scan({
+        cwd: rootDirectory,
+      }),
+    )
+  ).map((manifest) => manifest.replace(/\/package\.json$/, "")),
+  ...(
+    await Array.fromAsync(
+      new Bun.Glob("examples/*/package.json").scan({
+        cwd: rootDirectory,
+      }),
+    )
+  ).map((manifest) => manifest.replace(/\/package\.json$/, "")),
+].sort();
 
 const temporaryRoot = Bun.env.TMPDIR ?? "/tmp";
 const temporaryDirectory = `${temporaryRoot.replace(/\/$/, "")}/ragdoll-packages-${crypto.randomUUID()}`;
@@ -55,7 +67,7 @@ try {
         type: "module",
         dependencies: {
           ...packedDependencies,
-          react: "19.2.0",
+          react: reactVersion,
         },
         overrides: packedDependencies,
       },

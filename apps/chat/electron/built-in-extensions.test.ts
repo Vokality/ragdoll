@@ -5,7 +5,14 @@ describe("built-in extension descriptors", () => {
   it("uses canonical package metadata and includes Spotify OAuth hooks", () => {
     expect(
       BUILT_IN_EXTENSIONS.map(({ descriptor }) => descriptor.extensionId),
-    ).toEqual(["character", "tasks", "pomodoro", "spotify"]);
+    ).toEqual([
+      "character",
+      "tasks",
+      "pomodoro",
+      "spotify",
+      "tic-tac-toe",
+      "flash-cards",
+    ]);
 
     const spotify = BUILT_IN_EXTENSIONS.find(
       ({ descriptor }) => descriptor.extensionId === "spotify",

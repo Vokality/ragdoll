@@ -6,6 +6,9 @@
  * 2. Auto-discovered by the ExtensionLoader
  * 3. Dynamically loaded at runtime
  *
+ * Host-owned configuration is the source of truth. Factory arguments are an
+ * optional override for in-process registration when no host config is present.
+ *
  * To use this pattern for your own extension:
  * 1. Add a `ragdollExtension` manifest to package.json
  * 2. Export a `createExtension(config?)` function
@@ -13,14 +16,11 @@
 
 import {
   createExtension as defineExtension,
+  type ExtensionHostEnvironment,
   type RagdollExtension,
   type ToolResult,
   type ValidationResult,
 } from "@vokality/ragdoll-extensions";
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export type TemperatureUnits = "celsius" | "fahrenheit";
 
@@ -41,15 +41,7 @@ export interface WeatherData {
   humidity: number;
 }
 
-// =============================================================================
-// Constants
-// =============================================================================
-
 const VALID_UNITS: readonly TemperatureUnits[] = ["celsius", "fahrenheit"];
-
-// =============================================================================
-// Mock Weather Data (replace with real API in production)
-// =============================================================================
 
 const MOCK_WEATHER: Record<string, Omit<WeatherData, "location" | "units">> = {
   "new york": { temperature: 22, condition: "sunny", humidity: 45 },
@@ -84,10 +76,6 @@ function getWeatherData(
   };
 }
 
-// =============================================================================
-// Validators
-// =============================================================================
-
 function validateGetWeather(args: Record<string, unknown>): ValidationResult {
   if (!args.location || typeof args.location !== "string") {
     return { valid: false, error: "location is required and must be a string" };
@@ -109,36 +97,34 @@ function validateGetWeather(args: Record<string, unknown>): ValidationResult {
   return { valid: true };
 }
 
-// =============================================================================
-// Extension Factory
-// =============================================================================
+function resolveDefaultUnits(
+  host: ExtensionHostEnvironment,
+  factoryConfig: WeatherExtensionConfig,
+): TemperatureUnits {
+  const fromHost = host.config?.getValues().defaultUnits;
+  if (fromHost === "celsius" || fromHost === "fahrenheit") {
+    return fromHost;
+  }
+  return factoryConfig.defaultUnits ?? "celsius";
+}
 
 /**
- * Creates the weather extension with optional configuration.
+ * Creates the weather extension with optional factory configuration.
  *
- * @param config - Optional configuration from package.json or manual override
- * @returns A RagdollExtension that provides weather tools
- *
- * @example
- * ```ts
- * // Manual registration
- * import { createExtension } from "@example/ragdoll-extension-weather";
- *
- * const weatherExt = createExtension({ defaultUnits: "fahrenheit" });
- * await registry.register(weatherExt, { host });
- * ```
+ * When the host grants `config`, `defaultUnits` is read from `host.config`
+ * at tool execution time. Factory arguments apply only when host config is
+ * absent (manual in-process registration).
  */
 export function createExtension(
   config: WeatherExtensionConfig = {},
 ): RagdollExtension {
-  const defaultUnits = config.defaultUnits ?? "celsius";
-
   return defineExtension({
     id: "weather",
     name: "Weather",
     version: "1.0.0",
-
-    tools: [
+    description: "Example weather lookup tools",
+    optionalCapabilities: ["config"],
+    tools: (host) => [
       {
         definition: {
           type: "function",
@@ -157,16 +143,17 @@ export function createExtension(
                 units: {
                   type: "string",
                   enum: VALID_UNITS,
-                  description: `Temperature units (default: ${defaultUnits})`,
+                  description:
+                    "Temperature units (default comes from host config)",
                 },
               },
               required: ["location"],
             },
           },
         },
-        handler: async (args, _context): Promise<ToolResult> => {
+        handler: async (args): Promise<ToolResult> => {
           const { location, units } = args as unknown as GetWeatherArgs;
-          const resolvedUnits = units ?? defaultUnits;
+          const resolvedUnits = units ?? resolveDefaultUnits(host, config);
 
           const weather = getWeatherData(location, resolvedUnits);
 

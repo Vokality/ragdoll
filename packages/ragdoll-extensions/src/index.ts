@@ -66,6 +66,7 @@ export type {
   HostLoggerCapability,
   HostTimersCapability,
   HostSchedulerCapability,
+  HostSchedulerPriority,
   HostIpcBridge,
   HostConversationEventsCapability,
   HostScheduleOptions,
@@ -114,6 +115,11 @@ export {
 
 // Host config capability
 export type { HostConfigCapability } from "./types/host-environment.js";
+export {
+  CONVERSATION_EVENT_TYPE_PATTERN,
+  HOST_CAPABILITY_FIELDS,
+  REQUIRED_TOOL_NAME_PATTERN,
+} from "./types/host-environment.js";
 
 // =============================================================================
 // React-free Slot Contracts and State

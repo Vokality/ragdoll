@@ -1,3 +1,7 @@
+import {
+  CONVERSATION_EVENT_TYPE_PATTERN,
+  REQUIRED_TOOL_NAME_PATTERN,
+} from "@vokality/ragdoll-extensions";
 import { z } from "zod";
 
 export const conversationMessageSchema = z
@@ -13,14 +17,14 @@ export const conversationEventInputSchema = z
       .string()
       .min(1)
       .max(100)
-      .regex(/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/),
+      .regex(CONVERSATION_EVENT_TYPE_PATTERN),
     payload: z.record(z.string(), z.json()),
     turnPolicy: z.enum(["record-only", "start-turn"]),
     requiredToolName: z
       .string()
       .min(1)
       .max(100)
-      .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
+      .regex(REQUIRED_TOOL_NAME_PATTERN)
       .optional(),
     deduplicationKey: z.string().min(1).max(200).optional(),
   })

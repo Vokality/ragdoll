@@ -57,6 +57,7 @@ export class ExtensionInstaller {
         release.downloadUrl,
         join(temporaryPath, "extension.tar.gz"),
         extractedPath,
+        release.sha256,
       );
 
       const manifest = parseExtensionPackageJson(

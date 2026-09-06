@@ -214,4 +214,25 @@ describe("ExtensionRegistry capability integrity", () => {
       error: "validator crashed",
     });
   });
+
+  it("rejects a host that advertises a capability without implementing it", async () => {
+    const registry = createRegistry(registryDependencies);
+    await expect(
+      registry.register(
+        {
+          ...extension("needs-storage", { tools: [tool("stored")] }),
+          manifest: {
+            id: "needs-storage",
+            name: "needs-storage",
+            version: "1.0.0",
+            requiredCapabilities: ["storage"],
+            optionalCapabilities: [],
+          },
+        },
+        {
+          host: { capabilities: new Set(["storage"]) },
+        },
+      ),
+    ).rejects.toThrow("without an implementation");
+  });
 });
