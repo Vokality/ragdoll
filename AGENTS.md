@@ -54,6 +54,18 @@ The maintained package shape is [`examples/extension-weather`](./examples/extens
 - Add regression coverage for lifecycle, loading, and IPC behavior changes.
 - Keep changes scoped; remove stale paths, commands, and docs instead of retaining compatibility guidance.
 
+## Cursor Cloud specific instructions
+
+The Cloud Agent environment is defined by [.cursor/environment.json](./.cursor/environment.json):
+
+- `install` runs `.cursor/install.sh`, which installs the pinned Bun toolchain when missing, then `bun install --frozen-lockfile` and `bun run build`.
+- The `lumen-renderer` terminal runs `.cursor/start-lumen-renderer.sh` (the Vite dev server on `http://localhost:5173`).
+- The `lumen-app` terminal runs `.cursor/run-lumen-headless.sh`, the canonical way to launch the `lumen` Electron desktop app in the cloud. Restart that terminal (or rerun the script) to relaunch the app.
+
+Launching the Electron app in the cloud is not the same as locally. A headless VM has no usable desktop OS keyring, and its desktop session ships a `login` keyring guarded by the (nonexistent) login password. A plain `electron .` / `bun run dev:chat` therefore either blocks on an "unlock login keyring" password dialog the passwordless cloud user cannot answer, or makes `safeStorage.isEncryptionAvailable()` return `false` so saving the OpenAI API key fails with "Secure credential storage is unavailable on this system".
+
+`.cursor/run-lumen-headless.sh` avoids both: it launches Electron inside a private D-Bus session (which has no GUI keyring prompter, so no dialog is possible) with a dedicated, auto-unlocked `gnome-keyring` in its own `XDG_DATA_HOME` and `--password-store=gnome-libsecret`. It never touches the desktop `login` keyring. Always launch the cloud app through this script; do not fold the keyring workaround into the cross-platform `dev:chat` script, where the OS keychain already backs `safeStorage`.
+
 ## Task routing
 
 - Character framework: `packages/ragdoll`

@@ -47,24 +47,24 @@
     "@vokality/ragdoll-extension-tasks": "workspace:*",
     "@vokality/ragdoll-extension-tic-tac-toe": "workspace:*",
     "@vokality/ragdoll-extensions": "workspace:*",
-    "openai": "^6.48.0",
+    "openai": "^7.10.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "semver": "^7.8.5",
-    "tar": "^7.5.20",
+    "tar": "^7.5.22",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.4.1",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/semver": "^7.7.1",
-    "@vitejs/plugin-react": "^6.0.3",
-    "concurrently": "^10.0.3",
-    "electron": "^43.1.1",
+    "@types/semver": "^7.8.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.2.0",
     "electron-builder": "26.15.3",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "wait-on": "^9.0.10"
+    "wait-on": "^9.1.0"
   }
 }
