@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { EventBus } from "../../src/state/event-bus";
+import type { StateEvent } from "../../src/state/types";
 
 describe("EventBus", () => {
   let eventBus: EventBus;
@@ -63,7 +64,7 @@ describe("EventBus", () => {
 
   describe("event emission", () => {
     it("should emit events to all subscribers", () => {
-      const events: any[] = [];
+      const events: StateEvent[] = [];
       eventBus.subscribe((event) => {
         events.push(event);
       });
@@ -79,7 +80,7 @@ describe("EventBus", () => {
     });
 
     it("should emit different event types", () => {
-      const events: any[] = [];
+      const events: StateEvent[] = [];
       eventBus.subscribe((event) => {
         events.push(event);
       });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { RagdollSkeleton } from "../../src/models/ragdoll-skeleton";
+import type { JointName } from "../../src/types";
 
 describe("RagdollSkeleton", () => {
   let skeleton: RagdollSkeleton;
@@ -51,7 +52,7 @@ describe("RagdollSkeleton", () => {
     });
 
     it("should return null for invalid joint", () => {
-      const rotation = skeleton.getJointRotation("invalid" as any);
+      const rotation = skeleton.getJointRotation("invalid" as JointName);
       expect(rotation).toBeNull();
     });
   });

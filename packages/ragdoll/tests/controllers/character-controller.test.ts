@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { CharacterController } from "../../src/controllers/character-controller";
+import type { StateEvent } from "../../src/state/types";
 
 describe("CharacterController", () => {
   let controller: CharacterController;
@@ -175,12 +176,9 @@ describe("CharacterController", () => {
   describe("event bus integration", () => {
     it("should emit mood change events", () => {
       const customController = new CharacterController(defaultConfig);
-      // Access event bus through state manager
-      const stateManager = (customController as any).stateManager;
-      const bus = stateManager.getEventBus();
+      const bus = customController.getEventBus();
 
-      // Subscribe to events
-      const events: any[] = [];
+      const events: StateEvent[] = [];
       bus.subscribe((event) => {
         events.push(event);
       });
@@ -191,10 +189,9 @@ describe("CharacterController", () => {
 
     it("should emit action triggered events", () => {
       const customController = new CharacterController(defaultConfig);
-      const stateManager = (customController as any).stateManager;
-      const bus = stateManager.getEventBus();
+      const bus = customController.getEventBus();
 
-      const events: any[] = [];
+      const events: StateEvent[] = [];
       bus.subscribe((event) => {
         events.push(event);
       });

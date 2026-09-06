@@ -21,6 +21,94 @@ function report(file: string, specifier: string, rule: string): void {
   );
 }
 
+async function readPackageJson(
+  directory: string,
+): Promise<{ name?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }> {
+  return Bun.file(resolve(workspaceRoot, directory, "package.json")).json();
+}
+
+function dependencyNames(pkg: {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}): string[] {
+  return [
+    ...Object.keys(pkg.dependencies ?? {}),
+    ...Object.keys(pkg.devDependencies ?? {}),
+    ...Object.keys(pkg.peerDependencies ?? {}),
+  ];
+}
+
+const ragdollPackage = await readPackageJson("packages/ragdoll");
+for (const name of dependencyNames(ragdollPackage)) {
+  if (
+    name.startsWith("@vokality/ragdoll-extension") ||
+    name === "electron" ||
+    name.startsWith("apps/")
+  ) {
+    violations.push(
+      `packages/ragdoll/package.json: character core cannot depend on apps or extensions (${name})`,
+    );
+  }
+}
+
+const extensionsPackage = await readPackageJson("packages/ragdoll-extensions");
+for (const name of dependencyNames(extensionsPackage)) {
+  if (
+    name.startsWith("@vokality/ragdoll-extension-") ||
+    name === "electron"
+  ) {
+    violations.push(
+      `packages/ragdoll-extensions/package.json: extension framework cannot depend on apps or first-party extensions (${name})`,
+    );
+  }
+}
+
+const emotePackage = await readPackageJson("apps/emote");
+for (const name of dependencyNames(emotePackage)) {
+  if (
+    name === "@vokality/ragdoll-extensions" ||
+    name.startsWith("@vokality/ragdoll-extension-")
+  ) {
+    violations.push(
+      `apps/emote/package.json: Emote is an MCP character host and must not depend on the extension framework or first-party extensions (${name})`,
+    );
+  }
+}
+
+const extensionPackageDirs = (
+  await Array.fromAsync(
+    new Bun.Glob("packages/ragdoll-extension-*/package.json").scan({
+      cwd: workspaceRoot,
+    }),
+  )
+).map((manifest) => dirname(manifest));
+for (const directory of extensionPackageDirs) {
+  const pkg = await readPackageJson(directory);
+  for (const name of dependencyNames(pkg)) {
+    if (
+      (name.startsWith("@vokality/ragdoll-extension-") &&
+        name !== pkg.name) ||
+      name === "electron"
+    ) {
+      violations.push(
+        `${directory}/package.json: extension packages cannot depend on apps or other extensions (${name})`,
+      );
+    }
+  }
+}
+
+const electronApi = await Bun.file(
+  resolve(workspaceRoot, "apps/chat/electron/electron-api.ts"),
+).text();
+const declaredIpcChannels = new Set(
+  [...electronApi.matchAll(/:\s*"([a-z]+:[a-z0-9-]+)"/g)].map(
+    (match) => match[1],
+  ),
+);
+const ipcChannelLiteral =
+  /["']((?:auth|chat|extensions|settings|shell):[a-z0-9-]+)["']/g;
+
 for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
   if (
     relativeFile.includes("/dist/") ||
@@ -45,6 +133,7 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
     if (
       normalizedFile.startsWith("packages/ragdoll/src/") &&
       (specifier.startsWith("@vokality/ragdoll-extension") ||
+        specifier === "electron" ||
         target?.startsWith("apps/") ||
         target?.startsWith("packages/ragdoll-extension"))
     ) {
@@ -56,8 +145,23 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
     }
 
     if (
+      normalizedFile.startsWith("packages/ragdoll-extensions/src/") &&
+      (specifier.startsWith("@vokality/ragdoll-extension-") ||
+        specifier === "electron" ||
+        target?.startsWith("apps/") ||
+        target?.startsWith("packages/ragdoll-extension-"))
+    ) {
+      report(
+        file,
+        specifier,
+        "the extension framework cannot depend on apps or first-party extensions",
+      );
+    }
+
+    if (
       extensionPackage &&
       (specifier.startsWith("@vokality/ragdoll-extension-") ||
+        specifier === "electron" ||
         target?.startsWith("apps/") ||
         (/^packages\/ragdoll-extension-[^/]+\//.test(target ?? "") &&
           !target?.startsWith(`${extensionPackage}/`)))
@@ -65,7 +169,7 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
       report(
         file,
         specifier,
-        "extension packages cannot depend on apps or other extensions",
+        "extension packages cannot depend on apps, Electron, or other extensions",
       );
     }
 
@@ -84,6 +188,7 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
     if (
       normalizedFile.startsWith("apps/chat/src/") &&
       (specifier === "electron" ||
+        specifier === "@vokality/ragdoll-extensions/loader" ||
         (target?.startsWith("apps/chat/electron/") &&
           target !== "apps/chat/electron/electron-api"))
     ) {
@@ -91,6 +196,19 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
         file,
         specifier,
         "the chat renderer may only consume the Electron API contract",
+      );
+    }
+
+    if (
+      normalizedFile.startsWith("apps/emote/") &&
+      (specifier === "@vokality/ragdoll-extensions" ||
+        specifier.startsWith("@vokality/ragdoll-extensions/") ||
+        specifier.startsWith("@vokality/ragdoll-extension-"))
+    ) {
+      report(
+        file,
+        specifier,
+        "Emote is an MCP character host, not a Ragdoll extension host",
       );
     }
 
@@ -104,6 +222,22 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
         specifier,
         "production source cannot import testing helpers",
       );
+    }
+  }
+
+  if (
+    normalizedFile.startsWith("apps/chat/") &&
+    normalizedFile !== "apps/chat/electron/electron-api.ts"
+  ) {
+    for (const match of contents.matchAll(ipcChannelLiteral)) {
+      const channel = match[1];
+      if (channel && !declaredIpcChannels.has(channel)) {
+        report(
+          file,
+          channel,
+          "Electron IPC channel names must be declared in IPC_CHANNELS",
+        );
+      }
     }
   }
 }
