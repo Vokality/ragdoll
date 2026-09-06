@@ -14,7 +14,7 @@ export function headBulgeParams(
   return {
     radiusX: headWidth * 0.56,
     radiusY: headHeight * 0.58,
-    amount: headWidth * 0.55,
+    amount: headWidth * 0.62,
   };
 }
 
@@ -133,13 +133,12 @@ export function roundExtrudedOutline(
   radiusX: number,
   radiusY: number,
   amount: number,
-  maxEdgeLength = 12,
+  maxEdgeLength = 10,
 ): BufferGeometry {
   const subdivided = subdivideFaces(geometry, maxEdgeLength);
   bulgeFront(subdivided, radiusX, radiusY, amount);
   const welded = weldVertices(subdivided);
   if (welded !== subdivided) subdivided.dispose();
-  applyEllipsoidNormals(welded, radiusX, radiusY, amount);
   return welded;
 }
 

@@ -182,8 +182,8 @@ export class CharacterScene {
     const distance = cameraDistanceForView(CAMERA_FOV, VIEW_HEIGHT);
     this.camera = new PerspectiveCamera(CAMERA_FOV, VIEW_WIDTH / VIEW_HEIGHT, 12, 2400);
     // Slight 3/4 view so cheek, ear, and head depth read as volume.
-    this.camera.position.set(distance * 0.22, distance * 0.07, distance * 0.94);
-    this.camera.lookAt(0, -10, 28);
+    this.camera.position.set(distance * 0.32, distance * 0.1, distance * 0.88);
+    this.camera.lookAt(0, -8, 36);
 
     this.materials = createThemeMaterials(getDefaultTheme());
 
@@ -217,11 +217,11 @@ export class CharacterScene {
     this.lights = {
       ambient: new AmbientLight(0xc5d0dc, 0.16),
       hemisphere: new HemisphereLight(0xfff4ea, 0x3a4250, 0.42),
-      key: new DirectionalLight(0xfff3e4, 2.35),
-      fill: new DirectionalLight(0x8fb4d4, 0.55),
-      rim: new DirectionalLight(0xffe4cc, 1.35),
+      key: new DirectionalLight(0xfff3e4, 2.6),
+      fill: new DirectionalLight(0x8fb4d4, 0.38),
+      rim: new DirectionalLight(0xffe4cc, 1.55),
     };
-    this.lights.key.position.set(220, 260, 320);
+    this.lights.key.position.set(340, 210, 180);
     this.lights.key.castShadow = true;
     this.lights.key.shadow.mapSize.set(1024, 1024);
     this.lights.key.shadow.bias = -0.0008;

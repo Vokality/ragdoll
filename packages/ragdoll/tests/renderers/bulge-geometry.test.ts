@@ -96,7 +96,7 @@ describe("head bulge", () => {
     const bulge = headBulgeParams(140, 170);
     expect(bulge.radiusX).toBeCloseTo(78.4);
     expect(bulge.radiusY).toBeCloseTo(98.6);
-    expect(bulge.amount).toBeCloseTo(77);
+    expect(bulge.amount).toBeCloseTo(86.8);
     expect(surfaceOffsetZ(0, 0, bulge.radiusX, bulge.radiusY, bulge.amount)).toBeCloseTo(
       bulge.amount,
     );
