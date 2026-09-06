@@ -459,7 +459,6 @@ export class CharacterScene {
       material.dispose();
     }
     disposeThemeMaterials(this.materials);
-    this.renderer.forceContextLoss();
     this.renderer.dispose();
   }
 

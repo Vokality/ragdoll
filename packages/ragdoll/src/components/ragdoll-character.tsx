@@ -11,12 +11,6 @@ interface RagdollCharacterProps {
   variant: string;
 }
 
-const canvasStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  height: "100%",
-};
-
 const wrapperStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
@@ -39,7 +33,6 @@ export function RagdollCharacter({
       }),
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [appliedTheme, setAppliedTheme] = useState(theme);
 
   if (appliedTheme !== theme) {
@@ -52,9 +45,14 @@ export function RagdollCharacter({
   }, [onControllerReady, controller]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
-    if (!canvas || !wrapper) return;
+    if (!wrapper) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    wrapper.appendChild(canvas);
 
     const scene = new CharacterScene(canvas);
 
@@ -84,14 +82,11 @@ export function RagdollCharacter({
       cancelAnimationFrame(frame);
       observer.disconnect();
       scene.dispose();
+      canvas.remove();
     };
   }, [controller]);
 
   useEffect(() => () => controller.destroy(), [controller]);
 
-  return (
-    <div ref={wrapperRef} style={wrapperStyle}>
-      <canvas ref={canvasRef} style={canvasStyle} />
-    </div>
-  );
+  return <div ref={wrapperRef} style={wrapperStyle} />;
 }
