@@ -36,31 +36,33 @@ export function useExtensionConfiguration(
     setOauth(await service.getOAuthState(extensionId));
   }, [extensionId, service]);
 
-  const load = useCallback(async () => {
-    const version = ++loadVersion.current;
-    setError(null);
-    try {
-      const [configuration, nextOAuth] = await Promise.all([
-        hasConfig ? service.loadConfiguration(extensionId) : null,
-        hasOAuth ? service.getOAuthState(extensionId) : null,
-      ]);
-      if (version !== loadVersion.current) return;
-      setSchema(configuration?.schema ?? null);
-      setStatus(configuration?.status ?? null);
-      setValues(configuration?.values ?? {});
-      setOauth(nextOAuth);
-    } catch (loadError) {
-      if (version !== loadVersion.current) return;
-      setError(getErrorMessage(loadError));
-    }
-  }, [extensionId, hasConfig, hasOAuth, service]);
-
   useEffect(() => {
-    if (isOpen) void load();
+    if (!isOpen) return;
+
+    const version = ++loadVersion.current;
+
+    void (async () => {
+      try {
+        const [configuration, nextOAuth] = await Promise.all([
+          hasConfig ? service.loadConfiguration(extensionId) : null,
+          hasOAuth ? service.getOAuthState(extensionId) : null,
+        ]);
+        if (version !== loadVersion.current) return;
+        setError(null);
+        setSchema(configuration?.schema ?? null);
+        setStatus(configuration?.status ?? null);
+        setValues(configuration?.values ?? {});
+        setOauth(nextOAuth);
+      } catch (loadError) {
+        if (version !== loadVersion.current) return;
+        setError(getErrorMessage(loadError));
+      }
+    })();
+
     return () => {
       loadVersion.current += 1;
     };
-  }, [isOpen, load]);
+  }, [extensionId, hasConfig, hasOAuth, isOpen, service]);
 
   useEffect(() => {
     if (!isOpen || !hasOAuth) return;

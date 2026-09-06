@@ -234,12 +234,14 @@ export function RagdollCharacter({
   const [renderData, setRenderData] = useState<RenderData>(() =>
     computeRenderData(controller),
   );
+  const [appliedTheme, setAppliedTheme] = useState(theme);
 
-  // Update theme if it changes
-  useEffect(() => {
+  // Apply theme object changes during render (including same-ID replacements).
+  if (appliedTheme !== theme) {
     controller.setTheme(theme.id);
+    setAppliedTheme(theme);
     setRenderData(computeRenderData(controller));
-  }, [theme, controller]);
+  }
 
   useEffect(() => {
     onControllerReady(controller);

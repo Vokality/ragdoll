@@ -15,7 +15,6 @@ import {
   useCallback,
   useState,
   useRef,
-  useEffect,
 } from "react";
 import type {
   ExtensionUISlot,
@@ -244,21 +243,21 @@ export function useActiveSlot(
   slots: ExtensionUISlot[],
 ): [string | null, (id: string | null) => void, ExtensionUISlot | null] {
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+  const visibleSlots = useVisibleSlots(slots);
+  const isActiveVisible =
+    activeSlotId !== null &&
+    visibleSlots.some((slot) => slot.id === activeSlotId);
+  const resolvedActiveSlotId = isActiveVisible ? activeSlotId : null;
+
+  // Clear a selection that disappeared instead of syncing via an effect.
+  if (activeSlotId !== null && resolvedActiveSlotId === null) {
+    setActiveSlotId(null);
+  }
 
   const activeSlot = useMemo(() => {
-    if (!activeSlotId) return null;
-    return slots.find((s) => s.id === activeSlotId) ?? null;
-  }, [slots, activeSlotId]);
+    if (!resolvedActiveSlotId) return null;
+    return slots.find((slot) => slot.id === resolvedActiveSlotId) ?? null;
+  }, [slots, resolvedActiveSlotId]);
 
-  // Get visible slots to check if active slot is still visible
-  const visibleSlots = useVisibleSlots(slots);
-
-  // Auto-close if active slot becomes invisible or is removed
-  useEffect(() => {
-    if (activeSlotId && !visibleSlots.some((s) => s.id === activeSlotId)) {
-      setActiveSlotId(null);
-    }
-  }, [activeSlotId, visibleSlots]);
-
-  return [activeSlotId, setActiveSlotId, activeSlot];
+  return [resolvedActiveSlotId, setActiveSlotId, activeSlot];
 }

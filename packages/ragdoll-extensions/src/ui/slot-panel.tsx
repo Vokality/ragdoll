@@ -8,7 +8,6 @@ import {
   useState,
   useEffect,
   useCallback,
-  useRef,
   type CSSProperties,
   type FormEvent,
 } from "react";
@@ -33,8 +32,6 @@ import type {
 // =============================================================================
 
 const ANIMATION_DURATION = 250;
-
-type AnimationState = "entering" | "visible" | "exiting" | "hidden";
 
 // =============================================================================
 // Main SlotPanel Component
@@ -66,39 +63,20 @@ interface SlotPanelBaseProps {
  * Base panel component that can be used directly with a panel config.
  */
 export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
-  const [animationState, setAnimationState] =
-    useState<AnimationState>("hidden");
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mounted, setMounted] = useState(isOpen);
 
-  // Handle open/close with animation states
+  // Mount immediately when opened; keep rendering through the exit animation.
+  if (isOpen && !mounted) {
+    setMounted(true);
+  }
+
   useEffect(() => {
-    if (isOpen) {
-      if (exitTimerRef.current) {
-        clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-      if (animationState === "hidden" || animationState === "exiting") {
-        setAnimationState("entering");
-        requestAnimationFrame(() => {
-          setAnimationState("visible");
-        });
-      }
-    } else {
-      if (animationState === "visible" || animationState === "entering") {
-        setAnimationState("exiting");
-        exitTimerRef.current = setTimeout(() => {
-          setAnimationState("hidden");
-          exitTimerRef.current = null;
-        }, ANIMATION_DURATION);
-      }
-    }
-
-    return () => {
-      if (exitTimerRef.current) {
-        clearTimeout(exitTimerRef.current);
-      }
-    };
-  }, [isOpen, animationState]);
+    if (isOpen || !mounted) return;
+    const timer = setTimeout(() => {
+      setMounted(false);
+    }, ANIMATION_DURATION);
+    return () => clearTimeout(timer);
+  }, [isOpen, mounted]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -117,12 +95,11 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
 
-  // Don't render if fully hidden
-  if (animationState === "hidden") {
+  if (!mounted) {
     return null;
   }
 
-  const isExiting = animationState === "exiting";
+  const isExiting = !isOpen;
 
   return (
     <>
@@ -169,14 +146,20 @@ interface CardsPanelProps {
 
 function CardsPanel({ config, onClose }: CardsPanelProps) {
   const { title, progress, card, actions } = config;
-  const [draft, setDraft] = useState("");
-  const [pending, setPending] = useState(false);
-  const attemptId = card.attemptId;
+  const [form, setForm] = useState({
+    attemptId: card.attemptId,
+    draft: "",
+    pending: false,
+  });
 
-  useEffect(() => {
-    setDraft("");
-    setPending(false);
-  }, [attemptId]);
+  if (form.attemptId !== card.attemptId) {
+    setForm({ attemptId: card.attemptId, draft: "", pending: false });
+  }
+
+  const draft =
+    form.attemptId === card.attemptId ? form.draft : "";
+  const pending =
+    form.attemptId === card.attemptId ? form.pending : false;
 
   const canSubmit =
     card.face === "front" &&
@@ -189,11 +172,15 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
     if (!canSubmit || !config.onSubmitAnswer) return;
     const answer = draft.trim();
     if (!answer) return;
-    setPending(true);
+    setForm((current) => ({ ...current, pending: true }));
     try {
       await config.onSubmitAnswer(answer);
     } finally {
-      setPending(false);
+      setForm((current) =>
+        current.attemptId === card.attemptId
+          ? { ...current, pending: false }
+          : current,
+      );
     }
   };
 
@@ -244,7 +231,7 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
         </div>
 
         <div
-          key={attemptId}
+          key={card.attemptId}
           className={`slot-panel-flip-scene ${card.face === "back" ? "flipped" : ""}`}
           style={styles.flipScene}
         >
@@ -275,7 +262,12 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
             <input
               type="text"
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  draft: event.target.value,
+                }))
+              }
               placeholder={config.answerInput.placeholder ?? "Type your answer"}
               maxLength={config.answerInput.maxLength}
               disabled={!canSubmit}

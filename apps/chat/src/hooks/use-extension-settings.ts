@@ -29,28 +29,53 @@ export function useExtensionSettings(
   const [uninstallingId, setUninstallingId] = useState<string | null>(null);
   const refreshGeneration = useRef(0);
 
-  const refresh = useCallback(async () => {
-    const generation = ++refreshGeneration.current;
-    try {
-      const overview = await service.loadOverview();
+  const applyOverview = useCallback(
+    (
+      generation: number,
+      overview: Awaited<
+        ReturnType<ExtensionManagementService["loadOverview"]>
+      >,
+    ) => {
       if (generation !== refreshGeneration.current) return;
       setAvailable(overview.available);
       setBuiltIn(overview.builtIn);
       setConfigurable(overview.configurable);
       setDisabled(overview.disabled);
       setInstalled(overview.installed);
+    },
+    [],
+  );
+
+  const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
+    try {
+      const overview = await service.loadOverview();
+      applyOverview(generation, overview);
     } catch (error) {
       if (generation !== refreshGeneration.current) return;
       setNotice({ tone: "error", text: getErrorMessage(error) });
     }
-  }, [service]);
+  }, [applyOverview, service]);
 
   useEffect(() => {
-    if (isOpen) void refresh();
+    if (!isOpen) return;
+
+    const generation = ++refreshGeneration.current;
+
+    void (async () => {
+      try {
+        const overview = await service.loadOverview();
+        applyOverview(generation, overview);
+      } catch (error) {
+        if (generation !== refreshGeneration.current) return;
+        setNotice({ tone: "error", text: getErrorMessage(error) });
+      }
+    })();
+
     return () => {
       refreshGeneration.current += 1;
     };
-  }, [isOpen, refresh]);
+  }, [applyOverview, isOpen, service]);
 
   const install = useCallback(async () => {
     const url = installUrl.trim();
