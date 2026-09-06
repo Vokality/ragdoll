@@ -67,7 +67,7 @@ try {
         type: "module",
         dependencies: {
           ...packedDependencies,
-          react: ${JSON.stringify(reactVersion)},
+          react: reactVersion,
         },
         overrides: packedDependencies,
       },
