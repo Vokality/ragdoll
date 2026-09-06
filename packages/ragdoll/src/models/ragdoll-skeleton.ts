@@ -17,7 +17,7 @@ export interface Skeleton {
 }
 
 /**
- * Skeleton that works with SVG transforms
+ * Skeleton for head-pose joint animation
  */
 export class RagdollSkeleton {
   public skeleton: Skeleton;

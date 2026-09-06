@@ -15,6 +15,9 @@ export default defineConfig({
     outDir: "dist/renderer",
     emptyOutDir: true,
   },
+  optimizeDeps: {
+    include: ["@vokality/ragdoll", "three"],
+  },
   server: {
     port: 5173,
     strictPort: true,

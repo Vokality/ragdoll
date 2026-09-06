@@ -25,7 +25,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["@vokality/ragdoll"],
+    include: ["@vokality/ragdoll", "three"],
   },
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),

@@ -1,6 +1,6 @@
 # @vokality/ragdoll
 
-An animated character framework with facial expressions, head poses, and themes. Built with React and SVG.
+An animated character framework with facial expressions, head poses, and themes. Built with React and Three.js.
 
 ## Installation
 
@@ -35,18 +35,19 @@ function App() {
 - **Facial Expressions**: smile, frown, laugh, angry, sad, surprise, confusion, thinking
 - **Actions**: wink, talk, and shake animations
 - **Head Pose**: yaw and pitch control with smooth transitions
+- **Three.js renderer**: WebGL canvas with extruded outline-path geometry (no SVG fallback)
 - **Themes**: default, robot, alien, monochrome (or create your own)
 - **Idle Animations**: subtle breathing, blinking, micro-movements
 
 ## Architecture & DDD
 
-`@vokality/ragdoll` is a React/SVG character package. Controllers, models, themes, and variants are UI-free TypeScript. `RagdollCharacter` is the bundled React renderer; hosts can also subscribe to `CharacterController` events and render their own UI.
+`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry still describes the face as outline paths; `RagdollCharacter` extrudes those paths into a themed WebGL scene. Hosts can also subscribe to `CharacterController` events and render their own UI.
 
 ## API
 
 ### RagdollCharacter
 
-The main React component that renders the animated character.
+The main React component that renders the animated character to a WebGL canvas. There is no SVG renderer.
 
 ```tsx
 <RagdollCharacter
@@ -185,6 +186,7 @@ import type {
 ## Requirements
 
 - React 19
+- WebGL (provided by Three.js, bundled with this package)
 - TypeScript (recommended)
 
 ## License

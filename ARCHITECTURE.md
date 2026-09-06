@@ -16,10 +16,11 @@ The framework never imports an app or a first-party extension. Extension package
 
 ## Character package
 
-`@vokality/ragdoll` owns the React/SVG character and its domain model:
+`@vokality/ragdoll` owns the React/Three.js character and its domain model:
 
 - controllers coordinate expression, head pose, actions, and idle behavior;
 - models represent geometry and the skeleton;
+- `RagdollCharacter` renders a themed Three.js canvas from outline-path geometry;
 - state and events are framework-local;
 - themes and variants are registered through typed APIs;
 - `/testing` exposes reusable clocks, builders, and mocks.

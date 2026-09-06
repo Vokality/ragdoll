@@ -1,7 +1,7 @@
 {
   "name": "@vokality/ragdoll",
   "version": "0.1.8",
-  "description": "An animated character framework with facial expressions, head poses, and themes. Built with React and SVG.",
+  "description": "An animated character framework with facial expressions, head poses, and themes. Built with React and Three.js.",
   "type": "module",
   "license": "MIT",
   "author": "Vokality",
@@ -16,7 +16,8 @@
     "animation",
     "facial-expressions",
     "react",
-    "svg",
+    "three",
+    "webgl",
     "avatar",
     "themes"
   ],
@@ -50,6 +51,10 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
+    "@types/three": "^0.185.4",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
   }
 }
