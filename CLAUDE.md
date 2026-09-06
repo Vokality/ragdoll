@@ -2,6 +2,8 @@
 
 Ragdoll is a Bun 1.3.14 workspace monorepo using React and strict TypeScript.
 
+Codex reads [AGENTS.md](./AGENTS.md). Keep the shared engineering rules in this file aligned with that root.
+
 ## Commands
 
 Run all commands from the repository root unless a package-specific command is required.

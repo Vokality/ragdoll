@@ -1,0 +1,168 @@
+{
+  "schema_version": 2,
+  "evidence": [
+    {
+      "source": ".agent-baseline.json",
+      "sha256": "5561e8c17f7ef7893b6a6c811a562e8368c99c22a6a65d83d2ccffbcbcb719c4"
+    },
+    {
+      "source": ".github/workflows/test.yml",
+      "sha256": "423f7022ea908310b76083a70f2e5b5826ab26eca999c09e8ddc0b47c15cb43f"
+    },
+    {
+      "source": "AGENTS.md",
+      "sha256": "0853cb42bf9e1926dd984598340bb3d86b807c6a72afe69eea386b0b72395b78"
+    },
+    {
+      "source": "CLAUDE.md",
+      "sha256": "1f4ac93be473875d06a8fc423e3e2bc7309442695606db34e4d439f1ea7dca29"
+    },
+    {
+      "source": "apps/chat/electron/electron-api.ts",
+      "sha256": "1103786052ff7ae0f1239c520f85f5dd6c8289e2dc01254b7b907e635364dc9a"
+    },
+    {
+      "source": "examples/extension-weather/src/index.ts",
+      "sha256": "8c4193c7b660fc0c09c2598afa672ab1505234d63935c866d22edab4c3e69167"
+    },
+    {
+      "source": "packages/ragdoll-extensions/src/create-extension.ts",
+      "sha256": "8b1b2dddf7a34f5e51c0f2971d5697309a027f87b7db8d6729ebd959ac00125b"
+    },
+    {
+      "source": "packages/ragdoll-extensions/src/loader.ts",
+      "sha256": "98c44ce4c778bc3efb269a1c871f27898f4a187bfb639c38d9597326365878b1"
+    },
+    {
+      "source": "packages/ragdoll-extensions/tests/loader.test.ts",
+      "sha256": "cfd7bbbbedf6e479c281101fc4e609f4630bbf95eeed34f70c7e6277e9b080ed"
+    },
+    {
+      "source": "packages/ragdoll-extensions/tests/slots-serialize.test.ts",
+      "sha256": "9838c962b1954fe77aaddbc9b29b4a3a4c194064dfcc73e9899231b5f7b1eb50"
+    },
+    {
+      "source": "scripts/verify-architecture.ts",
+      "sha256": "a159ca1f2faff836cf2ff9d85fa99f1dc1d7718c3ba093cdc3bc09d4164fd536"
+    },
+    {
+      "source": {
+        "path": "CLAUDE.md",
+        "heading": "Boundaries"
+      },
+      "sha256": "05e595e6836200db88ce7b3192a65682821f60aad216e9c2e9ceb7c1c26d3a9f"
+    },
+    {
+      "source": {
+        "path": "CLAUDE.md",
+        "heading": "Commands"
+      },
+      "sha256": "c26cfd7aeda0e3725deebc424ca64fa9b6910f5908623d9804042660218234bc"
+    },
+    {
+      "source": {
+        "path": "docs/conversation-events.md",
+        "heading": "Contract"
+      },
+      "sha256": "643cf2aee55b6535e3b037990a015e79dbfb0ad3b38810f01cbb24e544f56e4e"
+    },
+    {
+      "source": {
+        "path": "ARCHITECTURE.md",
+        "heading": "Dependency direction"
+      },
+      "sha256": "3d9fffa52b934639fa03fb43b6067cac8a49a4ce0220ad726d28249b5c6a64fd"
+    },
+    {
+      "source": {
+        "path": "CLAUDE.md",
+        "heading": "Engineering rules"
+      },
+      "sha256": "5f8bc82af796fcd1262fa1a1b0d814d7aa16d57ea7ba7457eb7ca6f4d6a5b119"
+    },
+    {
+      "source": {
+        "path": "CLAUDE.md",
+        "heading": "Extension contract"
+      },
+      "sha256": "dd06e1ef7ce4f5bf5fa1fd2b47196ac10f3d1342c3bff25fd462ed753c8d3176"
+    },
+    {
+      "source": {
+        "path": "ARCHITECTURE.md",
+        "heading": "Extension framework"
+      },
+      "sha256": "441e85c6c620d5d8ecf333b278e16dcb54eaa4aa37188712075aa240d50d3b8d"
+    },
+    {
+      "source": {
+        "path": "ARCHITECTURE.md",
+        "heading": "Monorepo build"
+      },
+      "sha256": "46766ce86a324f4860471108da894a20aa9a3daf05e351115a973373826cb7f9"
+    },
+    {
+      "source": {
+        "path": "README.md",
+        "heading": "Package boundaries"
+      },
+      "sha256": "03e8bdf66f4850c55a20c022a50026d4e1f7d973f212fcfd99a61f4a7301e51b"
+    },
+    {
+      "source": {
+        "path": "docs/extension-host-oauth.md",
+        "heading": "Package contract"
+      },
+      "sha256": "52fab02878e31a77ea6f1ed88983d470a36f745662924145c3d61b0dcc36eaeb"
+    },
+    {
+      "source": {
+        "path": "tsconfig.base.json",
+        "json_pointer": "/compilerOptions/strict"
+      },
+      "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+    },
+    {
+      "source": {
+        "path": "package.json",
+        "json_pointer": "/engines"
+      },
+      "sha256": "0a9a420b2e032114485440ea74e376208d855947ade3e304f632ad694fcae154"
+    },
+    {
+      "source": {
+        "path": "packages/ragdoll-extensions/package.json",
+        "json_pointer": "/exports"
+      },
+      "sha256": "a6d2f5831583895b6498760dee2d14af5ddbb36d543f3dcc9677f346aa54411f"
+    },
+    {
+      "source": {
+        "path": "package.json",
+        "json_pointer": "/packageManager"
+      },
+      "sha256": "5d6d6dc7630bffcd11ea47a8c99be5ebd9f17f066e48fd624d665d83ec856d1d"
+    },
+    {
+      "source": {
+        "path": "examples/extension-weather/package.json",
+        "json_pointer": "/ragdollExtension"
+      },
+      "sha256": "5160a826a824091c077df456e78663a78353aafe6c879487fac3c77b32362aa2"
+    },
+    {
+      "source": {
+        "path": "package.json",
+        "json_pointer": "/scripts"
+      },
+      "sha256": "2367ed8e20e5b0f48ba6103e8fe5acbe7164dc533bc8bcb59fbd6b61108a94ee"
+    },
+    {
+      "source": {
+        "path": "package.json",
+        "json_pointer": "/workspaces"
+      },
+      "sha256": "1649b0abc34ae0e683f82e791ba5a38be455005176674fbc6bd716800a755624"
+    }
+  ]
+}

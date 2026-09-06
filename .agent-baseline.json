@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "artifacts": [
+    {
+      "path": "AGENTS.md",
+      "sources": [
+        { "path": "package.json", "json_pointer": "/packageManager" },
+        { "path": "package.json", "json_pointer": "/engines" },
+        { "path": "package.json", "json_pointer": "/scripts" },
+        { "path": "package.json", "json_pointer": "/workspaces" },
+        { "path": "CLAUDE.md", "heading": "Commands" },
+        { "path": "CLAUDE.md", "heading": "Boundaries" },
+        { "path": "CLAUDE.md", "heading": "Extension contract" },
+        { "path": "CLAUDE.md", "heading": "Engineering rules" },
+        { "path": "ARCHITECTURE.md", "heading": "Dependency direction" },
+        { "path": "ARCHITECTURE.md", "heading": "Extension framework" },
+        { "path": "ARCHITECTURE.md", "heading": "Monorepo build" },
+        { "path": "README.md", "heading": "Package boundaries" },
+        { "path": "packages/ragdoll-extensions/package.json", "json_pointer": "/exports" },
+        { "path": "examples/extension-weather/package.json", "json_pointer": "/ragdollExtension" },
+        "examples/extension-weather/src/index.ts",
+        "scripts/verify-architecture.ts",
+        "packages/ragdoll-extensions/src/loader.ts",
+        "packages/ragdoll-extensions/src/create-extension.ts",
+        "packages/ragdoll-extensions/tests/loader.test.ts",
+        "packages/ragdoll-extensions/tests/slots-serialize.test.ts",
+        "apps/chat/electron/electron-api.ts",
+        { "path": "docs/extension-host-oauth.md", "heading": "Package contract" },
+        { "path": "docs/conversation-events.md", "heading": "Contract" },
+        ".github/workflows/test.yml",
+        { "path": "tsconfig.base.json", "json_pointer": "/compilerOptions/strict" }
+      ]
+    },
+    {
+      "path": "CLAUDE.md",
+      "sources": [
+        { "path": "package.json", "json_pointer": "/packageManager" },
+        { "path": "package.json", "json_pointer": "/scripts" },
+        { "path": "ARCHITECTURE.md", "heading": "Dependency direction" },
+        { "path": "ARCHITECTURE.md", "heading": "Extension framework" },
+        { "path": "packages/ragdoll-extensions/package.json", "json_pointer": "/exports" },
+        { "path": "examples/extension-weather/package.json", "json_pointer": "/ragdollExtension" },
+        "scripts/verify-architecture.ts",
+        "packages/ragdoll-extensions/src/loader.ts",
+        "packages/ragdoll-extensions/src/create-extension.ts"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "lint",
+      "argv": ["bun", "run", "lint"],
+      "cwd": ".",
+      "timeout_seconds": 300
+    },
+    {
+      "name": "test",
+      "argv": ["bun", "run", "test"],
+      "cwd": ".",
+      "timeout_seconds": 600
+    },
+    {
+      "name": "typecheck",
+      "argv": ["bun", "run", "typecheck"],
+      "cwd": ".",
+      "timeout_seconds": 600
+    },
+    {
+      "name": "verify-packages",
+      "argv": ["bun", "run", "verify:packages"],
+      "cwd": ".",
+      "timeout_seconds": 600
+    }
+  ]
+}
