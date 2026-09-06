@@ -1,7 +1,9 @@
 import {
+  ACESFilmicToneMapping,
   AmbientLight,
   AlwaysStencilFunc,
-  CircleGeometry,
+  BufferGeometry,
+  Color,
   DirectionalLight,
   EqualStencilFunc,
   ExtrudeGeometry,
@@ -9,13 +11,14 @@ import {
   HemisphereLight,
   KeepStencilOp,
   Line,
-  BufferGeometry,
   Mesh,
   MeshStandardMaterial,
-  OrthographicCamera,
+  PCFSoftShadowMap,
+  PerspectiveCamera,
   PlaneGeometry,
   ReplaceStencilOp,
   Scene,
+  SphereGeometry,
   Vector3,
   WebGLRenderer,
   type Material,
@@ -31,19 +34,34 @@ import {
 } from "./theme-materials";
 import { getDefaultTheme } from "../../themes";
 import type { RagdollTheme } from "../../themes/types";
+import {
+  headBulgeParams,
+  liftToHeadSurface,
+  roundExtrudedOutline,
+  subdivideFaces,
+  surfaceOffsetZ,
+  type HeadBulgeParams,
+} from "./bulge-geometry";
 
 const VIEW_WIDTH = 320;
 const VIEW_HEIGHT = 380;
+const CAMERA_FOV = 30;
 const MAX_YAW = (35 * Math.PI) / 180;
 const MOUTH_STENCIL = 3;
+/** Half of the face extrusion, used so features sit on the bulged front. */
+const FACE_FRONT = 11;
+
+type PathKind = "face" | "hair" | "feature" | "ear";
 
 interface ExtrudePart {
   mesh: Mesh;
   path: string;
   depth: number;
+  kind: PathKind;
+  extraZ: number;
 }
 
-interface CirclePart {
+interface SpherePart {
   mesh: Mesh;
 }
 
@@ -56,10 +74,10 @@ function extrudeSettings(depth: number) {
   return {
     depth,
     bevelEnabled: true,
-    bevelThickness: Math.min(1.3, depth * 0.12),
-    bevelSize: Math.min(1.05, depth * 0.1),
-    bevelSegments: 1,
-    curveSegments: 8,
+    bevelThickness: Math.min(4.2, depth * 0.28),
+    bevelSize: Math.min(3.4, depth * 0.22),
+    bevelSegments: 3,
+    curveSegments: 12,
   } as const;
 }
 
@@ -95,16 +113,21 @@ function copySurface(target: MeshStandardMaterial, source: MeshStandardMaterial)
   target.metalness = source.metalness;
 }
 
+function cameraDistanceForView(fovDeg: number, viewHeight: number): number {
+  return viewHeight / 2 / Math.tan((fovDeg * Math.PI) / 360);
+}
+
 export class CharacterScene {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
-  private readonly camera: OrthographicCamera;
+  private readonly camera: PerspectiveCamera;
   private readonly head = new Group();
   private readonly lights: {
     ambient: AmbientLight;
     hemisphere: HemisphereLight;
     key: DirectionalLight;
     fill: DirectionalLight;
+    rim: DirectionalLight;
   };
   private readonly materials: CharacterMaterials;
   private readonly eyeMaterials: {
@@ -129,15 +152,14 @@ export class CharacterScene {
     lipSheen: MeshStandardMaterial;
   };
   private readonly parts: Record<string, ExtrudePart>;
-  private readonly circles: Record<string, CirclePart>;
+  private readonly spheres: Record<string, SpherePart>;
   private readonly planes: Record<string, Mesh>;
   private readonly strokes: {
     leftCrease: LinePart;
     rightCrease: LinePart;
-    face: LinePart;
   };
   private themeId = "";
-  private readonly unitCircle = new CircleGeometry(1, 28);
+  private readonly unitSphere = new SphereGeometry(1, 24, 18);
   private readonly unitPlane = new PlaneGeometry(1, 1);
 
   constructor(canvas: HTMLCanvasElement) {
@@ -150,16 +172,16 @@ export class CharacterScene {
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.autoClear = true;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFSoftShadowMap;
 
-    this.camera = new OrthographicCamera(
-      -VIEW_WIDTH / 2,
-      VIEW_WIDTH / 2,
-      VIEW_HEIGHT / 2,
-      -VIEW_HEIGHT / 2,
-      0.1,
-      800,
-    );
-    this.camera.position.set(0, 0, 240);
+    const distance = cameraDistanceForView(CAMERA_FOV, VIEW_HEIGHT);
+    this.camera = new PerspectiveCamera(CAMERA_FOV, VIEW_WIDTH / VIEW_HEIGHT, 12, 2400);
+    // Slight 3/4 view so cheek, ear, and head depth read as volume.
+    this.camera.position.set(distance * 0.22, distance * 0.07, distance * 0.94);
+    this.camera.lookAt(0, -10, 28);
 
     this.materials = createThemeMaterials(getDefaultTheme());
 
@@ -184,71 +206,86 @@ export class CharacterScene {
       hairSheen: this.materials.hairLight.clone(),
       lipSheen: this.materials.highlight.clone(),
     };
+    this.overlays.noseTip.transparent = false;
+    this.overlays.noseTip.depthWrite = true;
     this.overlays.lipSheen.transparent = true;
     this.overlays.lipSheen.depthWrite = false;
     this.overlays.lipSheen.opacity = 0.25;
 
     this.lights = {
-      ambient: new AmbientLight(0xffffff, 0.32),
-      hemisphere: new HemisphereLight(0xffffff, 0x887766, 0.55),
-      key: new DirectionalLight(0xffffff, 0.9),
-      fill: new DirectionalLight(0xffffff, 0.28),
+      ambient: new AmbientLight(0xc5d0dc, 0.16),
+      hemisphere: new HemisphereLight(0xfff4ea, 0x3a4250, 0.42),
+      key: new DirectionalLight(0xfff3e4, 2.35),
+      fill: new DirectionalLight(0x8fb4d4, 0.55),
+      rim: new DirectionalLight(0xffe4cc, 1.35),
     };
-    this.lights.key.position.set(-70, 90, 160);
-    this.lights.fill.position.set(80, 20, 90);
+    this.lights.key.position.set(220, 260, 320);
+    this.lights.key.castShadow = true;
+    this.lights.key.shadow.mapSize.set(1024, 1024);
+    this.lights.key.shadow.bias = -0.0008;
+    this.lights.key.shadow.normalBias = 0.8;
+    const shadowCam = this.lights.key.shadow.camera;
+    shadowCam.left = -180;
+    shadowCam.right = 180;
+    shadowCam.top = 200;
+    shadowCam.bottom = -200;
+    shadowCam.near = 40;
+    shadowCam.far = 700;
+    this.lights.fill.position.set(-240, 40, 140);
+    this.lights.rim.position.set(-90, 90, -260);
     this.scene.add(
       this.lights.ambient,
       this.lights.hemisphere,
       this.lights.key,
       this.lights.fill,
+      this.lights.rim,
     );
     this.scene.add(this.head);
 
     this.parts = {
-      leftEar: this.pathPart(this.materials.skin, 6, -8, 0),
-      rightEar: this.pathPart(this.materials.skin, 6, -8, 0),
-      face: this.pathPart(this.materials.skinFace, 16, 0, 1),
-      leftSclera: this.pathPart(this.eyeMaterials.leftSclera, 2.2, 10, 10),
-      rightSclera: this.pathPart(this.eyeMaterials.rightSclera, 2.2, 10, 10),
-      leftUpperLid: this.pathPart(this.materials.lid, 2, 11.5, 14),
-      leftLowerLid: this.pathPart(this.materials.lid, 2, 11.5, 14),
-      rightUpperLid: this.pathPart(this.materials.lid, 2, 11.5, 14),
-      rightLowerLid: this.pathPart(this.materials.lid, 2, 11.5, 14),
-      leftBrow: this.pathPart(this.materials.brow, 2.4, 13, 15),
-      rightBrow: this.pathPart(this.materials.brow, 2.4, 13, 15),
-      nose: this.pathPart(this.materials.nose, 6, 14, 16),
-      mouthOpening: this.pathPart(this.mouthMaterials.opening, 2, 11, 17),
-      upperLip: this.pathPart(this.materials.upperLip, 3.2, 12, 19),
-      lowerLip: this.pathPart(this.materials.lowerLip, 3.4, 12.4, 19),
-      mustache: this.pathPart(this.materials.hair, 3, 13, 20),
-      hair: this.pathPart(this.materials.hair, 10, 8, 21),
+      leftEar: this.pathPart(this.materials.skin, 18, 0, "ear", 0, true),
+      rightEar: this.pathPart(this.materials.skin, 18, 0, "ear", 0, true),
+      face: this.pathPart(this.materials.skinFace, 22, 1, "face", 0, true),
+      leftSclera: this.pathPart(this.eyeMaterials.leftSclera, 4, 10, "feature", 2),
+      rightSclera: this.pathPart(this.eyeMaterials.rightSclera, 4, 10, "feature", 2),
+      leftUpperLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
+      leftLowerLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
+      rightUpperLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
+      rightLowerLid: this.pathPart(this.materials.lid, 3.2, 14, "feature", 4),
+      leftBrow: this.pathPart(this.materials.brow, 5.5, 15, "feature", 5),
+      rightBrow: this.pathPart(this.materials.brow, 5.5, 15, "feature", 5),
+      nose: this.pathPart(this.materials.nose, 10, 16, "feature", 10, true),
+      mouthOpening: this.pathPart(this.mouthMaterials.opening, 5, 17, "feature", 4),
+      upperLip: this.pathPart(this.materials.upperLip, 5.5, 19, "feature", 6),
+      lowerLip: this.pathPart(this.materials.lowerLip, 6, 19, "feature", 6),
+      mustache: this.pathPart(this.materials.hair, 6, 20, "feature", 7, true),
+      hair: this.pathPart(this.materials.hair, 16, 21, "hair", 0, true),
     };
 
-    this.circles = {
-      leftIris: this.circlePart(this.eyeMaterials.leftIris, 12, 11),
-      rightIris: this.circlePart(this.eyeMaterials.rightIris, 12, 11),
-      leftPupil: this.circlePart(this.eyeMaterials.leftPupil, 12.4, 12),
-      rightPupil: this.circlePart(this.eyeMaterials.rightPupil, 12.4, 12),
-      leftHighlightA: this.circlePart(this.eyeMaterials.leftHighlight, 12.8, 13),
-      leftHighlightB: this.circlePart(this.eyeMaterials.leftHighlightSoft, 12.8, 13),
-      rightHighlightA: this.circlePart(this.eyeMaterials.rightHighlight, 12.8, 13),
-      rightHighlightB: this.circlePart(this.eyeMaterials.rightHighlightSoft, 12.8, 13),
-      noseTip: this.circlePart(this.overlays.noseTip, 16, 16),
-      hairHighlight: this.circlePart(this.overlays.hairSheen, 14, 22),
+    this.spheres = {
+      leftIris: this.spherePart(this.eyeMaterials.leftIris, 11),
+      rightIris: this.spherePart(this.eyeMaterials.rightIris, 11),
+      leftPupil: this.spherePart(this.eyeMaterials.leftPupil, 12),
+      rightPupil: this.spherePart(this.eyeMaterials.rightPupil, 12),
+      leftHighlightA: this.spherePart(this.eyeMaterials.leftHighlight, 13),
+      leftHighlightB: this.spherePart(this.eyeMaterials.leftHighlightSoft, 13),
+      rightHighlightA: this.spherePart(this.eyeMaterials.rightHighlight, 13),
+      rightHighlightB: this.spherePart(this.eyeMaterials.rightHighlightSoft, 13),
+      noseTip: this.spherePart(this.overlays.noseTip, 16, true),
+      hairHighlight: this.spherePart(this.overlays.hairSheen, 22),
     };
 
     this.planes = {
-      shadow: this.planePart(this.materials.shadow, 7, 2),
-      blushLeft: this.planePart(this.materials.blush, 8, 3),
-      blushRight: this.planePart(this.materials.blush, 8, 3),
-      teeth: this.planePart(this.mouthMaterials.teeth, 11.2, 18),
-      lipHighlight: this.planePart(this.overlays.lipSheen, 12.8, 20),
+      shadow: this.planePart(this.materials.shadow, 2),
+      blushLeft: this.planePart(this.materials.blush, 3),
+      blushRight: this.planePart(this.materials.blush, 3),
+      teeth: this.planePart(this.mouthMaterials.teeth, 18),
+      lipHighlight: this.planePart(this.overlays.lipSheen, 20),
     };
 
     this.strokes = {
-      face: this.linePart(this.materials.stroke, 8.2, 2),
-      leftCrease: this.linePart(this.materials.crease, 14, 14),
-      rightCrease: this.linePart(this.materials.crease, 14, 14),
+      leftCrease: this.linePart(this.materials.crease, 14),
+      rightCrease: this.linePart(this.materials.crease, 14),
     };
 
     this.syncEyeMaterials();
@@ -260,23 +297,7 @@ export class CharacterScene {
   setSize(width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
     this.renderer.setSize(width, height, false);
-    const canvasAspect = width / height;
-    const viewAspect = VIEW_WIDTH / VIEW_HEIGHT;
-    if (canvasAspect > viewAspect) {
-      const halfHeight = VIEW_HEIGHT / 2;
-      const halfWidth = halfHeight * canvasAspect;
-      this.camera.left = -halfWidth;
-      this.camera.right = halfWidth;
-      this.camera.top = halfHeight;
-      this.camera.bottom = -halfHeight;
-    } else {
-      const halfWidth = VIEW_WIDTH / 2;
-      const halfHeight = halfWidth / canvasAspect;
-      this.camera.left = -halfWidth;
-      this.camera.right = halfWidth;
-      this.camera.top = halfHeight;
-      this.camera.bottom = -halfHeight;
-    }
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.render(this.scene, this.camera);
   }
@@ -295,107 +316,129 @@ export class CharacterScene {
     this.head.position.set(0, -data.breathingOffsetY, 0);
     this.head.scale.setScalar(data.breathingScale);
 
-    this.updatePath(this.parts.leftEar, data.leftEarPath);
-    this.updatePath(this.parts.rightEar, data.rightEarPath);
-    this.updatePath(this.parts.face, data.facePath);
-    this.updateStroke(this.strokes.face, data.facePath);
-    this.updatePath(this.parts.leftSclera, data.leftEyePaths.sclera);
-    this.updatePath(this.parts.rightSclera, data.rightEyePaths.sclera);
-    this.updatePath(this.parts.leftUpperLid, data.leftEyePaths.upperLid);
-    this.updatePath(this.parts.leftLowerLid, data.leftEyePaths.lowerLid);
-    this.updatePath(this.parts.rightUpperLid, data.rightEyePaths.upperLid);
-    this.updatePath(this.parts.rightLowerLid, data.rightEyePaths.lowerLid);
-    this.updatePath(this.parts.leftBrow, data.leftEyebrowPath);
-    this.updatePath(this.parts.rightBrow, data.rightEyebrowPath);
-    this.updatePath(this.parts.nose, data.nosePath);
-    this.updatePath(this.parts.mouthOpening, data.mouthPaths.opening);
-    this.updatePath(this.parts.upperLip, data.mouthPaths.upperLip);
-    this.updatePath(this.parts.lowerLip, data.mouthPaths.lowerLip);
-    this.updatePath(this.parts.mustache, data.mustachePath);
-    this.updatePath(this.parts.hair, data.hairPath);
+    const bulge = headBulgeParams(data.dims.headWidth, data.dims.headHeight);
 
-    this.placeCircle(
-      this.circles.leftIris,
+    this.updatePath(this.parts.leftEar, data.leftEarPath, bulge);
+    this.updatePath(this.parts.rightEar, data.rightEarPath, bulge);
+    this.updatePath(this.parts.face, data.facePath, bulge);
+    this.updatePath(this.parts.leftSclera, data.leftEyePaths.sclera, bulge);
+    this.updatePath(this.parts.rightSclera, data.rightEyePaths.sclera, bulge);
+    this.updatePath(this.parts.leftUpperLid, data.leftEyePaths.upperLid, bulge);
+    this.updatePath(this.parts.leftLowerLid, data.leftEyePaths.lowerLid, bulge);
+    this.updatePath(this.parts.rightUpperLid, data.rightEyePaths.upperLid, bulge);
+    this.updatePath(this.parts.rightLowerLid, data.rightEyePaths.lowerLid, bulge);
+    this.updatePath(this.parts.leftBrow, data.leftEyebrowPath, bulge);
+    this.updatePath(this.parts.rightBrow, data.rightEyebrowPath, bulge);
+    this.updatePath(this.parts.nose, data.nosePath, bulge);
+    this.updatePath(this.parts.mouthOpening, data.mouthPaths.opening, bulge);
+    this.updatePath(this.parts.upperLip, data.mouthPaths.upperLip, bulge);
+    this.updatePath(this.parts.lowerLip, data.mouthPaths.lowerLip, bulge);
+    this.updatePath(this.parts.mustache, data.mustachePath, bulge);
+    this.updatePath(this.parts.hair, data.hairPath, bulge);
+
+    this.placeSphere(
+      this.spheres.leftIris,
       data.leftIris.cx,
       data.leftIris.cy,
       data.leftIris.irisR,
+      bulge,
+      6,
     );
-    this.placeCircle(
-      this.circles.rightIris,
+    this.placeSphere(
+      this.spheres.rightIris,
       data.rightIris.cx,
       data.rightIris.cy,
       data.rightIris.irisR,
+      bulge,
+      6,
     );
-    this.placeCircle(
-      this.circles.leftPupil,
+    this.placeSphere(
+      this.spheres.leftPupil,
       data.leftIris.cx,
       data.leftIris.cy,
       data.leftIris.pupilR,
+      bulge,
+      9,
     );
-    this.placeCircle(
-      this.circles.rightPupil,
+    this.placeSphere(
+      this.spheres.rightPupil,
       data.rightIris.cx,
       data.rightIris.cy,
       data.rightIris.pupilR,
+      bulge,
+      9,
     );
-    this.placeCircle(
-      this.circles.leftHighlightA,
+    this.placeSphere(
+      this.spheres.leftHighlightA,
       data.leftIris.cx - 2,
       data.leftIris.cy - 2,
-      data.leftIris.pupilR * 0.6,
+      data.leftIris.pupilR * 0.55,
+      bulge,
+      12,
     );
-    this.placeCircle(
-      this.circles.leftHighlightB,
+    this.placeSphere(
+      this.spheres.leftHighlightB,
       data.leftIris.cx + 3,
       data.leftIris.cy + 1,
-      data.leftIris.pupilR * 0.3,
+      data.leftIris.pupilR * 0.28,
+      bulge,
+      13,
     );
-    this.placeCircle(
-      this.circles.rightHighlightA,
+    this.placeSphere(
+      this.spheres.rightHighlightA,
       data.rightIris.cx - 2,
       data.rightIris.cy - 2,
-      data.rightIris.pupilR * 0.6,
+      data.rightIris.pupilR * 0.55,
+      bulge,
+      12,
     );
-    this.placeCircle(
-      this.circles.rightHighlightB,
+    this.placeSphere(
+      this.spheres.rightHighlightB,
       data.rightIris.cx + 3,
       data.rightIris.cy + 1,
-      data.rightIris.pupilR * 0.3,
+      data.rightIris.pupilR * 0.28,
+      bulge,
+      13,
     );
     const leftEyeOpen = data.leftEyePaths.aperture.height > 2;
     const rightEyeOpen = data.rightEyePaths.aperture.height > 2;
-    this.circles.leftIris.mesh.visible = leftEyeOpen;
-    this.circles.leftPupil.mesh.visible = leftEyeOpen;
-    this.circles.leftHighlightA.mesh.visible = leftEyeOpen;
-    this.circles.leftHighlightB.mesh.visible = leftEyeOpen;
-    this.circles.rightIris.mesh.visible = rightEyeOpen;
-    this.circles.rightPupil.mesh.visible = rightEyeOpen;
-    this.circles.rightHighlightA.mesh.visible = rightEyeOpen;
-    this.circles.rightHighlightB.mesh.visible = rightEyeOpen;
-    this.placeCircle(
-      this.circles.noseTip,
+    this.spheres.leftIris.mesh.visible = leftEyeOpen;
+    this.spheres.leftPupil.mesh.visible = leftEyeOpen;
+    this.spheres.leftHighlightA.mesh.visible = leftEyeOpen;
+    this.spheres.leftHighlightB.mesh.visible = leftEyeOpen;
+    this.spheres.rightIris.mesh.visible = rightEyeOpen;
+    this.spheres.rightPupil.mesh.visible = rightEyeOpen;
+    this.spheres.rightHighlightA.mesh.visible = rightEyeOpen;
+    this.spheres.rightHighlightB.mesh.visible = rightEyeOpen;
+    this.placeSphere(
+      this.spheres.noseTip,
       0,
       data.dims.noseY + data.dims.noseHeight * 0.3,
-      4,
-      3 / 4,
+      6.5,
+      bulge,
+      14,
     );
-    this.circles.hairHighlight.mesh.visible = data.hairPath.trim().length > 0;
-    this.placeCircle(
-      this.circles.hairHighlight,
+    this.spheres.hairHighlight.mesh.visible = data.hairPath.trim().length > 0;
+    this.placeSphere(
+      this.spheres.hairHighlight,
       -20,
       -data.dims.headHeight / 2 + 15,
-      25,
-      10 / 25,
+      18,
+      bulge,
+      8,
+      0.45,
+      0.7,
     );
 
     const yawNorm = Math.max(-1, Math.min(1, data.yaw / MAX_YAW));
-    const shadowIntensity = Math.abs(yawNorm) * 0.15;
+    const shadowIntensity = Math.abs(yawNorm) * 0.18;
     const shadow = this.planes.shadow;
     shadow.visible = shadowIntensity > 0.02;
+    const shadowX = (yawNorm > 0 ? -1 : 1) * (data.dims.headWidth / 3);
     shadow.position.set(
-      (yawNorm > 0 ? -1 : 1) * (data.dims.headWidth / 3),
+      shadowX,
       0,
-      7,
+      this.headZ(shadowX, 0, bulge, 1),
     );
     shadow.scale.set(60, data.dims.headHeight - 30, 1);
     this.materials.shadow.opacity = shadowIntensity;
@@ -408,6 +451,8 @@ export class CharacterScene {
       18,
       12,
       blushOpacity,
+      bulge,
+      3,
     );
     this.placeEllipse(
       this.planes.blushRight,
@@ -416,6 +461,8 @@ export class CharacterScene {
       18,
       12,
       blushOpacity,
+      bulge,
+      3,
     );
 
     const openingHeight = data.mouthPaths.openingHeight;
@@ -424,12 +471,14 @@ export class CharacterScene {
       const mouthWidth = data.dims.mouthWidth * data.expression.mouth.width;
       const teethWidth = Math.min(mouthWidth * 0.6, mouthWidth * 1.5);
       const teethHeight = Math.min(8, openingHeight * 0.5);
-      teeth.visible = true;
-      teeth.position.set(
-        0,
-        -(data.dims.mouthY + data.expression.mouth.upperLipBottom + 2 + teethHeight / 2),
-        11.2,
+      const teethY = -(
+        data.dims.mouthY +
+        data.expression.mouth.upperLipBottom +
+        2 +
+        teethHeight / 2
       );
+      teeth.visible = true;
+      teeth.position.set(0, teethY, this.headZ(0, teethY, bulge, 5));
       teeth.scale.set(teethWidth, teethHeight, 1);
     } else {
       teeth.visible = false;
@@ -442,10 +491,12 @@ export class CharacterScene {
       data.dims.mouthWidth * data.expression.mouth.width * 0.25,
       2,
       0.25,
+      bulge,
+      8,
     );
 
-    this.updateStroke(this.strokes.leftCrease, data.leftCreasePath);
-    this.updateStroke(this.strokes.rightCrease, data.rightCreasePath);
+    this.updateStroke(this.strokes.leftCrease, data.leftCreasePath, bulge, 6);
+    this.updateStroke(this.strokes.rightCrease, data.rightCreasePath, bulge, 6);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -457,7 +508,7 @@ export class CharacterScene {
     for (const stroke of Object.values(this.strokes)) {
       stroke.line.geometry.dispose();
     }
-    this.unitCircle.dispose();
+    this.unitSphere.dispose();
     this.unitPlane.dispose();
     for (const material of Object.values(this.eyeMaterials)) {
       material.dispose();
@@ -475,49 +526,50 @@ export class CharacterScene {
   private pathPart(
     material: Material,
     depth: number,
-    z: number,
     renderOrder: number,
+    kind: PathKind,
+    extraZ = 0,
+    shadows = false,
   ): ExtrudePart {
     const mesh = new Mesh(new BufferGeometry(), material);
-    mesh.position.z = z;
     mesh.renderOrder = renderOrder;
+    mesh.castShadow = shadows;
+    mesh.receiveShadow = shadows;
     this.head.add(mesh);
-    return { mesh, path: "", depth };
+    return { mesh, path: "", depth, kind, extraZ };
   }
 
-  private circlePart(
+  private spherePart(
     material: Material,
-    z: number,
     renderOrder: number,
-  ): CirclePart {
-    const mesh = new Mesh(this.unitCircle, material);
-    mesh.position.z = z;
+    shadows = false,
+  ): SpherePart {
+    const mesh = new Mesh(this.unitSphere, material);
     mesh.renderOrder = renderOrder;
+    mesh.castShadow = shadows;
     this.head.add(mesh);
     return { mesh };
   }
 
-  private planePart(
-    material: Material,
-    z: number,
-    renderOrder: number,
-  ): Mesh {
+  private planePart(material: Material, renderOrder: number): Mesh {
     const mesh = new Mesh(this.unitPlane, material);
-    mesh.position.z = z;
     mesh.renderOrder = renderOrder;
     this.head.add(mesh);
     return mesh;
   }
 
-  private linePart(material: Material, z: number, renderOrder: number): LinePart {
+  private linePart(material: Material, renderOrder: number): LinePart {
     const line = new Line(new BufferGeometry(), material);
-    line.position.z = z;
     line.renderOrder = renderOrder;
     this.head.add(line);
     return { line, path: "" };
   }
 
-  private updatePath(part: ExtrudePart, path: string): void {
+  private updatePath(
+    part: ExtrudePart,
+    path: string,
+    bulge: HeadBulgeParams,
+  ): void {
     if (!path.trim()) {
       part.path = path;
       part.mesh.visible = false;
@@ -534,8 +586,44 @@ export class CharacterScene {
       return;
     }
     try {
-      const geometry = new ExtrudeGeometry(shape, extrudeSettings(part.depth));
+      let geometry: BufferGeometry = new ExtrudeGeometry(
+        shape,
+        extrudeSettings(part.depth),
+      );
       geometry.translate(0, 0, -part.depth / 2);
+      if (part.kind === "face") {
+        const rounded = roundExtrudedOutline(
+          geometry,
+          bulge.radiusX,
+          bulge.radiusY,
+          bulge.amount,
+        );
+        geometry.dispose();
+        geometry = rounded;
+      } else if (part.kind === "hair") {
+        const rounded = roundExtrudedOutline(
+          geometry,
+          bulge.radiusX * 1.1,
+          bulge.radiusY * 1.14,
+          bulge.amount * 0.82,
+        );
+        geometry.dispose();
+        geometry = rounded;
+        geometry.translate(0, 0, 6);
+      } else if (part.kind === "ear") {
+        geometry.translate(0, 0, -14);
+      } else {
+        const subdivided = subdivideFaces(geometry, 22);
+        if (subdivided !== geometry) geometry.dispose();
+        geometry = subdivided;
+        liftToHeadSurface(
+          geometry,
+          bulge.radiusX,
+          bulge.radiusY,
+          bulge.amount,
+          FACE_FRONT + part.extraZ,
+        );
+      }
       part.mesh.geometry.dispose();
       part.mesh.geometry = geometry;
       part.mesh.visible = true;
@@ -544,7 +632,12 @@ export class CharacterScene {
     }
   }
 
-  private updateStroke(part: LinePart, path: string): void {
+  private updateStroke(
+    part: LinePart,
+    path: string,
+    bulge: HeadBulgeParams,
+    extraZ: number,
+  ): void {
     if (!path.trim()) {
       part.path = path;
       part.line.visible = false;
@@ -560,23 +653,34 @@ export class CharacterScene {
       part.line.visible = false;
       return;
     }
-    const points = shape.getPoints(16).map((point) => new Vector3(point.x, point.y, 0));
+    const points = shape.getPoints(16).map(
+      (point) =>
+        new Vector3(
+          point.x,
+          point.y,
+          this.headZ(point.x, point.y, bulge, extraZ),
+        ),
+    );
     part.line.geometry.dispose();
     part.line.geometry = new BufferGeometry().setFromPoints(points);
     part.line.visible = true;
   }
 
-  private placeCircle(
-    part: CirclePart,
+  private placeSphere(
+    part: SpherePart,
     cx: number,
     cy: number,
     radius: number,
+    bulge: HeadBulgeParams,
+    extraZ: number,
     yScale = 1,
+    zScale = 1,
   ): void {
     part.mesh.visible = radius > 0;
-    part.mesh.position.x = cx;
-    part.mesh.position.y = -cy;
-    part.mesh.scale.set(radius, radius * yScale, 1);
+    const x = cx;
+    const y = -cy;
+    part.mesh.position.set(x, y, this.headZ(x, y, bulge, extraZ));
+    part.mesh.scale.set(radius, radius * yScale, radius * zScale);
   }
 
   private placeEllipse(
@@ -586,15 +690,31 @@ export class CharacterScene {
     rx: number,
     ry: number,
     opacity: number,
+    bulge: HeadBulgeParams,
+    extraZ: number,
   ): void {
     mesh.visible = opacity > 0.02 && rx > 0 && ry > 0;
-    mesh.position.x = cx;
-    mesh.position.y = -cy;
+    const x = cx;
+    const y = -cy;
+    mesh.position.set(x, y, this.headZ(x, y, bulge, extraZ));
     mesh.scale.set(rx * 2, ry * 2, 1);
     if (mesh.material instanceof MeshStandardMaterial) {
       mesh.material.opacity = opacity;
       mesh.material.transparent = opacity < 1;
     }
+  }
+
+  private headZ(
+    x: number,
+    y: number,
+    bulge: HeadBulgeParams,
+    extraZ: number,
+  ): number {
+    return (
+      surfaceOffsetZ(x, y, bulge.radiusX, bulge.radiusY, bulge.amount) +
+      FACE_FRONT +
+      extraZ
+    );
   }
 
   private syncEyeMaterials(): void {
@@ -608,8 +728,8 @@ export class CharacterScene {
     copySurface(this.eyeMaterials.rightHighlight, this.materials.highlight);
     copySurface(this.eyeMaterials.leftHighlightSoft, this.materials.highlight);
     copySurface(this.eyeMaterials.rightHighlightSoft, this.materials.highlight);
-    this.eyeMaterials.leftHighlight.opacity = 0.8;
-    this.eyeMaterials.rightHighlight.opacity = 0.8;
+    this.eyeMaterials.leftHighlight.opacity = 0.85;
+    this.eyeMaterials.rightHighlight.opacity = 0.85;
     this.eyeMaterials.leftHighlightSoft.opacity = 0.4;
     this.eyeMaterials.rightHighlightSoft.opacity = 0.4;
   }
@@ -621,11 +741,11 @@ export class CharacterScene {
 
   private syncOverlayMaterials(): void {
     copySurface(this.overlays.noseTip, this.materials.skinLight);
-    this.overlays.noseTip.opacity = 0.4;
-    this.overlays.noseTip.transparent = true;
-    this.overlays.noseTip.depthWrite = false;
+    this.overlays.noseTip.opacity = 1;
+    this.overlays.noseTip.transparent = false;
+    this.overlays.noseTip.depthWrite = true;
     copySurface(this.overlays.hairSheen, this.materials.hairLight);
-    this.overlays.hairSheen.opacity = 0.3;
+    this.overlays.hairSheen.opacity = 0.32;
     this.overlays.hairSheen.transparent = true;
     this.overlays.hairSheen.depthWrite = false;
     copySurface(this.overlays.lipSheen, this.materials.highlight);
@@ -635,12 +755,14 @@ export class CharacterScene {
   }
 
   private tintLights(theme: RagdollTheme): void {
-    this.lights.ambient.color.copy(parseCssColor(theme.colors.skin.light).color);
-    this.lights.hemisphere.color.copy(parseCssColor(theme.colors.highlight).color);
-    this.lights.hemisphere.groundColor.copy(
-      parseCssColor(theme.colors.skin.dark).color,
-    );
-    this.lights.key.color.copy(parseCssColor(theme.colors.highlight).color);
-    this.lights.fill.color.copy(parseCssColor(theme.colors.skin.light).color);
+    const skinLight = parseCssColor(theme.colors.skin.light).color;
+    const skinDark = parseCssColor(theme.colors.skin.dark).color;
+    const highlight = parseCssColor(theme.colors.highlight).color;
+    this.lights.ambient.color.setHex(0xc5d0dc);
+    this.lights.hemisphere.color.copy(highlight);
+    this.lights.hemisphere.groundColor.copy(skinDark);
+    this.lights.key.color.setHex(0xfff3e4);
+    this.lights.fill.color.lerpColors(skinLight, new Color(0x88aacc), 0.55);
+    this.lights.rim.color.copy(highlight);
   }
 }

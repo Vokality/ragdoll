@@ -35,13 +35,13 @@ function App() {
 - **Facial Expressions**: smile, frown, laugh, angry, sad, surprise, confusion, thinking
 - **Actions**: wink, talk, and shake animations
 - **Head Pose**: yaw and pitch control with smooth transitions
-- **Three.js renderer**: WebGL canvas with extruded outline-path geometry (no SVG fallback)
+- **Three.js renderer**: perspective WebGL canvas; outline paths extrude into a rounded head with sphere eyes (no SVG fallback)
 - **Themes**: default, robot, alien, monochrome (or create your own)
 - **Idle Animations**: subtle breathing, blinking, micro-movements
 
 ## Architecture & DDD
 
-`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry still describes the face as outline paths; `RagdollCharacter` extrudes those paths into a themed WebGL scene. Hosts can also subscribe to `CharacterController` events and render their own UI.
+`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry still describes the face as outline paths; `RagdollCharacter` extrudes those paths onto a rounded perspective head with sphere eyes. Hosts can also subscribe to `CharacterController` events and render their own UI.
 
 ## API
 
