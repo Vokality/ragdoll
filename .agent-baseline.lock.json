@@ -75,7 +75,7 @@
     },
     {
       "source": "scripts/verify-packages.ts",
-      "sha256": "60e302a008f143f70448cfc955c97c4f5fb3f3d7538adf4cd680f09c335d870f"
+      "sha256": "55d02d5a437b368ed56416d5eb727a330a3fc9eec0039e77d54181e90f2d7c99"
     },
     {
       "source": {
