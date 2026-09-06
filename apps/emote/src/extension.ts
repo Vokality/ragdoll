@@ -29,24 +29,32 @@ export function activate(context: vscode.ExtensionContext): void {
   register("emote.toggle", () => commands.toggle());
   register("emote.copyMcpConfig", () => mcpSetup.copyConfiguration());
   register("emote.setMood", (mood, duration) =>
-    commands.executeRaw({ type: "setMood", mood, duration }),
+    mood === undefined
+      ? commands.selectMood()
+      : commands.executeRaw({ type: "setMood", mood, duration }),
   );
   register("emote.triggerAction", (action, duration) =>
-    commands.executeRaw({ type: "triggerAction", action, duration }),
+    action === undefined
+      ? commands.selectAction()
+      : commands.executeRaw({ type: "triggerAction", action, duration }),
   );
   register("emote.clearAction", () =>
     commands.executeRaw({ type: "clearAction" }),
   );
   register("emote.setHeadPose", (yawDegrees, pitchDegrees, duration) =>
-    commands.executeRaw({
-      type: "setHeadPose",
-      yawDegrees,
-      pitchDegrees,
-      duration,
-    }),
+    yawDegrees === undefined && pitchDegrees === undefined
+      ? commands.selectHeadPose()
+      : commands.executeRaw({
+          type: "setHeadPose",
+          yawDegrees,
+          pitchDegrees,
+          duration,
+        }),
   );
   register("emote.setSpeechBubble", (text, tone) =>
-    commands.executeRaw({ type: "setSpeechBubble", text, tone }),
+    text === undefined
+      ? commands.selectSpeechBubble()
+      : commands.executeRaw({ type: "setSpeechBubble", text, tone }),
   );
   register("emote.setTheme", (themeId) =>
     themeId === undefined

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { validateCommand, type RawCommand } from "./command-validator";
 import type { EmoteSettings } from "./emote-settings";
 import { RagdollPanel } from "./ragdoll-panel";
+import { VALID_ACTIONS, VALID_MOODS, VALID_TONES } from "./types";
 import type { ThemeId, VariantId } from "./types";
 
 const THEME_OPTIONS: Array<{
@@ -117,6 +118,63 @@ export class EmoteCommandService {
     if (selected) {
       await this.executeRaw({ type: "setVariant", variantId: selected.id });
     }
+  }
+
+  async selectMood(): Promise<void> {
+    const selected = await vscode.window.showQuickPick(
+      VALID_MOODS.map((mood) => ({ label: mood, id: mood })),
+      { placeHolder: "Select a facial mood" },
+    );
+    if (selected) {
+      await this.executeRaw({ type: "setMood", mood: selected.id });
+    }
+  }
+
+  async selectAction(): Promise<void> {
+    const selected = await vscode.window.showQuickPick(
+      VALID_ACTIONS.map((action) => ({ label: action, id: action })),
+      { placeHolder: "Select an action (wink, talk, or shake)" },
+    );
+    if (selected) {
+      await this.executeRaw({
+        type: "triggerAction",
+        action: selected.id,
+      });
+    }
+  }
+
+  async selectHeadPose(): Promise<void> {
+    const yaw = await vscode.window.showInputBox({
+      prompt: "Head yaw in degrees (-35 to 35)",
+      value: "0",
+    });
+    if (yaw === undefined) return;
+    const pitch = await vscode.window.showInputBox({
+      prompt: "Head pitch in degrees (-20 to 20)",
+      value: "0",
+    });
+    if (pitch === undefined) return;
+    await this.executeRaw({
+      type: "setHeadPose",
+      yawDegrees: Number(yaw),
+      pitchDegrees: Number(pitch),
+    });
+  }
+
+  async selectSpeechBubble(): Promise<void> {
+    const text = await vscode.window.showInputBox({
+      prompt: "Speech bubble text (leave empty to clear)",
+    });
+    if (text === undefined) return;
+    const tone = await vscode.window.showQuickPick(
+      VALID_TONES.map((value) => ({ label: value, id: value })),
+      { placeHolder: "Select a speech-bubble tone" },
+    );
+    await this.executeRaw({
+      type: "setSpeechBubble",
+      text,
+      tone: tone?.id,
+    });
   }
 
   syncAppearance(): void {

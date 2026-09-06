@@ -9,7 +9,7 @@ Emote lets AI assistants step out of the chat window and into a lively character
 - **Expressive companion** – Smooth facial animation, idle motion, and speech bubbles that feel alive.
 - **MCP-native control** – Every expression change is a tool call away. Works with Cursor, Claude, and any MCP-compatible client.
 - **Customizable** – Choose between Human and Einstein character variants, each with unique proportions and features. Combine with themes (Default, Robot, Alien, Monochrome) for different looks.
-- **Self-contained** – Builds to a single VSIX. No background daemons, no network sockets, only file-based IPC.
+- **Self-contained** – Builds to a single VSIX. The VS Code extension hosts a local Unix domain socket (named pipe on Windows) for the MCP helper; there is no network listener and no background daemon beyond the MCP process your client launches.
 
 ## Installation
 
@@ -81,17 +81,19 @@ The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activat
 | Tool              | Input                                              |
 | ----------------- | -------------------------------------------------- |
 | `setMood`         | `{ "mood": "smile", "duration": 0.5 }`             |
-| `triggerAction`   | `{ "action": "wink", "duration": 1 }`              |
+| `triggerAction`   | `{ "action": "shake", "duration": 1 }`             |
 | `clearAction`     | `{}`                                               |
 | `setHeadPose`     | `{ "yawDegrees": 15, "pitchDegrees": -5 }`         |
 | `setSpeechBubble` | `{ "text": "Deployment passed", "tone": "shout" }` |
 | `setTheme`        | `{ "themeId": "robot" }`                           |
+| `setVariant`      | `{ "variantId": "einstein" }`                      |
 | `show` / `hide`   | `{}`                                               |
+| `health`          | `{}`                                               |
 
 ## Telemetry & Privacy
 
 - Emote sends **no** telemetry and makes **no** network requests.
-- MCP communication happens through a tiny JSON file inside your system temp directory (`/tmp/ragdoll-vscode/command.json`).
+- MCP communication uses a local Unix domain socket at `$TMPDIR/ragdoll-vscode/emote.sock` (a named pipe on Windows).
 - The only files written outside VS Code’s sandbox are `~/.emote/mcp-server.js` (the helper server) and optional screenshots you capture yourself.
 
 ## Troubleshooting
@@ -99,9 +101,9 @@ The extension installs (and auto-updates) `~/.emote/mcp-server.js` every activat
 | Symptom                   | Fix                                                                                                                        |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Panel never appears       | Run `Emote: Show Character`, then check the VS Code output channel **Emote** for errors.                                   |
-| MCP commands do nothing   | Ensure your MCP config points to the latest `~/.emote/mcp-server.js`, then restart the MCP client.                         |
+| MCP commands do nothing   | Ensure your MCP config points to the latest `~/.emote/mcp-server.js`, then restart the MCP client. Confirm the Emote panel is open so the socket server is listening. |
 | Speech bubble text sticks | Use `clearAction` and `setSpeechBubble` with `text: null` to reset.                                                        |
-| High CPU usage            | Reduce polling in the MCP server by leaving the character hidden when not needed (the extension auto-throttles when idle). |
+| High CPU usage            | Hide the character when idle; the webview throttles animation when the panel is hidden.                                    |
 
 ## Screenshots
 
