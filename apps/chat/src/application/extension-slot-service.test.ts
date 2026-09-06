@@ -28,9 +28,23 @@ const initialState: SerializedSlotState = {
 
 function createGateway(state: SerializedSlotState | null) {
   let listener: ((event: SlotChangeEvent) => void) | null = null;
+  let selected: string | null = null;
+  let selectionListener: ((slotId: string | null) => void) | null = null;
   let slotsListener: (() => void) | null = null;
   const actions: SlotActionRequest[] = [];
   const gateway: ExtensionSlotGateway = {
+    getActiveExtensionCard: async () => selected,
+    selectExtensionCard: async (slotId) => {
+      selected = slotId;
+      selectionListener?.(slotId);
+      return { success: true };
+    },
+    onActiveExtensionCardChanged: (callback) => {
+      selectionListener = callback;
+      return () => {
+        selectionListener = null;
+      };
+    },
     getExtensionSlots: async () => [
       {
         extensionId: "tasks",
@@ -63,6 +77,11 @@ function createGateway(state: SerializedSlotState | null) {
     actions,
     getListener: () => listener,
     changeSlots: () => slotsListener?.(),
+    getSelectionListener: () => selectionListener,
+    selectFromAgent: (slotId: string | null) => {
+      selected = slotId;
+      selectionListener?.(slotId);
+    },
   };
 }
 
@@ -256,13 +275,17 @@ it("does not roll back live state when a reload returns an older snapshot", asyn
 it("ignores a failed obsolete load after the service restarts", async () => {
   const testGateway = createGateway(initialState);
   const stale = Promise.withResolvers<SerializedSlotState | null>();
-  testGateway.gateway.getSlotState = () => stale.promise;
+  const requested = Promise.withResolvers<void>();
+  testGateway.gateway.getSlotState = () => {
+    requested.resolve();
+    return stale.promise;
+  };
   const errors: unknown[] = [];
   const service = new ExtensionSlotService(testGateway.gateway, (error) =>
     errors.push(error),
   );
   const started = service.start();
-  await Promise.resolve();
+  await requested.promise;
   service.stop();
   testGateway.gateway.getSlotState = async () => initialState;
   await service.start();
@@ -272,4 +295,25 @@ it("ignores a failed obsolete load after the service restarts", async () => {
   expect(service.getSnapshot()).toHaveLength(1);
   expect(testGateway.getListener()).not.toBeNull();
   service.stop();
+});
+
+it("agent selections arriving during hydration survive stale snapshots and stop", async () => {
+  const gateway = createGateway(initialState);
+  const initial = Promise.withResolvers<string | null>();
+  gateway.gateway.getActiveExtensionCard = () => initial.promise;
+  const service = new ExtensionSlotService(gateway.gateway, (error) => {
+    throw error;
+  });
+  const started = service.start();
+  gateway.selectFromAgent("tasks.main");
+  initial.resolve(null);
+  await started;
+  expect(service.getActiveCardSnapshot()).toBe("tasks.main");
+  await service.selectCard(null);
+  expect(service.getActiveCardSnapshot()).toBeNull();
+  const late = gateway.getSelectionListener();
+  service.stop();
+  late?.("tasks.main");
+  expect(service.getActiveCardSnapshot()).toBeNull();
+  expect(gateway.getSelectionListener()).toBeNull();
 });

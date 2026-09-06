@@ -20,6 +20,7 @@ const pages = [
   "apps/chat/tests/extension-configuration.html",
   "apps/chat/tests/extension-settings.html",
   "apps/chat/tests/character-card.html",
+  "apps/chat/tests/agent-card-controls.html",
   "apps/chat/tests/compact-forms.html",
   "apps/chat/tests/visible-slots.html",
   "apps/chat/tests/panel-actions.html",

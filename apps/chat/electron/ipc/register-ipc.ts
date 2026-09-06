@@ -1,3 +1,5 @@
+import type { ExtensionCardService } from "../services/extension-card-service.js";
+import { registerCardIpc } from "./register-card-ipc.js";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 import type { ApiKeyService } from "../services/api-key-service.js";
@@ -16,6 +18,7 @@ export interface IpcServices {
   apiKeys: ApiKeyService;
   chat: ChatApplicationService;
   extensions: ExtensionManager;
+  cards: ExtensionCardService;
   extensionOperations: ExtensionOperationsService;
   navigation: ExternalNavigationService;
   storage: StorageRepository;
@@ -35,6 +38,7 @@ export function registerIpc(
       services.extensions,
       services.extensionOperations,
     );
+    registerCardIpc(registrar, services.cards);
     registerSettingsIpc(registrar, services.storage);
     registerShellIpc(registrar, services.navigation);
   } catch (error) {

@@ -79,6 +79,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(IPC_CHANNELS.settings.set, settings),
 
   // Extensions
+  getActiveExtensionCard: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.cards.getActive),
+  selectExtensionCard: (slotId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.cards.select, slotId),
+  onActiveExtensionCardChanged: (callback) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      slotId: string | null,
+    ) => callback(slotId);
+    ipcRenderer.on(IPC_CHANNELS.cards.changed, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.cards.changed, handler);
+    };
+  },
+
   getExtensionSlots: () => ipcRenderer.invoke(IPC_CHANNELS.extensions.getSlots),
   getSlotState: (slotId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.extensions.getSlotState, slotId),

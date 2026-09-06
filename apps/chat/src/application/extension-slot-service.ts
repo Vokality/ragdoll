@@ -25,6 +25,9 @@ import type {
 
 export type ExtensionSlotGateway = Pick<
   ElectronAPI,
+  | "getActiveExtensionCard"
+  | "selectExtensionCard"
+  | "onActiveExtensionCardChanged"
   | "executeSlotAction"
   | "getExtensionSlots"
   | "getSlotState"
@@ -38,6 +41,9 @@ export class ExtensionSlotService {
   private slots: ExtensionUISlot[] = [];
   private unsubscribe: (() => void) | null = null;
   private unsubscribeFromSlotChanges: (() => void) | null = null;
+  private activeCard: string | null = null;
+  private selectionRevision = 0;
+  private unsubscribeFromSelection: (() => void) | null = null;
   private generation = 0;
   private loadRevision = 0;
   private startPromise: Promise<void> | null = null;
@@ -47,6 +53,17 @@ export class ExtensionSlotService {
     private readonly api: ExtensionSlotGateway,
     private readonly reportError: (error: unknown) => void,
   ) {}
+
+  readonly getActiveCardSnapshot = (): string | null => this.activeCard;
+
+  readonly selectCard = async (slotId: string | null): Promise<void> => {
+    try {
+      const result = await this.api.selectExtensionCard(slotId);
+      if (!result.success) throw new Error(result.error);
+    } catch (error) {
+      this.reportError(error);
+    }
+  };
 
   readonly getSnapshot = (): ExtensionUISlot[] => this.slots;
 
@@ -58,6 +75,14 @@ export class ExtensionSlotService {
   start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
     const generation = ++this.generation;
+    this.unsubscribeFromSelection = this.api.onActiveExtensionCardChanged(
+      (slotId) => {
+        if (generation !== this.generation) return;
+        this.selectionRevision++;
+        this.activeCard = slotId;
+        for (const listener of this.listeners) listener();
+      },
+    );
     this.unsubscribe = this.api.onSlotStateChanged((event) => {
       if (generation !== this.generation) return;
       this.loadingStates?.set(event.slotId, event.state);
@@ -86,6 +111,9 @@ export class ExtensionSlotService {
   stop(): void {
     this.generation++;
     this.loadRevision++;
+    this.unsubscribeFromSelection?.();
+    this.unsubscribeFromSelection = null;
+    this.activeCard = null;
     this.unsubscribe?.();
     this.unsubscribeFromSlotChanges?.();
     this.unsubscribe = null;
@@ -100,7 +128,11 @@ export class ExtensionSlotService {
     const updates = new Map<string, SerializedSlotState>();
     this.loadingStates = updates;
     try {
-      const metadata = await this.api.getExtensionSlots();
+      const selectionRevision = this.selectionRevision;
+      const [metadata, activeCard] = await Promise.all([
+        this.api.getExtensionSlots(),
+        this.api.getActiveExtensionCard(),
+      ]);
       const duplicateIds = metadata.filter(
         (slot, index) =>
           metadata.findIndex(
@@ -141,6 +173,8 @@ export class ExtensionSlotService {
         priority: slot.priority,
         state: this.requireStore(slot.slotId),
       }));
+      if (selectionRevision === this.selectionRevision)
+        this.activeCard = activeCard;
       for (const listener of this.listeners) listener();
     } finally {
       if (this.loadingStates === updates) this.loadingStates = null;

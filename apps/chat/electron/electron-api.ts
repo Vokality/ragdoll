@@ -115,6 +115,11 @@ export const IPC_CHANNELS = {
     functionCall: "chat:function-call",
     streamEnd: "chat:stream-end",
   },
+  cards: {
+    getActive: "cards:get-active",
+    select: "cards:select",
+    changed: "cards:changed",
+  },
   settings: {
     get: "settings:get",
     set: "settings:set",
@@ -206,6 +211,12 @@ export interface ElectronAPI {
 
   getSettings(): Promise<CharacterSettings>;
   setSettings(settings: CharacterSettingsUpdate): Promise<OperationResult>;
+
+  getActiveExtensionCard(): Promise<string | null>;
+  selectExtensionCard(slotId: string | null): Promise<OperationResult>;
+  onActiveExtensionCardChanged(
+    callback: (slotId: string | null) => void,
+  ): () => void;
 
   getExtensionSlots(): Promise<SlotInfo[]>;
   getSlotState(slotId: string): Promise<SerializedSlotState | null>;

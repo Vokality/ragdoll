@@ -1,5 +1,6 @@
 import {
   useState,
+  useSyncExternalStore,
   useCallback,
   useEffect,
   useRef,
@@ -8,7 +9,7 @@ import {
 import type { CharacterController } from "@vokality/ragdoll";
 import {
   ControlledSlotBar,
-  useActiveSlot,
+  useVisibleSlots,
 } from "@vokality/ragdoll-extensions/ui";
 import { CharacterView } from "../components/character-view";
 import { ChatInput } from "../components/chat-input";
@@ -67,14 +68,21 @@ export function ChatScreen({
 
   // Get extension slots from extensions
   const extensionSlots = useExtensionSlots(extensionSlotService);
-  const [activeSlotId, setActiveSlotId, activeSlot] =
-    useActiveSlot(extensionSlots);
+  const activeSlotId = useSyncExternalStore(
+    extensionSlotService.subscribe,
+    extensionSlotService.getActiveCardSnapshot,
+    extensionSlotService.getActiveCardSnapshot,
+  );
+  const visibleSlots = useVisibleSlots(extensionSlots);
+  const activeSlot =
+    visibleSlots.find((slot) => slot.id === activeSlotId) ?? null;
+  const setActiveSlotId = extensionSlotService.selectCard;
   const dockRef = useRef<HTMLDivElement>(null);
   const closePanel = useCallback(() => {
     dockRef.current
       ?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
       ?.focus({ preventScroll: true });
-    setActiveSlotId(null);
+    void setActiveSlotId(null);
   }, [setActiveSlotId]);
 
   useEffect(() => {

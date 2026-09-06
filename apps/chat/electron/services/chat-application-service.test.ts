@@ -433,3 +433,45 @@ describe("ChatApplicationService", () => {
     ]);
   });
 });
+
+it("preserves streamed progress on failure and accepts the next user turn", async () => {
+  let calls = 0;
+  const agent: AgentRunner = {
+    runUserTurn: async (_key, _conversation, stream) => {
+      calls += 1;
+      stream(calls === 1 ? "Checking." : "Recovered.");
+      if (calls === 1) throw new Error("Connection interrupted");
+      return "Recovered.";
+    },
+    runEventTurn: async () => ({ disposition: "silent" }),
+  };
+  const storage = createInMemoryStorageRepository();
+  const chat = new ChatApplicationService(
+    storage,
+    { getKey: async () => "key" },
+    agent,
+    () => {},
+    ignoreError,
+  );
+  let ended = 0;
+  const events = {
+    streamingText: () => {},
+    streamEnded: () => {
+      ended += 1;
+    },
+  };
+  expect(await chat.sendMessage("Check", events)).toEqual({
+    success: false,
+    error: "Connection interrupted",
+  });
+  expect(storage.snapshot().conversation).toContainEqual({
+    role: "assistant",
+    content: "Checking.",
+  });
+  expect(await chat.sendMessage("Continue", events)).toEqual({ success: true });
+  expect(storage.snapshot().conversation).toContainEqual({
+    role: "assistant",
+    content: "Recovered.",
+  });
+  expect(ended).toBe(2);
+});

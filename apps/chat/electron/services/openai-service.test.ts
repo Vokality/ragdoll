@@ -62,6 +62,7 @@ class ScriptedCompletionSession implements AgentCompletionSession {
     this.messages.push(structuredClone(request.messages));
     const next = this.rounds.shift();
     if (!next) throw new Error("No scripted completion remains");
+    if (next.content) request.onStreamingText?.(next.content);
     return next;
   }
 }
@@ -319,4 +320,139 @@ describe("user-turn text recovery", () => {
     ).rejects.toThrow("empty response");
     expect(session.toolChoices).toEqual(["auto", "none"]);
   });
+});
+
+describe("user turn continuation", () => {
+  it("keeps progress, executes batches and later rounds, and recovers an empty final reply", async () => {
+    const { runner, session, executed } = createRunner(
+      [
+        {
+          ...round(
+            toolCall("a", "tic_tac_toe_place", { row: 0 }),
+            toolCall("b", "tic_tac_toe_place", { row: 1 }),
+          ),
+          content: "Checking.",
+        },
+        round(toolCall("c", "tic_tac_toe_place", { row: 2 })),
+        responseRound(""),
+        responseRound("Done."),
+      ],
+      [{ success: true }, { success: true }, { success: true }],
+    );
+    let streamed = "";
+    expect(
+      await runner.runUserTurn("key", [], (text) => {
+        streamed += text;
+      }),
+    ).toBe("Checking.\n\nDone.");
+    expect(streamed).toBe("Checking.\n\nDone.");
+    expect(executed).toHaveLength(3);
+    expect(
+      session.messages[1]
+        ?.filter((message) => message.role === "tool")
+        .map((message) => message.tool_call_id),
+    ).toEqual(["a", "b"]);
+    expect(
+      session.messages[3]
+        ?.filter((message) => message.role === "tool")
+        .map((message) => message.tool_call_id),
+    ).toEqual(["a", "b", "c"]);
+    expect(session.toolChoices).toEqual(["auto", "auto", "auto", "none"]);
+  });
+
+  it("returns malformed argument errors alongside successful calls and retries only the failed call", async () => {
+    const { runner, session, executed } = createRunner(
+      [
+        round(
+          { id: "bad", name: "tic_tac_toe_place", arguments: "{" },
+          toolCall("good", "tic_tac_toe_place", { row: 1 }),
+        ),
+        round(toolCall("fixed", "tic_tac_toe_place", { row: 0 })),
+        responseRound("Done"),
+      ],
+      [{ success: true }, { success: true }],
+    );
+    await runner.runUserTurn("key", [], () => {});
+    expect(executed.map((call) => call.args)).toEqual([{ row: 1 }, { row: 0 }]);
+    expect(
+      session.messages[1]?.filter((message) => message.role === "tool"),
+    ).toHaveLength(2);
+    expect(session.toolChoices[1]).toEqual({
+      type: "function",
+      function: { name: "tic_tac_toe_place" },
+    });
+  });
+
+  it("feeds unexpected tool failures back without forcing a replay", async () => {
+    const { runner, session, executed } = createRunner(
+      [
+        round(
+          toolCall("a", "tic_tac_toe_place", {}),
+          toolCall("b", "tic_tac_toe_place", {}),
+        ),
+        responseRound("The actions could not be confirmed."),
+      ],
+      [],
+    );
+    await runner.runUserTurn("key", [], () => {});
+    expect(executed).toHaveLength(2);
+    expect(session.toolChoices).toEqual(["auto", "auto"]);
+    const results = session.messages[1]?.filter(
+      (message) => message.role === "tool",
+    );
+    expect(results).toHaveLength(2);
+    expect(results?.[0]?.content).toContain('"retryable":false');
+  });
+
+  for (const finishReason of [null, "content_filter", "length"] as const) {
+    it(`rejects an unfinished response: ${finishReason}`, async () => {
+      const { runner } = createRunner(
+        [{ ...responseRound("Partial"), finishReason }],
+        [],
+      );
+      await expect(runner.runUserTurn("key", [], () => {})).rejects.toThrow();
+    });
+  }
+
+  it("does not start tools after cancellation during streaming", async () => {
+    const abort = new AbortController();
+    const { runner, executed } = createRunner(
+      [
+        {
+          ...round(toolCall("a", "tic_tac_toe_place", {})),
+          content: "Starting",
+        },
+      ],
+      [{ success: true }],
+    );
+    await expect(
+      runner.runUserTurn("key", [], () => abort.abort(), abort.signal),
+    ).rejects.toThrow();
+    expect(executed).toHaveLength(0);
+  });
+});
+
+it("stops the remaining tool batch when cancelled during an action", async () => {
+  const abort = new AbortController();
+  const executed: string[] = [];
+  const session = new ScriptedCompletionSession([
+    round(toolCall("a", "first", {}), toolCall("b", "second", {})),
+  ]);
+  const tools: AgentToolService = {
+    getTools: () => [],
+    getToolsForExtension: () => [],
+    executeTool: async (name) => {
+      executed.push(name);
+      abort.abort();
+      return { success: true };
+    },
+  };
+  const runner = new OpenAIAgentRunner(tools, config, {
+    create: () => session,
+  });
+  await expect(
+    runner.runUserTurn("key", [], () => {}, abort.signal),
+  ).rejects.toThrow();
+  expect(executed).toEqual(["first"]);
+  expect(session.messages).toHaveLength(1);
 });

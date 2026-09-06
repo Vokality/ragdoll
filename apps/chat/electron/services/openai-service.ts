@@ -5,6 +5,7 @@ import type {
 } from "@vokality/ragdoll-extensions";
 import OpenAI from "openai";
 import type {
+  ChatCompletionChunk,
   ChatCompletionMessageParam,
   ChatCompletionTool,
   ChatCompletionToolChoiceOption,
@@ -52,7 +53,7 @@ export interface PendingToolCall {
 
 export interface CompletionRound {
   content: string;
-  finishReason: string | null;
+  finishReason: ChatCompletionChunk.Choice["finish_reason"];
   toolCalls: PendingToolCall[];
 }
 
@@ -157,10 +158,7 @@ function copySchemaValue(value: unknown): unknown {
 
 function parseArguments(value: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Tool arguments must be a JSON object");
-  }
-  return parsed as Record<string, unknown>;
+  return z.record(z.string(), z.unknown()).parse(parsed);
 }
 
 function serializeExtensionEvent(event: ExtensionConversationEvent): string {
@@ -190,13 +188,29 @@ async function executeToolCall(
   extensionManager: AgentToolService,
   call: PendingToolCall,
 ): Promise<ExecutedToolCall> {
-  const args = parseArguments(call.arguments);
-  const result = await extensionManager.executeTool(call.name, args);
-  return {
-    call,
-    content: JSON.stringify({ args, result }),
-    result,
-  };
+  let args: Record<string, unknown>;
+  try {
+    args = parseArguments(call.arguments);
+  } catch {
+    const result: ToolResult = {
+      success: false,
+      error:
+        "Tool arguments must be a valid JSON object. Correct the arguments and retry.",
+      retryable: true,
+    };
+    return { call, content: JSON.stringify({ result }), result };
+  }
+  let result: ToolResult;
+  try {
+    result = await extensionManager.executeTool(call.name, args);
+  } catch (error) {
+    result = {
+      success: false,
+      error: `Tool execution failed; completion is unknown. Do not repeat the action without checking its state. ${error instanceof Error ? error.message : String(error)}`,
+      retryable: false,
+    };
+  }
+  return { call, content: JSON.stringify({ args, result }), result };
 }
 
 function isEventDecisionTool(call: PendingToolCall): boolean {
@@ -239,7 +253,7 @@ class OpenAICompletionSession implements AgentCompletionSession {
       { signal: request.signal },
     );
     const toolCalls = new Map<number, PendingToolCall>();
-    let finishReason: string | null = null;
+    let finishReason: ChatCompletionChunk.Choice["finish_reason"] = null;
     let content = "";
 
     for await (const chunk of stream) {
@@ -297,30 +311,45 @@ export class OpenAIAgentRunner implements AgentRunner {
       { role: "system", content: this.config.systemPrompt },
       ...toModelMessages(conversation),
     ];
-    const tools = toOpenAITools(this.extensions);
     let response = "";
     let retryToolName: string | null = null;
+    const complete = async (
+      request: Omit<AgentCompletionRequest, "onStreamingText" | "signal">,
+    ): Promise<CompletionRound> => {
+      signal?.throwIfAborted();
+      let started = false;
+      const separator = response ? "\n\n" : "";
+      const completion = await completionSession.complete({
+        ...request,
+        signal,
+        onStreamingText: (text) => {
+          if (!text) return;
+          onStreamingText((started ? "" : separator) + text);
+          started = true;
+        },
+      });
+      if (completion.content) response += separator + completion.content;
+      signal?.throwIfAborted();
+      return completion;
+    };
 
     for (let round = 0; round <= this.config.maxToolRounds; round += 1) {
-      const completion = await completionSession.complete({
+      const completion = await complete({
         messages,
-        tools,
+        tools: toOpenAITools(this.extensions),
         toolChoice: retryToolName
           ? {
               type: "function",
               function: { name: retryToolName },
             }
           : "auto",
-        onStreamingText,
-        signal,
       });
-      response += completion.content;
 
       if (completion.toolCalls.length === 0) {
         this.assertFinishedWithoutTools(completion);
-        if (!response.trim() && completion.finishReason === "stop") {
+        if (!completion.content.trim()) {
           // Recover text once without replaying tools that may already have acted.
-          const finalText = await completionSession.complete({
+          const finalText = await complete({
             messages: [
               ...messages,
               {
@@ -331,20 +360,22 @@ export class OpenAIAgentRunner implements AgentRunner {
             ],
             tools: [],
             toolChoice: "none",
-            onStreamingText,
-            signal,
           });
           this.assertFinishedWithoutTools(finalText);
           if (finalText.toolCalls.length || !finalText.content.trim()) {
             throw new Error("The agent returned an empty response");
           }
-          return finalText.content;
+          return response;
         }
         return response;
       }
 
       this.assertToolRoundCanContinue(round, completion);
-      const executed = await this.appendToolResults(messages, completion);
+      const executed = await this.appendToolResults(
+        messages,
+        completion,
+        signal,
+      );
       retryToolName =
         executed.find(({ result }) => !result.success && result.retryable)?.call
           .name ?? null;
@@ -470,6 +501,11 @@ export class OpenAIAgentRunner implements AgentRunner {
     if (completion.finishReason === "tool_calls") {
       throw new Error("The model ended with an empty tool call");
     }
+    if (completion.finishReason !== "stop") {
+      throw new Error(
+        `The model response did not finish normally: ${completion.finishReason ?? "stream interrupted"}`,
+      );
+    }
   }
 
   private assertToolRoundCanContinue(
@@ -504,6 +540,7 @@ export class OpenAIAgentRunner implements AgentRunner {
   private async appendToolResults(
     messages: ChatCompletionMessageParam[],
     completion: CompletionRound,
+    signal?: AbortSignal,
   ): Promise<ExecutedToolCall[]> {
     messages.push({
       role: "assistant",
@@ -516,6 +553,7 @@ export class OpenAIAgentRunner implements AgentRunner {
     });
     const results: ExecutedToolCall[] = [];
     for (const call of completion.toolCalls) {
+      signal?.throwIfAborted();
       results.push(await executeToolCall(this.extensions, call));
     }
     messages.push(

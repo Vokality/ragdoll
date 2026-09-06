@@ -66,6 +66,7 @@ export class ChatApplicationService {
       const abort = new AbortController();
       this.activeUserTurn = abort;
       let streamed = "";
+      let assistantSaveStarted = false;
       try {
         const data = await this.storage.update((draft) => {
           draft.conversation.push({ role: "user", content });
@@ -81,22 +82,27 @@ export class ChatApplicationService {
           },
           abort.signal,
         );
+        assistantSaveStarted = true;
         const completed = await this.appendAssistantResponse(response);
         events.streamEnded();
         this.publishConversation(completed);
         return { success: true };
       } catch (error) {
-        // A user-initiated stop is not a failure: keep whatever text
-        // already streamed as the assistant message.
-        if (abort.signal.aborted) {
-          const partial = streamed.trim();
-          const conversation = partial
-            ? await this.appendAssistantResponse(partial)
-            : (await this.storage.read()).conversation;
-          events.streamEnded();
-          this.publishConversation(conversation);
-          return { success: true };
+        // Preserve visible progress on cancellation and failures without replaying
+        // a save whose outcome may be uncertain.
+        if (!assistantSaveStarted) {
+          try {
+            const partial = streamed.trim();
+            const conversation = partial
+              ? await this.appendAssistantResponse(partial)
+              : (await this.storage.read()).conversation;
+            events.streamEnded();
+            this.publishConversation(conversation);
+          } catch (persistenceError) {
+            this.reportError(persistenceError);
+          }
         }
+        if (abort.signal.aborted) return { success: true };
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),

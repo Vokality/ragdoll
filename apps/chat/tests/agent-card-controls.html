@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent card control regression</title>
+  </head>
+  <body>
+    <p id="result">Running…</p>
+    <div id="root" style="width: 400px; height: 600px"></div>
+    <script type="module">
+      import React, { act, useSyncExternalStore } from "react";
+      import { createRoot } from "react-dom/client";
+      import {
+        ControlledSlotBar,
+        useVisibleSlots,
+      } from "@vokality/ragdoll-extensions/ui";
+      import { AppToolService } from "../electron/services/app-tool-service.ts";
+      import { ExtensionCardService } from "../electron/services/extension-card-service.ts";
+      import { ExtensionSlotService } from "../src/application/extension-slot-service.ts";
+      import { useExtensionSlots } from "../src/hooks/use-extension-slots.ts";
+      import { CharacterView } from "../src/components/character-view.tsx";
+      import "../src/styles/global.css";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const metadata = [
+        {
+          slotId: "tasks.main",
+          extensionId: "tasks",
+          label: "Tasks",
+          icon: "checklist",
+          priority: 1,
+        },
+        {
+          slotId: "timer.main",
+          extensionId: "timer",
+          label: "Timer",
+          icon: "timer",
+          priority: 0,
+        },
+      ];
+      const state = {
+        visible: true,
+        badge: null,
+        panel: {
+          type: "list",
+          title: "Example",
+          items: [],
+          emptyMessage: "No items",
+        },
+      };
+      const listeners = new Set();
+      const cards = new ExtensionCardService(
+        { getAllSlots: () => metadata, getSlotState: () => state },
+        (id) => {
+          for (const listener of listeners) listener(id);
+        },
+      );
+      let extensionCalls = 0;
+      const tools = new AppToolService(
+        {
+          getTools: () => [],
+          getToolsForExtension: () => [],
+          executeTool: async () => {
+            extensionCalls++;
+            return { success: true };
+          },
+        },
+        cards,
+      );
+      const service = new ExtensionSlotService(
+        {
+          getExtensionSlots: async () => structuredClone(metadata),
+          getSlotState: async () => structuredClone(state),
+          getActiveExtensionCard: async () => cards.getActive(),
+          selectExtensionCard: async (id) => {
+            cards.select(id);
+            return { success: true };
+          },
+          onActiveExtensionCardChanged: (callback) => {
+            listeners.add(callback);
+            return () => listeners.delete(callback);
+          },
+          onSlotStateChanged: () => () => {},
+          onExtensionSlotsChanged: () => () => {},
+          executeSlotAction: async () => ({ success: true }),
+        },
+        (error) => {
+          throw error;
+        },
+      );
+      const ready = () => {};
+      function Sample() {
+        const slots = useExtensionSlots(service);
+        const visible = useVisibleSlots(slots);
+        const selected = useSyncExternalStore(
+          service.subscribe,
+          service.getActiveCardSnapshot,
+        );
+        return React.createElement(
+          "main",
+          { style: { display: "flex", flexDirection: "column", height: 600 } },
+          React.createElement(ControlledSlotBar, {
+            slots,
+            activeSlotId: selected,
+            onSlotClick: service.selectCard,
+          }),
+          React.createElement(CharacterView, {
+            activeSlot: visible.find((slot) => slot.id === selected) ?? null,
+            onClosePanel: () => service.selectCard(null),
+            messages: [
+              {
+                role: "assistant",
+                content: "Your conversation stays visible.",
+              },
+            ],
+            isStreaming: false,
+            themeId: "default",
+            variantId: "human",
+            onControllerReady: ready,
+            onEventSubscriberError: (error) => {
+              throw error;
+            },
+          }),
+          React.createElement("textarea", {
+            "aria-label": "Message",
+            style: { height: 50, flexShrink: 0 },
+          }),
+        );
+      }
+      const root = createRoot(document.getElementById("root"));
+      const check = (ok, message) => {
+        if (!ok) throw new Error(message);
+      };
+      try {
+        await act(async () => root.render(React.createElement(Sample)));
+        const canvas = document.querySelector("canvas");
+        await act(async () =>
+          tools.executeTool("lumen_open_card", { slotId: "tasks.main" }),
+        );
+        check(
+          document.querySelector(".inline-slot-panel"),
+          "Agent did not open a card",
+        );
+        check(
+          document
+            .querySelector('[aria-label="Tasks"]')
+            .getAttribute("aria-pressed") === "true",
+          "Toolbar missed agent selection",
+        );
+        check(
+          document.querySelector("canvas") === canvas,
+          "Opening replaced character canvas",
+        );
+        const composer = document.querySelector("textarea");
+        composer.focus();
+        check(document.activeElement === composer, "Card blocks chat");
+        await act(async () =>
+          document.querySelector('[aria-label="Timer"]').click(),
+        );
+        check(
+          cards.getActive() === "timer.main",
+          "Manual selection did not reach app state",
+        );
+        await act(async () => tools.executeTool("lumen_close_card", {}));
+        check(
+          !document.querySelector(".inline-slot-panel"),
+          "Agent did not close the manually selected card",
+        );
+        await act(async () => tools.executeTool("listTasks", {}));
+        check(
+          !document.querySelector(".inline-slot-panel") && extensionCalls === 1,
+          "Extension action is coupled to card presentation",
+        );
+        await act(async () =>
+          tools.executeTool("lumen_open_card", { slotId: "tasks.main" }),
+        );
+        await act(async () =>
+          document
+            .querySelector('.inline-slot-panel [aria-label="Close"]')
+            .click(),
+        );
+        check(
+          cards.getActive() === null,
+          "Manual close did not reach app state",
+        );
+        await act(async () => root.unmount());
+        check(listeners.size === 0, "Card subscription survived unmount");
+        document.getElementById("result").textContent =
+          "PASS: agent open/close, manual synchronization, independent extension actions, persistent character and usable chat";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.stack ?? error}`;
+        throw error;
+      }
+    </script>
+  </body>
+</html>

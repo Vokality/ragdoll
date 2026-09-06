@@ -1,3 +1,5 @@
+import { ExtensionCardService } from "./services/extension-card-service.js";
+import { AppToolService } from "./services/app-tool-service.js";
 import { Notification, ipcMain, safeStorage, shell } from "electron";
 import { mkdir } from "node:fs/promises";
 import { BUILT_IN_EXTENSIONS } from "./built-in-extensions.js";
@@ -36,6 +38,7 @@ export class LumenApplication {
   );
   private readonly storage: StorageRepository;
   private readonly extensions;
+  private readonly cards;
   private readonly windows;
   private readonly oauthRedirects;
   private readonly apiKeys;
@@ -83,9 +86,14 @@ export class LumenApplication {
         if (!result.success) throw new Error(result.error);
       },
       events: {
-        slotStateChanged: (extensionId, slotId, state) =>
-          this.rendererEvents.slotStateChanged({ extensionId, slotId, state }),
-        slotsChanged: () => this.rendererEvents.slotsChanged(),
+        slotStateChanged: (extensionId, slotId, state) => {
+          this.rendererEvents.slotStateChanged({ extensionId, slotId, state });
+          this.cards.reconcile();
+        },
+        slotsChanged: () => {
+          this.rendererEvents.slotsChanged();
+          this.cards.reconcile();
+        },
         oauthConnected: (extensionId) => {
           this.rendererEvents.oauthConnected({ extensionId });
           this.rendererEvents.focus();
@@ -97,6 +105,9 @@ export class LumenApplication {
         ? (request) => new Notification(request).show()
         : undefined,
     });
+    this.cards = new ExtensionCardService(this.extensions, (slotId) =>
+      this.rendererEvents.activeCardChanged(slotId),
+    );
     this.windows = new WindowService(
       config,
       this.navigation,
@@ -107,7 +118,7 @@ export class LumenApplication {
       this.storage,
       this.apiKeys,
       new OpenAIAgentRunner(
-        this.extensions,
+        new AppToolService(this.extensions, this.cards),
         this.config.chat,
         createOpenAICompletionSessionFactory(),
       ),
@@ -193,6 +204,7 @@ export class LumenApplication {
         apiKeys: this.apiKeys,
         chat: this.chat,
         extensions: this.extensions,
+        cards: this.cards,
         extensionOperations,
         navigation: this.navigation,
         storage: this.storage,

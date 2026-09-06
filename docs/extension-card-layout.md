@@ -48,3 +48,21 @@ header and controls plus a usable content area; Lumen reserves at least 260px.
 `apps/chat/tests/character-card.html` exercises both 480×800 and 400×600 hosts,
 including long lists, long study text, board containment, pinned controls,
 persistent character canvas, and a visible, interactive chat composer.
+
+## Agent control
+
+Lumen exposes separate app-owned tools: `lumen_list_cards`, `lumen_open_card`
+(with an available `slotId`), and `lumen_close_card`. These tools control
+presentation only. Reading tasks, starting a timer, and playing a move remain
+independent extension actions. An extension does not need to add card-opening
+metadata or depend on the app to participate; its registered visible slots are
+already discoverable through the host.
+
+`AppToolService` combines extension tools with app controls for the agent.
+`ExtensionCardService` owns the current selection in Electron, and both agent
+calls and authorized toolbar IPC use it. Selection changes are published to the
+renderer, including changes received during slot hydration. Unknown or hidden
+cards cannot be opened; hiding or unregistering the active slot closes it.
+Closing a card does not dispose its extension or cancel its activity.
+
+App-control tool names are reserved and cannot be shadowed by extension tools.
