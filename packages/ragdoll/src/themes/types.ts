@@ -1,5 +1,5 @@
 /**
- * Gradient stop definition for SVG gradients
+ * Gradient stop definition for theme palettes
  */
 export interface GradientStop {
   offset: string;

@@ -53,8 +53,16 @@ fi
 
 cd "$APP_DIR"
 echo "[run-lumen-headless] launching Electron in a private D-Bus session ..."
+# Cloud VMs typically expose a virtual GPU that Chromium blocklists, which
+# disables WebGL1/WebGL2, and software GL often fails to present frames
+# unless GPU compositing is disabled. The character renderer is Three.js-only,
+# so this cloud launcher enables SwiftShader and --disable-gpu.
 exec dbus-run-session -- bash -c '
   eval "$(printf "%s\n" "$LUMEN_KEYRING_PASSWORD" | gnome-keyring-daemon --unlock --components=secrets,pkcs11 2>/dev/null)"
   export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
-  exec bunx --bun --no-install electron . --no-sandbox --password-store=gnome-libsecret
+  exec bunx --bun --no-install electron . --no-sandbox --password-store=gnome-libsecret \
+    --disable-gpu \
+    --ignore-gpu-blocklist \
+    --enable-webgl \
+    --enable-unsafe-swiftshader
 '

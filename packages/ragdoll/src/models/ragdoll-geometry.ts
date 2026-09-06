@@ -130,7 +130,7 @@ export interface FaceDimensions {
 }
 
 /**
- * Geometry for the ragdoll character using SVG paths
+ * Geometry for the ragdoll character using outline paths
  */
 export class RagdollGeometry {
   public currentExpression: ExpressionConfig;
@@ -452,7 +452,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for the face outline
+   * Generate outline path for the face outline
    */
   public getFacePath(): string {
     const d = this.dimensions;
@@ -475,7 +475,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for an eye shape
+   * Generate outline path for an eye shape
    */
   public getEyePath(isLeft: boolean, eyeState: EyeState): EyePaths {
     const d = this.dimensions;
@@ -561,7 +561,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for an eyebrow
+   * Generate outline path for an eyebrow
    */
   public getEyebrowPath(isLeft: boolean, eyebrowState: EyebrowState): string {
     const d = this.dimensions;
@@ -606,7 +606,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for the mouth/lips
+   * Generate outline path for the mouth/lips
    */
   public getMouthPath(mouthState: MouthState): MouthPaths {
     const d = this.dimensions;
@@ -689,7 +689,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for the nose
+   * Generate outline path for the nose
    */
   public getNosePath(scrunch: number = 0): string {
     const d = this.dimensions;
@@ -712,7 +712,7 @@ export class RagdollGeometry {
   }
 
   /**
-   * Generate SVG path for an ear
+   * Generate outline path for an ear
    */
   public getEarPath(isLeft: boolean): string {
     const d = this.dimensions;

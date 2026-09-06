@@ -33,7 +33,7 @@ The root build is dependency-ordered: core libraries, extension packages, the ex
 
 ### Libraries
 
-- `packages/ragdoll` — `@vokality/ragdoll`, the React/SVG character framework.
+- `packages/ragdoll` — `@vokality/ragdoll`, the React/Three.js character framework.
 - `packages/ragdoll-extensions` — React-free extension contracts, registry, host capabilities, loader, serializable slot state, and optional React UI.
 - `packages/ragdoll-extension-character` — character control tools.
 - `packages/ragdoll-extension-tasks` — task tools, state channel, and slot.
