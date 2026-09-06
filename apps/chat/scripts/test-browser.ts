@@ -32,7 +32,16 @@ try {
     if (!address || typeof address === "string")
       throw new Error("Test server did not bind a TCP port");
     const child = Bun.spawn({
-      cmd: ["bunx", "--bun", "--no-install", "electron", entry],
+      cmd: [
+        "bunx",
+        "--bun",
+        "--no-install",
+        "electron",
+        // Linux sandbox initialization happens before the fixture entry runs.
+        // This exception applies only to the disposable browser-test process.
+        ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+        entry,
+      ],
       cwd: appRoot,
       env: {
         ...process.env,

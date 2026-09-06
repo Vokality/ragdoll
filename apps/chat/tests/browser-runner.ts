@@ -9,7 +9,6 @@ if (!origin || new URL(origin).hostname !== "127.0.0.1" || !profile) {
 app.setPath("userData", profile);
 // Linux CI runs fixture pages in an isolated disposable process under Xvfb.
 if (process.platform === "linux") {
-  app.commandLine.appendSwitch("no-sandbox");
   app.commandLine.appendSwitch("enable-unsafe-swiftshader");
   app.commandLine.appendSwitch("use-angle", "swiftshader");
 }
