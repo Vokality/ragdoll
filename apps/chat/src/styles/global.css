@@ -342,56 +342,6 @@ button:disabled {
   transition: transform var(--duration-normal) var(--ease-spring);
 }
 
-/* Status pill */
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--bg-glass);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: border-color var(--transition-normal);
-}
-
-.status-pill.busy {
-  border-color: rgba(251, 191, 36, 0.35);
-}
-
-.status-pill .label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-  transition: background var(--transition-normal);
-}
-
-.status-dot.busy {
-  background: var(--warning);
-  animation: statusPulse 1.4s var(--ease-out) infinite;
-}
-
-@keyframes statusPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--warning-dim);
-    opacity: 1;
-  }
-  50% {
-    box-shadow: 0 0 0 5px transparent;
-    opacity: 0.6;
-  }
-}
-
 /* Error banner */
 .banner-error {
   flex-shrink: 0;
@@ -1201,8 +1151,7 @@ dialog.modal-card::backdrop {
 }
 
 /* Keep conversation space available in compact desktop windows. */
-.chat-header > .icon-btn,
-.chat-header > .status-pill {
+.chat-header > .icon-btn {
   flex-shrink: 0;
 }
 .extension-dock {

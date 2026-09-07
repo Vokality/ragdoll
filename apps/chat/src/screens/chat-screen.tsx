@@ -190,12 +190,6 @@ export function ChatScreen({
           <SettingsIcon />
         </button>
 
-        {isLoading && (
-          <div className="status-pill busy" role="status">
-            <span className="status-dot busy" />
-            <span className="label">Thinking…</span>
-          </div>
-        )}
         {extensionSlots.length > 0 && (
           <div
             ref={dockRef}
