@@ -10,6 +10,8 @@ interface ModalShellProps {
   maxWidth: number;
   onClose: () => void;
   children: ReactNode;
+  onBack?: () => void;
+  closeLabel?: string;
 }
 
 /**
@@ -21,7 +23,13 @@ export function ModalShell({
   maxWidth,
   onClose,
   children,
+  onBack,
+  closeLabel,
 }: ModalShellProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, [title]);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useLayoutEffect(() => {
@@ -46,6 +54,12 @@ export function ModalShell({
       className="modal-card card"
       style={{ maxWidth }}
       aria-label={title}
+      onCancel={(event) => {
+        if (onBack) {
+          event.preventDefault();
+          onBack();
+        }
+      }}
       onClose={(event) => {
         // Strict Mode can close and reopen the same element before its queued
         // native close event is delivered.
@@ -53,13 +67,30 @@ export function ModalShell({
       }}
     >
       <div style={styles.header}>
-        <h2 style={styles.title}>{title}</h2>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+        >
+          {onBack && (
+            <button
+              type="button"
+              className="icon-btn"
+              style={styles.closeButton}
+              aria-label="Back"
+              onClick={onBack}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+          )}
+          <h2 ref={headingRef} tabIndex={-1} style={styles.title}>
+            {title}
+          </h2>
+        </div>
         <button
           type="button"
           onClick={onClose}
           className="icon-btn"
           style={styles.closeButton}
-          aria-label={`Close ${title}`}
+          aria-label={closeLabel ?? `Close ${title}`}
         >
           <CloseIcon />
         </button>
@@ -96,6 +127,8 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
   },
   title: {
+    minWidth: 0,
+    overflowWrap: "anywhere",
     fontSize: "17px",
     fontWeight: "600",
     letterSpacing: "-0.01em",
@@ -103,6 +136,7 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
   },
   closeButton: {
+    flexShrink: 0,
     width: "32px",
     height: "32px",
   },

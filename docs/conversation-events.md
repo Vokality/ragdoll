@@ -134,3 +134,11 @@ User turns use the Responses API with `store: false`. Each completed assistant m
 Within a turn, replay the complete message, function-call, and reasoning output items with each `function_call_output`, using `call_id` to associate results. Request encrypted reasoning so stateless follow-ups preserve model context. Extension-event turns retain explicit respond/silent decision tools and publish no unsolicited commentary. Function schemas remain non-strict at the provider boundary because extension schemas permit optional fields; the owning tool validates its arguments before acting.
 
 See OpenAI's [function-calling guide](https://developers.openai.com/api/docs/guides/function-calling) and [assistant phase guidance](https://developers.openai.com/api/docs/guides/reasoning#phase-parameter).
+
+## App events and personal context
+
+Lumen also publishes host-owned `app-event` entries for `app.onboarding` and `app.focused`. They use the existing durable queue and model respond/silent decisions but have no extension identity or required extension tool; extensions cannot publish this kind. Introduction completion is persisted with its event disposition. Failed introductions remain pending for retry.
+
+`profile` (preferred name, optional short notes, and check-in preference) and `experience` (introduction completion, first successful useful tool, focus cooldown) are separate validated storage domains outside the conversation. Clearing conversation never clears them. Settings edits use a revision check to avoid overwriting concurrent agent memories. User turns can use `lumen_update_profile`; background turns cannot write personal memory. Each turn receives a fresh profile snapshot as data, not instructions.
+
+Native window blur/focus callbacks admit a focus event only after 15 minutes away, once per four hours, after a successful useful action, with check-ins enabled, and with no active or pending turn. Stale focus events expire after 15 minutes. Timer/focus check-ins can be disabled independently of other extension-event turns. Actual agent lifecycle events drive renderer busy state and character reactions; no assistant messages or memories are synthesized by the host.

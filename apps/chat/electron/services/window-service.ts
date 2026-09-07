@@ -13,6 +13,10 @@ export class WindowService {
     private readonly config: MainProcessConfig,
     private readonly navigation: ExternalNavigationService,
     private readonly rendererEvents: RendererEventService,
+    private readonly lifecycle: { focused(): void; blurred(): void } = {
+      focused() {},
+      blurred() {},
+    },
   ) {}
 
   create(): Promise<BrowserWindow> {
@@ -52,6 +56,8 @@ export class WindowService {
       event.preventDefault();
       void this.navigation.open(url);
     });
+    window.on("focus", () => this.lifecycle.focused());
+    window.on("blur", () => this.lifecycle.blurred());
     window.on("closed", () => {
       this.rendererEvents.detach(window);
       if (this.window === window) this.window = null;

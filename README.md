@@ -6,6 +6,11 @@
 
 Lumen is a desktop AI assistant with an animated character and tools that act on your requests. Chat with it, manage tasks, start a focus timer, build flash cards, draw on a canvas, or connect services through MCP. Interactive cards open beside the conversation, with the character tucked into the corner so you can keep chatting while you work.
 
+<p align="center">
+  <img src="docs/site/public/screenshots/lumen-chat.png" alt="Lumen suggesting a morning plan in a conversation" width="340" />
+  <img src="docs/site/public/screenshots/lumen-tasks.png" alt="Lumen's task card open above the same conversation" width="340" />
+</p>
+
 This is the **Ragdoll** monorepo: home to Lumen, the React character and extension frameworks that power it, and first-party extensions.
 
 ## Documentation
@@ -19,6 +24,7 @@ Lumen’s documentation covers [getting started](docs/site/getting-started.md), 
 - **Connect your services.** Add MCP connections in Settings, sign in with OAuth or supply an access token, then choose which connections the agent may use.
 - **Search the web.** Ask for current information or research. Search citations appear as clickable source pills below the answer.
 - **Read formatted messages.** User and assistant messages support Markdown, including lists, code blocks, tables, and task lists, while assistant replies stream.
+- **Make it personal.** Lumen learns your name through conversation and can remember small preferences in a local profile, separate from chat. Review memory and control occasional check-ins under Settings → About you.
 - **Keep context between sessions.** Lumen saves conversations and tool execution history, so the agent can distinguish completed actions from interrupted work. It checks fresh state when needed.
 - **Control the character.** Ask it to smile, wink, or change its pose. Choose a character variant and visual theme in Settings.
 
@@ -39,7 +45,7 @@ The build prepares the shared packages and Electron application. `dev:chat` star
 On first launch:
 
 1. Enter your [OpenAI API key](https://platform.openai.com/api-keys) in the setup screen. Lumen validates it and stores it encrypted through the operating system's credential storage.
-2. Send a message, or use the toolbar to open an interactive card.
+2. Lumen introduces itself in chat and asks what to call you. Tell it what you need, or choose a suggestion to try your first action.
 3. Open **Settings** to change the character, manage features and connections, configure integrations, or install extensions.
 
 The current default is **GPT-5.6 Sol with low reasoning**, using the OpenAI Responses API. Model configuration lives in [`apps/chat/electron/main-process-config.ts`](apps/chat/electron/main-process-config.ts); it is not currently a Settings control. API keys are entered in the app, not a repository `.env` file.
@@ -73,7 +79,7 @@ Lumen supports HTTPS endpoints and local HTTP servers. Legacy SSE-only endpoints
 
 Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
 
-Use **Settings → Integrations** to configure Spotify. Use **Settings → Extension library** to install additional Ragdoll extensions from a GitHub repository URL. An extension must follow the Ragdoll package contract; an arbitrary GitHub project or MCP server is not an installable extension.
+Use **Settings → Extensions → Integrations** to configure Spotify. Use **Settings → Extensions → Extension library** to install additional Ragdoll extensions from a GitHub repository URL. An extension must follow the Ragdoll package contract; an arbitrary GitHub project or MCP server is not an installable extension.
 
 To build an extension, start with [`examples/extension-weather`](examples/extension-weather). The host provides storage, configuration, OAuth, notifications, and other runtime services through typed capabilities.
 

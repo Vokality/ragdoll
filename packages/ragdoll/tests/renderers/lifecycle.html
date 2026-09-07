@@ -65,13 +65,30 @@
           document.querySelectorAll("canvas").length === 1,
           "Variant replacement leaked a canvas",
         );
+        const host = document.getElementById("root");
+        host.style.transform = "scale(0.2)";
+        host.style.width = "240px";
+        host.style.height = "200px";
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        const canvas = host.querySelector("canvas");
+        const ratio = Math.min(devicePixelRatio || 1, 2);
+        check(
+          canvas.width >= 240 * ratio && canvas.height >= 200 * ratio,
+          "Portrait transform reduced the backing resolution",
+        );
+        host.style.transform = "none";
+        check(
+          canvas.width >= canvas.clientWidth * ratio,
+          "Returning from miniature left a blurry portrait",
+        );
         root.unmount();
         check(
           document.querySelectorAll("canvas").length === 0,
           "Unmount leaked a canvas",
         );
         document.getElementById("result").textContent =
-          "PASS: StrictMode, theme update, variant replacement, and unmount";
+          "PASS: StrictMode, theme update, variant replacement, transformed resizing, and unmount";
       } catch (error) {
         document.getElementById("result").textContent =
           `FAIL: ${error.message}`;

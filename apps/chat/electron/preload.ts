@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  CharacterReaction,
   ChatMessageDto,
   CharacterSettingsUpdate,
   ElectronAPI,
@@ -11,6 +12,25 @@ import type {
 import { IPC_CHANNELS } from "./electron-api.js";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  getExperience: () => ipcRenderer.invoke(IPC_CHANNELS.experience.get),
+  beginExperience: () => ipcRenderer.invoke(IPC_CHANNELS.experience.begin),
+  saveProfile: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.experience.saveProfile, input),
+  onExperienceChanged: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.experience.changed, handler);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.experience.changed, handler);
+  },
+  onCharacterReaction: (callback) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      reaction: CharacterReaction,
+    ) => callback(reaction);
+    ipcRenderer.on(IPC_CHANNELS.experience.reaction, handler);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.experience.reaction, handler);
+  },
   getConnections: () => ipcRenderer.invoke(IPC_CHANNELS.connections.list),
   saveConnection: (input) =>
     ipcRenderer.invoke(IPC_CHANNELS.connections.save, input),

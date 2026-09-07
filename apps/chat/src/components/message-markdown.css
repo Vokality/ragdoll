@@ -1,4 +1,5 @@
 .message-markdown {
+  user-select: text;
   min-width: 0;
   overflow-wrap: anywhere;
 }

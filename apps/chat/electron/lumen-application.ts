@@ -1,3 +1,6 @@
+import { UserProfileService } from "./services/user-profile-service.js";
+import { ExperienceService } from "./services/experience-service.js";
+import { PersonalAgent } from "./services/personal-agent.js";
 import { ConnectionService } from "./services/connection-service.js";
 import { ConnectionToolService } from "./services/connection-tool-service.js";
 import { SdkMcpConnectionFactory } from "./services/mcp-connection-client.js";
@@ -35,7 +38,6 @@ import { GitHubReleaseService } from "./services/github-release-service.js";
 import { createHostSchedulerCapability } from "./services/host-scheduler-capability.js";
 import { createHostTimersCapability } from "./services/host-timers-capability.js";
 import { OAuthLoopbackService } from "./services/oauth-loopback-service.js";
-import { OpenAIAgentRunner } from "./services/openai-service.js";
 import { RendererEventService } from "./services/renderer-event-service.js";
 import { WindowService } from "./services/window-service.js";
 
@@ -46,6 +48,8 @@ export class LumenApplication {
   );
   private readonly storage: StorageRepository;
   private readonly extensions;
+  private readonly profile;
+  private readonly experience;
   private readonly cards;
   private readonly connections;
   private readonly windows;
@@ -66,6 +70,15 @@ export class LumenApplication {
       createId: () => globalThis.crypto.randomUUID(),
       now: Date.now,
     });
+    this.profile = new UserProfileService(storage, () =>
+      this.rendererEvents.experienceChanged(),
+    );
+    this.experience = new ExperienceService(
+      storage,
+      () => this.chat.schedulePendingEventTurns(),
+      () => this.rendererEvents.experienceChanged(),
+      (reaction) => this.rendererEvents.characterReaction(reaction),
+    );
     const timers = createHostTimersCapability();
     const scheduler = createHostSchedulerCapability(timers);
     this.oauthRedirects = new OAuthLoopbackService(
@@ -138,12 +151,21 @@ export class LumenApplication {
       config,
       this.navigation,
       this.rendererEvents,
+      {
+        focused: () => {
+          void this.experience.focus().catch(console.error);
+        },
+        blurred: () => this.experience.blur(),
+      },
     );
     this.apiKeys = new ApiKeyService(this.storage, safeStorage);
     this.chat = new ChatApplicationService(
       this.storage,
       this.apiKeys,
-      new OpenAIAgentRunner(
+      new PersonalAgent(
+        storage,
+        this.profile,
+        this.experience,
         new ConnectionToolService(
           new WebToolService(
             new AppToolService(this.extensions, this.cards),
@@ -160,7 +182,13 @@ export class LumenApplication {
         new ToolHistoryService(this.storage),
       ),
       (conversation) => this.rendererEvents.conversationChanged(conversation),
-      (error) => console.error("Failed to process extension event turn", error),
+      (error) => {
+        console.error("Failed to process event turn", error);
+        this.experience.finished(
+          false,
+          "Lumen could not finish its check-in. Check your API key or connection and try again.",
+        );
+      },
     );
     this.unsubscribeConversationEvents = this.conversationEvents.onTurnQueued(
       () => void this.chat.schedulePendingEventTurns(),
@@ -243,6 +271,8 @@ export class LumenApplication {
     this.disposeIpc = registerIpc(
       ipcMain,
       {
+        profile: this.profile,
+        experience: this.experience,
         connections: this.connections,
         apiKeys: this.apiKeys,
         chat: this.chat,

@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import type {
+  CharacterReaction,
   ChatMessageDto,
   OAuthConnectedEvent,
   OAuthFailedEvent,
@@ -17,6 +18,13 @@ export class RendererEventService {
 
   detach(window: BrowserWindow): void {
     if (this.window === window) this.window = null;
+  }
+
+  experienceChanged(): void {
+    this.send(IPC_CHANNELS.experience.changed);
+  }
+  characterReaction(reaction: CharacterReaction): void {
+    this.send(IPC_CHANNELS.experience.reaction, reaction);
   }
 
   functionCall(name: string, args: Record<string, unknown>): void {

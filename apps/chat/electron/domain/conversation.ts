@@ -43,6 +43,24 @@ export const extensionConversationEventSchema = z
   })
   .strict();
 
+export const appConversationEventSchema = extensionConversationEventSchema
+  .omit({ extensionId: true, requiredToolName: true })
+  .extend({
+    kind: z.literal("app-event"),
+    type: z.enum(["app.onboarding", "app.focused"]),
+  });
+export type AppConversationEvent = z.infer<typeof appConversationEventSchema>;
+export type AgentConversationEvent =
+  ExtensionConversationEvent | AppConversationEvent;
+export function isAgentConversationEvent(
+  entry: ConversationEntry,
+): entry is AgentConversationEvent {
+  return (
+    "kind" in entry &&
+    (entry.kind === "extension-event" || entry.kind === "app-event")
+  );
+}
+
 export const toolCallSchema = z
   .object({
     id: z.string().min(1),
@@ -93,6 +111,7 @@ export type ToolExecutionOrigin = z.infer<typeof toolExecutionOriginSchema>;
 export const conversationEntrySchema = z.union([
   conversationMessageSchema,
   extensionConversationEventSchema,
+  appConversationEventSchema,
   toolExecutionSchema,
 ]);
 

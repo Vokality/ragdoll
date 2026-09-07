@@ -1,11 +1,11 @@
 import type { AgentResponse } from "../electron-api.js";
 import type { ChatMessageDto, OperationResult } from "../electron-api.js";
 import {
-  isExtensionConversationEvent,
+  isAgentConversationEvent,
   projectVisibleConversation,
   type ConversationEntry,
   type ConversationMessage,
-  type ExtensionConversationEvent,
+  type AgentConversationEvent,
 } from "../domain/conversation.js";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 import type { AgentRunner } from "./openai-service.js";
@@ -158,9 +158,8 @@ export class ChatApplicationService {
       if (!job) return;
 
       const trigger = data.conversation.find(
-        (entry): entry is ExtensionConversationEvent =>
-          isExtensionConversationEvent(entry) &&
-          entry.id === job.triggerEventId,
+        (entry): entry is AgentConversationEvent =>
+          isAgentConversationEvent(entry) && entry.id === job.triggerEventId,
       );
       if (!trigger) {
         throw new Error(
@@ -168,11 +167,19 @@ export class ChatApplicationService {
         );
       }
 
-      const outcome = await this.agent.runEventTurn(
-        await this.apiKeys.getKey(),
-        data.conversation,
-        trigger,
-      );
+      const abort = new AbortController();
+      this.activeUserTurn = abort;
+      let outcome;
+      try {
+        outcome = await this.agent.runEventTurn(
+          await this.apiKeys.getKey(),
+          data.conversation,
+          trigger,
+          abort.signal,
+        );
+      } finally {
+        if (this.activeUserTurn === abort) this.activeUserTurn = null;
+      }
       const completed = await this.storage.update((draft) => {
         if (outcome.disposition === "respond") {
           draft.conversation.push({
@@ -180,6 +187,9 @@ export class ChatApplicationService {
             content: outcome.content,
             ...(outcome.sources ? { sources: outcome.sources } : {}),
           });
+        }
+        if (trigger.kind === "app-event" && trigger.type === "app.onboarding") {
+          draft.experience.introduced = true;
         }
         draft.pendingAgentTurns = draft.pendingAgentTurns.filter(
           (pending) => pending.triggerEventId !== trigger.id,

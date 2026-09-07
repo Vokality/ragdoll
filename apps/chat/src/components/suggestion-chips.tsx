@@ -2,24 +2,40 @@ import type { CSSProperties } from "react";
 
 interface SuggestionChipsProps {
   onPick: (prompt: string) => void;
+  slots: readonly string[];
 }
 
-const SUGGESTIONS: ReadonlyArray<{ label: string; prompt: string }> = [
-  { label: "What can you do?", prompt: "What can you do?" },
-  {
-    label: "Start a focus timer",
-    prompt: "Start a 25 minute focus timer for me.",
-  },
-  { label: "Play tic-tac-toe", prompt: "Let's play a game of tic-tac-toe." },
-];
-
-/** First-run hints that teach what Lumen (and its extensions) can do. */
-export function SuggestionChips({ onPick }: SuggestionChipsProps) {
+/** Everyday invitations; actions still run through the agent after a user picks one. */
+export function SuggestionChips({ onPick, slots }: SuggestionChipsProps) {
+  const suggestions = [
+    ...(slots.includes("tasks.main")
+      ? [
+          {
+            label: "Plan my day",
+            prompt:
+              "Help me plan my day. Show my tasks and help me pick a priority.",
+          },
+        ]
+      : []),
+    ...(slots.includes("pomodoro.main")
+      ? [
+          {
+            label: "Help me focus",
+            prompt: "Start a 25 minute focus timer for me.",
+          },
+        ]
+      : []),
+    {
+      label: "Think it through",
+      prompt:
+        "I'd like to think something through with you. Ask me what's on my mind.",
+    },
+  ];
   return (
-    <div style={styles.container} className="animate-fadeIn">
-      <p style={styles.caption}>Say hello, or try one of these</p>
-      <div style={styles.chips}>
-        {SUGGESTIONS.map((suggestion, index) => (
+    <div style={styles.container} className="suggestion-chips animate-fadeIn">
+      <p style={styles.caption}>What would help today?</p>
+      <div className="suggestion-options" style={styles.chips}>
+        {suggestions.map((suggestion, index) => (
           <button
             key={suggestion.label}
             type="button"
@@ -44,6 +60,10 @@ const styles: Record<string, CSSProperties> = {
     padding: "0 20px 8px",
     position: "relative",
     zIndex: 1,
+    flexShrink: 0,
+    width: "100%",
+    maxWidth: "var(--chat-shell-width)",
+    alignSelf: "center",
   },
   caption: {
     fontSize: "12px",
@@ -52,8 +72,6 @@ const styles: Record<string, CSSProperties> = {
   },
   chips: {
     display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "center",
     gap: "8px",
   },
 };

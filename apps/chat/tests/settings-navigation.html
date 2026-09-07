@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Settings navigation</title>
+  </head>
+  <body>
+    <button id="opener">Open settings</button>
+    <p id="result">Running…</p>
+    <div id="root"></div>
+    <script type="module">
+      import React, { act, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import { SettingsModal } from "../src/components/settings-modal.tsx";
+      import "../src/styles/global.css";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const check = (ok, message) => {
+        if (!ok) throw new Error(message);
+      };
+      const root = createRoot(document.getElementById("root"));
+      let failOverview = false;
+      let overviewGate = null;
+      const service = {
+        loadOverview: async () => {
+          if (failOverview) throw new Error("Extensions could not be loaded");
+          if (overviewGate) await overviewGate.promise;
+          return {
+            available: [],
+            builtIn: [],
+            configurable: [],
+            disabled: [],
+            installed: [],
+          };
+        },
+      };
+      function Fixture() {
+        const [open, setOpen] = useState(true);
+        return React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(
+            "button",
+            { id: "reopen", onClick: () => setOpen(true) },
+            "Reopen",
+          ),
+          React.createElement(SettingsModal, {
+            isOpen: open,
+            onClose: () => setOpen(false),
+            service,
+            experience: {},
+            connections: {},
+            currentTheme: "default",
+            currentVariant: "human",
+            onThemeChange: () => {},
+            onVariantChange: () => {},
+            onClearConversation: () => {},
+            onChangeApiKey: () => {},
+          }),
+        );
+      }
+      const visible = (selector) =>
+        [...document.querySelectorAll(selector)].filter((node) =>
+          node.checkVisibility(),
+        );
+      const click = async (selector) => {
+        const button = visible(selector)[0];
+        check(button, `Missing ${selector}`);
+        await act(async () => button.click());
+      };
+      const title = () =>
+        document.querySelector("dialog[open]")?.getAttribute("aria-label");
+      try {
+        document.getElementById("opener").focus();
+        await act(async () =>
+          root.render(
+            React.createElement(
+              React.StrictMode,
+              null,
+              React.createElement(Fixture),
+            ),
+          ),
+        );
+        check(title() === "Settings", "Settings did not open at root");
+        check(
+          visible(".settings-menu-row").length === 6,
+          "Root is not condensed",
+        );
+        check(visible("input").length === 0, "Detail forms mounted on root");
+        await click('[data-settings-page="appearance"]');
+        check(title() === "Appearance", "Appearance route missing");
+        check(
+          document.activeElement.tagName === "H2",
+          "Detail heading not focused",
+        );
+        await click('[aria-label="Back"]');
+        check(
+          document.activeElement.dataset.settingsPage === "appearance",
+          "Back did not restore menu focus",
+        );
+        await click('[data-settings-page="extensions"]');
+        check(
+          visible(".settings-menu-row").length === 3,
+          "Extensions submenu missing",
+        );
+        await click('[data-settings-page="library"]');
+        const input = visible("input")[0];
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          ).set.call(input, "https://github.com/example/draft");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await click('[aria-label="Back"]');
+        check(title() === "Extensions", "Library back skipped parent");
+        await click('[data-settings-page="library"]');
+        check(
+          visible("input")[0].value === "https://github.com/example/draft",
+          "Navigation discarded draft",
+        );
+        const cancel = new Event("cancel", { cancelable: true });
+        await act(async () =>
+          document.querySelector("dialog[open]").dispatchEvent(cancel),
+        );
+        check(
+          cancel.defaultPrevented && title() === "Extensions",
+          "Escape did not navigate back",
+        );
+        await click('[aria-label="Close Settings"]');
+        check(
+          !document.querySelector("dialog"),
+          "Close did not unmount settings",
+        );
+        check(
+          document.activeElement.id === "opener",
+          "Close lost original focus",
+        );
+        await click("#reopen");
+        check(title() === "Settings", "Reopen retained old route");
+        await click('[data-settings-page="extensions"]');
+        await click('[data-settings-page="library"]');
+        check(
+          visible("input")[0].value === "",
+          "Closed settings retained discarded draft",
+        );
+        await click('[aria-label="Close Settings"]');
+        failOverview = true;
+        await click("#reopen");
+        await click('[data-settings-page="extensions"]');
+        await click('[data-settings-page="integrations"]');
+        check(
+          visible('[role="alert"]')[0]?.textContent.includes(
+            "Extensions could not be loaded",
+          ),
+          "Failed load left an empty settings page",
+        );
+        failOverview = false;
+        overviewGate = Promise.withResolvers();
+        await click('[role="alert"] button');
+        check(
+          visible('[role="status"]')[0]?.textContent === "Loading extensions…",
+          "Retry did not show actual loading",
+        );
+        await act(async () => overviewGate.resolve());
+        check(
+          !visible('[role="alert"]').length &&
+            !visible('[role="status"]').length,
+          "Completed load retained a stale status",
+        );
+        check(
+          visible(".settings-description")[0]?.textContent.includes(
+            "No integrations",
+          ),
+          "Empty integration state missing",
+        );
+        await act(async () => root.unmount());
+        document.getElementById("result").textContent =
+          "PASS: settings hierarchy, focus, Escape, draft preservation and reset";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.stack ?? error}`;
+      }
+    </script>
+  </body>
+</html>

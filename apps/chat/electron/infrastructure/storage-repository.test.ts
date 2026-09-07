@@ -15,6 +15,18 @@ describe("storageSchema", () => {
         ...DEFAULT_CHARACTER_SETTINGS,
         disabledExtensions: [],
       },
+      profile: {
+        name: null,
+        nameDeclined: false,
+        notes: [],
+        checkInsEnabled: true,
+        revision: 0,
+      },
+      experience: {
+        introduced: false,
+        firstSuccess: null,
+        lastFocusCheckInAt: 0,
+      },
       conversation: [],
       pendingAgentTurns: [],
       connections: [],

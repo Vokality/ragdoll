@@ -1,3 +1,4 @@
+import type { ExperienceService } from "../application/experience-service";
 import type { ConnectionManagementService } from "../application/connection-management-service";
 import {
   useState,
@@ -28,6 +29,7 @@ import type {
 } from "../../electron/electron-api";
 
 interface ChatScreenProps {
+  experience: ExperienceService;
   onLogout: () => void;
   chatService: ChatService;
   characterCommands: CharacterCommandService;
@@ -38,6 +40,7 @@ interface ChatScreenProps {
 }
 
 export function ChatScreen({
+  experience,
   onLogout,
   chatService,
   characterCommands,
@@ -56,7 +59,7 @@ export function ChatScreen({
     settings,
     visibleMessages,
     isStreaming,
-    isLoading,
+    isLoading: isChatLoading,
     error,
     actions: {
       sendMessage: sendChatMessage,
@@ -68,6 +71,23 @@ export function ChatScreen({
     },
     subscribeToFunctionCalls,
   } = useChatApplication(chatService);
+
+  const personal = useSyncExternalStore(
+    experience.subscribe,
+    experience.getSnapshot,
+  );
+  const isLoading = isChatLoading || personal?.busy === true;
+  useEffect(() => {
+    if (!controller) return;
+    const unsubscribe = experience.reactions((reaction) =>
+      characterCommands.react(controller, reaction),
+    );
+    const stop = experience.start(reportError);
+    return () => {
+      unsubscribe();
+      stop();
+    };
+  }, [experience, characterCommands, controller, reportError]);
 
   // Get extension slots from extensions
   const extensionSlots = useExtensionSlots(extensionSlotService);
@@ -106,18 +126,11 @@ export function ChatScreen({
 
       setDismissedError(null);
 
-      if (controller) {
-        controller.setMood("thinking", 0.3);
-      }
-
       const result = await sendChatMessage(message);
 
-      if (!result.success && controller) {
-        controller.setMood("sad", 0.3);
-      }
       return result.success;
     },
-    [controller, isLoading, sendChatMessage],
+    [isLoading, sendChatMessage],
   );
 
   // Cmd/Ctrl+, opens settings — the platform convention for preferences.
@@ -161,12 +174,12 @@ export function ChatScreen({
   const visibleError = error && error !== dismissedError ? error : null;
 
   return (
-    <div style={styles.container}>
+    <div className="chat-screen" style={styles.container}>
       <div className="app-atmosphere" />
       <div className="ambient-glow chat-character-glow" aria-hidden="true" />
       <div style={styles.dragRegion} className="drag-region" />
 
-      <header style={styles.header}>
+      <header className="chat-header" style={styles.header}>
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}
@@ -224,18 +237,40 @@ export function ChatScreen({
         onEventSubscriberError={reportError}
       />
 
-      {visibleMessages.length === 0 && !isLoading && (
-        <SuggestionChips onPick={(prompt) => void handleSendMessage(prompt)} />
+      {personal?.error && !isLoading && (
+        <div className="banner-error" role="alert">
+          <span>{personal.error}</span>
+          <button
+            className="chip"
+            onClick={() => void experience.retry().catch(reportError)}
+          >
+            Try again
+          </button>
+        </div>
       )}
+      {(visibleMessages.length === 0 || personal?.needsFirstAction) &&
+        !activeSlot &&
+        !visibleError &&
+        !personal?.error &&
+        !isLoading && (
+          <SuggestionChips
+            slots={visibleSlots.map((slot) => slot.id)}
+            onPick={(prompt) => void handleSendMessage(prompt)}
+          />
+        )}
 
       <ChatInput
         onSend={handleSendMessage}
-        onStop={() => void stopStreaming()}
+        onStop={() => {
+          if (isChatLoading) void stopStreaming();
+          else void experience.cancel().catch(reportError);
+        }}
         isBusy={isLoading}
         placeholder="Message Lumen…"
       />
 
       <SettingsModal
+        experience={experience}
         connections={connections}
         service={extensions}
         isOpen={isSettingsOpen}
@@ -311,6 +346,7 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     background: "var(--bg-primary)",
     position: "relative",
+    overflow: "hidden",
   },
   dragRegion: {
     position: "absolute",
@@ -328,7 +364,8 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: "12px",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+    flexShrink: 0,
     padding: "36px 20px 12px", // Account for drag region on macOS
     position: "relative",
     zIndex: 1,
@@ -340,6 +377,10 @@ const styles: Record<string, CSSProperties> = {
   extensionDock: {
     marginLeft: "auto",
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
+    minWidth: 0,
+    overflowX: "auto",
+    padding: "3px",
+    marginRight: "-3px",
   },
 };

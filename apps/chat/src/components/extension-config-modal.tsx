@@ -8,6 +8,7 @@ import { ModalShell } from "./modal-shell";
 interface ExtensionConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onBack?: () => void;
   extensionId: string;
   extensionName: string;
   hasOAuth: boolean;
@@ -19,6 +20,7 @@ interface ExtensionConfigModalProps {
 export function ExtensionConfigModal({
   isOpen,
   onClose,
+  onBack,
   extensionId,
   extensionName,
   hasOAuth,
@@ -50,6 +52,7 @@ export function ExtensionConfigModal({
       title={`Configure ${extensionName}`}
       maxWidth={420}
       onClose={onClose}
+      onBack={onBack}
     >
       {configuration.error && (
         <div role="alert" style={styles.errorBanner}>

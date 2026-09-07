@@ -40,7 +40,7 @@ Attach it to a GitHub release. Keep the package version, runtime version, descri
 
 ## Install in Lumen
 
-Open **Settings → Extension Library**, add the GitHub repository URL, and install the extension. Configure any required fields before expecting it to activate. An installed extension's tools become available through the host; any visible slots can be opened through the toolbar or agent card controls.
+Open **Settings → Extensions → Extension library**, add the GitHub repository URL, and install the extension. Configure any required fields before expecting it to activate. An installed extension's tools become available through the host; any visible slots can be opened through the toolbar or agent card controls.
 
 Extension packages execute code inside the host. Install packages from authors you trust.
 

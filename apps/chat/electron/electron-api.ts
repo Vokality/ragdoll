@@ -161,7 +161,55 @@ export interface ConnectionInfo extends ConnectionRecord {
   error?: string;
 }
 
+export const userProfileSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).nullable().default(null),
+    nameDeclined: z.boolean().default(false),
+    notes: z
+      .array(
+        z
+          .object({ id: z.uuid(), text: z.string().trim().min(1).max(240) })
+          .strict(),
+      )
+      .max(8)
+      .default([]),
+    checkInsEnabled: z.boolean().default(true),
+    revision: z.number().int().nonnegative().default(0),
+  })
+  .strict();
+export type UserProfile = z.infer<typeof userProfileSchema>;
+export const profileEditSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).nullable(),
+    notes: z
+      .array(
+        z
+          .object({ id: z.uuid(), text: z.string().trim().min(1).max(240) })
+          .strict(),
+      )
+      .max(8),
+    checkInsEnabled: z.boolean(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ProfileEdit = z.infer<typeof profileEditSchema>;
+export interface ExperienceSnapshot {
+  profile: UserProfile;
+  needsFirstAction: boolean;
+  busy: boolean;
+  error: string | null;
+}
+export type CharacterReaction =
+  "working" | "completed" | "failed" | "welcome" | "timer-completed";
+
 export const IPC_CHANNELS = {
+  experience: {
+    get: "experience:get",
+    begin: "experience:begin",
+    saveProfile: "experience:save-profile",
+    changed: "experience:changed",
+    reaction: "experience:reaction",
+  },
   auth: {
     hasKey: "auth:has-key",
     setKey: "auth:set-key",
@@ -267,6 +315,14 @@ export interface ChatMessageDto {
 }
 
 export interface ElectronAPI {
+  getExperience(): Promise<ExperienceSnapshot>;
+  beginExperience(): Promise<void>;
+  saveProfile(input: ProfileEdit): Promise<void>;
+  onExperienceChanged(callback: () => void): () => void;
+  onCharacterReaction(
+    callback: (reaction: CharacterReaction) => void,
+  ): () => void;
+
   getConnections(): Promise<ConnectionInfo[]>;
   saveConnection(input: ConnectionSave): Promise<ConnectionInfo>;
   connectConnection(id: string): Promise<OperationResult>;

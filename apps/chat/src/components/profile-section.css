@@ -1,0 +1,85 @@
+.profile-section {
+  display: grid;
+  gap: 12px;
+}
+.profile-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+.profile-section p,
+.profile-section li {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.profile-section fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.profile-section label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.profile-section input:not([type="checkbox"]),
+.profile-section textarea {
+  width: 100%;
+  padding: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.profile-note {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.profile-section .profile-check-ins {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-section ul {
+  padding-left: 18px;
+}
+.profile-section li + li {
+  margin-top: 6px;
+}
+.profile-section button {
+  width: auto;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.profile-section > button {
+  justify-self: start;
+}
+.profile-section textarea {
+  resize: vertical;
+  min-height: 64px;
+  max-height: 180px;
+}
+.profile-section [role="alert"] {
+  color: var(--error);
+}
+.profile-check-ins input {
+  accent-color: var(--accent);
+}

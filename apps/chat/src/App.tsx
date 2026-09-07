@@ -57,6 +57,7 @@ export function App({ services }: AppProps) {
 
   return (
     <ChatScreen
+      experience={services.experience}
       chatService={services.chat}
       characterCommands={services.characterCommands}
       extensionSlots={services.extensionSlots}

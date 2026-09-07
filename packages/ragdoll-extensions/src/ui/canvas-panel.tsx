@@ -105,7 +105,16 @@ export function CanvasPanel({ document }: { document: CanvasDocument }) {
             fontSize: 12,
           }}
         >
-          Ask me to draw something
+          <span
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              background: "var(--bg-secondary, #1e293b)",
+              color: "var(--text-primary, #f1f5f9)",
+            }}
+          >
+            Ask me to draw something
+          </span>
         </span>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { ExperienceService } from "./experience-service";
 import { ConnectionManagementService } from "./connection-management-service";
 import {
   DEFAULT_CHARACTER_SETTINGS,
@@ -12,6 +13,7 @@ import { SetupService } from "./setup-service";
 import { createElectronChatGateway } from "../infrastructure/electron-chat-gateway";
 
 export interface RendererServices {
+  experience: ExperienceService;
   app: AppService;
   setup: SetupService;
   chat: ChatService;
@@ -27,6 +29,7 @@ export function createRendererServices(api: ElectronAPI): RendererServices {
     console.error("Renderer service failed", error);
   };
   return {
+    experience: new ExperienceService(api),
     app: new AppService(api),
     setup: new SetupService(api),
     chat: new ChatService(

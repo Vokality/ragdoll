@@ -394,8 +394,12 @@ button:disabled {
 
 /* Error banner */
 .banner-error {
+  flex-shrink: 0;
+  max-height: 96px;
+  overflow: auto;
+  overflow-wrap: anywhere;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin: 0 16px;
   padding: 10px 14px;
@@ -405,6 +409,11 @@ button:disabled {
   border-radius: var(--radius-md);
   font-size: 13px;
   animation: bannerIn var(--duration-normal) var(--ease-spring) both;
+}
+
+.banner-error > svg,
+.banner-error .dismiss {
+  flex-shrink: 0;
 }
 
 .banner-error .dismiss {
@@ -455,6 +464,7 @@ button:disabled {
 
 .chat-textarea {
   flex: 1;
+  min-width: 0;
   resize: none;
   border: none;
   background: transparent;
@@ -561,6 +571,7 @@ button:disabled {
    content change, which makes streaming text visibly flash. */
 /* Fade scrolling messages into the surrounding surface without covering chat. */
 .conversation-scroller {
+  overflow-anchor: none;
   mask-image: linear-gradient(
     to bottom,
     transparent,
@@ -571,7 +582,7 @@ button:disabled {
 }
 
 .bubble {
-  max-width: 320px;
+  max-width: min(100%, 380px);
   min-width: 80px;
   padding: 10px 14px;
   font-family: var(--font-sans);
@@ -1060,14 +1071,15 @@ dialog.modal-card::backdrop {
   width: 100%;
   max-width: var(--chat-content-width);
   height: clamp(260px, 36vh, 320px);
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-height: 140px;
   margin-bottom: 12px;
   isolation: isolate;
 }
 .character-portrait {
   position: absolute;
-  width: 300px;
-  height: 300px;
+  width: min(300px, 100%);
+  height: min(300px, 100%);
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -1165,4 +1177,66 @@ dialog.modal-card::backdrop {
   flex-shrink: 0;
   object-fit: contain;
   border-radius: 3px;
+}
+
+.chat-content {
+  padding: 16px 20px 0;
+}
+.suggestion-options {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Keep conversation space available in compact desktop windows. */
+.chat-header > .icon-btn,
+.chat-header > .status-pill {
+  flex-shrink: 0;
+}
+.extension-dock {
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.extension-dock > div {
+  flex-shrink: 0;
+}
+.chat-content .conversation-scroller {
+  min-height: 100px;
+}
+.character-stage[data-panel-open="true"] {
+  min-height: 190px;
+}
+.character-stage[data-panel-open="true"] .character-portrait {
+  width: 300px;
+  height: 300px;
+}
+@media (max-height: 680px) {
+  .banner-error {
+    max-height: 72px;
+  }
+  .chat-textarea {
+    max-height: 84px;
+  }
+  .character-stage {
+    height: 180px;
+    margin-bottom: 4px;
+  }
+  .character-stage[data-panel-open="true"] {
+    height: 260px;
+  }
+  .suggestion-chips .suggestion-options {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 3px;
+    scrollbar-width: thin;
+  }
+  .suggestion-options .chip {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .chat-content {
+    padding-top: 4px;
+  }
 }

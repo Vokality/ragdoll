@@ -162,3 +162,19 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+
+/* Real desktop captures, shared with the repository README. */
+.product-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 28px 0 48px;
+}
+.product-gallery figure { min-width: 0; margin: 0; }
+.product-gallery figure p { margin: 0; }
+.product-gallery img { display: block; width: 100%; height: auto; border: 1px solid var(--vp-c-divider); }
+.product-gallery figcaption { margin-top: 12px; color: var(--vp-c-text-2); font-size: 13px; line-height: 1.7; }
+.product-gallery figcaption strong { color: var(--vp-c-text-1); font-weight: 500; }
+@media (max-width: 639px) {
+  .product-gallery { grid-template-columns: 1fr; gap: 28px; }
+}

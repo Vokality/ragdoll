@@ -1,3 +1,6 @@
+import type { UserProfileService } from "../services/user-profile-service.js";
+import type { ExperienceService } from "../services/experience-service.js";
+import { IPC_CHANNELS, profileEditSchema } from "../electron-api.js";
 import { registerConnectionIpc } from "./register-connection-ipc.js";
 import type { ConnectionService } from "../services/connection-service.js";
 import type { ExtensionCardService } from "../services/extension-card-service.js";
@@ -17,6 +20,8 @@ import { registerSettingsIpc } from "./register-settings-ipc.js";
 import { registerShellIpc } from "./register-shell-ipc.js";
 
 export interface IpcServices {
+  profile: UserProfileService;
+  experience: ExperienceService;
   connections: ConnectionService;
   apiKeys: ApiKeyService;
   chat: ChatApplicationService;
@@ -34,6 +39,19 @@ export function registerIpc(
 ): () => Promise<void> {
   const registrar = new IpcRegistrar(ipcMain, authorize);
   try {
+    registrar.handle(IPC_CHANNELS.experience.get, () =>
+      services.experience.snapshot(),
+    );
+    registrar.handle(
+      IPC_CHANNELS.experience.saveProfile,
+      (_event, input: unknown) =>
+        services.profile.edit(profileEditSchema.parse(input)),
+    );
+    registrar.handle(IPC_CHANNELS.experience.begin, async () => {
+      if (!(await services.apiKeys.hasKey()))
+        throw new Error("Add an API key before starting Lumen");
+      await services.experience.begin();
+    });
     registerConnectionIpc(registrar, services.connections);
     registerAuthIpc(registrar, services.apiKeys);
     registerChatIpc(registrar, services.chat);

@@ -1,0 +1,74 @@
+.settings-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-menu-row:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+}
+.settings-menu-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.settings-menu-row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-menu-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.settings-menu-row > span:last-child {
+  color: var(--text-secondary);
+  font-size: 22px;
+}
+.settings-pages {
+  min-width: 0;
+}
+.settings-pages > [hidden] {
+  display: none;
+}
+
+.settings-section + .settings-section {
+  margin-top: 20px;
+}
+.settings-pages .connections-section {
+  margin-bottom: 0;
+}
+
+.settings-description,
+.settings-feedback {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.settings-feedback[role="alert"] {
+  color: var(--error);
+}
+.settings-feedback button {
+  width: auto;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}

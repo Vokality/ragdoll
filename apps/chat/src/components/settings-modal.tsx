@@ -1,6 +1,14 @@
+import { ProfileSection } from "./profile-section";
+import type { ExperienceService } from "../application/experience-service";
 import { ConnectionsSection } from "./connections-section";
 import type { ConnectionManagementService } from "../application/connection-management-service";
-import { useId, useState, type CSSProperties } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { ExtensionConfigModal } from "./extension-config-modal";
 import { useTimedConfirm } from "../hooks/use-timed-confirm";
 import type {
@@ -12,9 +20,12 @@ import type { ExtensionManagementService } from "../application/extension-manage
 import { useExtensionSettings } from "../hooks/use-extension-settings";
 import { ModalShell } from "./modal-shell";
 
+import "./settings-modal.css";
+
 type ExtensionSettings = ReturnType<typeof useExtensionSettings>;
 
 interface SettingsModalProps {
+  experience: ExperienceService;
   isOpen: boolean;
   onClose: () => void;
   currentTheme: CharacterThemeId;
@@ -47,8 +58,84 @@ const VARIANTS: ReadonlyArray<{
   { id: "einstein", name: "Einstein", description: "Wild hair & mustache" },
 ];
 
-export function SettingsModal({
-  isOpen,
+type SettingsPage =
+  | "home"
+  | "profile"
+  | "appearance"
+  | "connections"
+  | "extensions"
+  | "features"
+  | "integrations"
+  | "library"
+  | "key"
+  | "data";
+const SETTINGS_PAGES: Record<
+  SettingsPage,
+  { title: string; description: string; parent: SettingsPage }
+> = {
+  home: { title: "Settings", description: "", parent: "home" },
+  profile: {
+    title: "About you",
+    description: "Memory and check-ins",
+    parent: "home",
+  },
+  appearance: {
+    title: "Appearance",
+    description: "Character and theme",
+    parent: "home",
+  },
+  connections: {
+    title: "Connections",
+    description: "Connected services and accounts",
+    parent: "home",
+  },
+  extensions: {
+    title: "Extensions",
+    description: "Features, integrations and library",
+    parent: "home",
+  },
+  features: {
+    title: "Features",
+    description: "Choose which extensions are active",
+    parent: "extensions",
+  },
+  integrations: {
+    title: "Integrations",
+    description: "Configure extension accounts and settings",
+    parent: "extensions",
+  },
+  library: {
+    title: "Extension library",
+    description: "Install, update and remove extensions",
+    parent: "extensions",
+  },
+  key: {
+    title: "API key",
+    description: "Manage your OpenAI key",
+    parent: "home",
+  },
+  data: {
+    title: "Chat data",
+    description: "Clear your conversation",
+    parent: "home",
+  },
+};
+const ROOT_PAGES: SettingsPage[] = [
+  "profile",
+  "appearance",
+  "connections",
+  "extensions",
+  "key",
+  "data",
+];
+const EXTENSION_PAGES: SettingsPage[] = ["features", "integrations", "library"];
+
+export function SettingsModal(props: SettingsModalProps) {
+  return props.isOpen ? <SettingsContent {...props} /> : null;
+}
+
+function SettingsContent({
+  experience,
   onClose,
   currentTheme,
   currentVariant,
@@ -59,64 +146,161 @@ export function SettingsModal({
   service,
   connections,
 }: SettingsModalProps) {
+  const [page, setPage] = useState<SettingsPage>("home");
+  const [visited, setVisited] = useState<SettingsPage[]>(["home"]);
   const [configModalExtension, setConfigModalExtension] =
     useState<ExtensionInfo | null>(null);
-  const extensions = useExtensionSettings(service, isOpen);
-
-  if (!isOpen) return null;
-
-  // If config modal is open, render only that
-  if (configModalExtension) {
-    return (
-      <ExtensionConfigModal
-        service={service}
-        isOpen={true}
-        onClose={() => setConfigModalExtension(null)}
-        extensionId={configModalExtension.id}
-        extensionName={configModalExtension.name}
-        hasOAuth={configModalExtension.hasOAuth}
-        hasConfig={configModalExtension.hasConfigSchema}
-        onConfigured={() => {
-          void extensions.refresh();
-        }}
-      />
+  const extensions = useExtensionSettings(service, true);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const returnPage = useRef<SettingsPage | null>(null);
+  const navigate = (next: SettingsPage) => {
+    setVisited((previous) =>
+      previous.includes(next) ? previous : [...previous, next],
     );
-  }
-
+    setPage(next);
+  };
+  const back = () => {
+    returnPage.current = page;
+    navigate(SETTINGS_PAGES[page].parent);
+  };
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    content?.parentElement?.scrollTo(0, 0);
+    if (returnPage.current) {
+      content
+        ?.querySelector<HTMLButtonElement>(
+          `button[data-settings-page="${returnPage.current}"]`,
+        )
+        ?.focus();
+      returnPage.current = null;
+    }
+  }, [page]);
+  const menu = (pages: SettingsPage[]) => (
+    <nav className="settings-menu" aria-label={SETTINGS_PAGES[page].title}>
+      {pages.map((next) => (
+        <button
+          type="button"
+          className="settings-menu-row"
+          data-settings-page={next}
+          key={next}
+          onClick={() => navigate(next)}
+        >
+          <span>
+            <strong>{SETTINGS_PAGES[next].title}</strong>
+            <small>{SETTINGS_PAGES[next].description}</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
+      ))}
+    </nav>
+  );
+  const renderPage = (item: SettingsPage) => {
+    switch (item) {
+      case "home":
+        return menu(ROOT_PAGES);
+      case "extensions":
+        return menu(EXTENSION_PAGES);
+      case "profile":
+        return <ProfileSection service={experience} />;
+      case "connections":
+        return <ConnectionsSection service={connections} />;
+      case "appearance":
+        return (
+          <>
+            <OptionPickerSection
+              title="Theme"
+              options={THEMES}
+              selectedId={currentTheme}
+              onSelect={onThemeChange}
+            />
+            <OptionPickerSection
+              title="Character"
+              options={VARIANTS}
+              selectedId={currentVariant}
+              onSelect={onVariantChange}
+            />
+          </>
+        );
+      case "features":
+        return <FeatureTogglesSection extensions={extensions} />;
+      case "integrations":
+        return (
+          <IntegrationsSection
+            extensions={extensions}
+            onConfigure={setConfigModalExtension}
+          />
+        );
+      case "library":
+        return (
+          <ExtensionLibrarySection
+            extensions={extensions}
+            onConfigure={setConfigModalExtension}
+          />
+        );
+      case "key":
+        return <ApiKeySection onChangeApiKey={onChangeApiKey} />;
+      case "data":
+        return <DataSection onClearConversation={onClearConversation} />;
+    }
+  };
   return (
-    <ModalShell title="Settings" maxWidth={400} onClose={onClose}>
-      <ApiKeySection onChangeApiKey={onChangeApiKey} />
+    <>
+      <ModalShell
+        title={SETTINGS_PAGES[page].title}
+        maxWidth={400}
+        onClose={onClose}
+        onBack={page === "home" ? undefined : back}
+        closeLabel="Close Settings"
+      >
+        <div ref={contentRef} className="settings-pages">
+          {EXTENSION_PAGES.includes(page) &&
+            extensions.overviewLoad.status === "loading" && (
+              <p className="settings-feedback" role="status">
+                Loading extensions…
+              </p>
+            )}
+          {EXTENSION_PAGES.includes(page) &&
+            extensions.overviewLoad.status === "error" && (
+              <div className="settings-feedback" role="alert">
+                <p>{extensions.overviewLoad.message}</p>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void extensions.refresh()}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          {page === "features" && extensions.notice && (
+            <p className="settings-feedback" role="alert">
+              {extensions.notice.text}
+            </p>
+          )}
 
-      <ConnectionsSection service={connections} />
-
-      <OptionPickerSection
-        title="Theme"
-        options={THEMES}
-        selectedId={currentTheme}
-        onSelect={onThemeChange}
-      />
-
-      <OptionPickerSection
-        title="Character"
-        options={VARIANTS}
-        selectedId={currentVariant}
-        onSelect={onVariantChange}
-      />
-
-      <FeatureTogglesSection extensions={extensions} />
-
-      <IntegrationsSection
-        extensions={extensions}
-        onConfigure={setConfigModalExtension}
-      />
-
-      <ExtensionLibrarySection
-        extensions={extensions}
-        onConfigure={setConfigModalExtension}
-      />
-
-      <DataSection onClearConversation={onClearConversation} />
-    </ModalShell>
+          {visited.map((item) => (
+            <div key={item} hidden={page !== item}>
+              {renderPage(item)}
+            </div>
+          ))}
+        </div>
+      </ModalShell>
+      {configModalExtension && (
+        <ExtensionConfigModal
+          service={service}
+          isOpen={true}
+          onClose={onClose}
+          onBack={() => setConfigModalExtension(null)}
+          extensionId={configModalExtension.id}
+          extensionName={configModalExtension.name}
+          hasOAuth={configModalExtension.hasOAuth}
+          hasConfig={configModalExtension.hasConfigSchema}
+          onConfigured={() => {
+            void extensions.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -133,8 +317,7 @@ function ApiKeySection({ onChangeApiKey }: { onChangeApiKey: () => void }) {
   };
 
   return (
-    <section style={styles.section}>
-      <h3 style={styles.sectionTitle}>API Key</h3>
+    <section className="settings-section">
       <div style={styles.apiKeyDisplay}>
         <span style={styles.maskedKey}>API key connected</span>
         <button
@@ -169,7 +352,7 @@ function OptionPickerSection<Id extends string>({
   onSelect,
 }: OptionPickerSectionProps<Id>) {
   return (
-    <section style={styles.section}>
+    <section className="settings-section">
       <h3 style={styles.sectionTitle}>{title}</h3>
       <div style={styles.optionGrid}>
         {options.map((option) => (
@@ -194,13 +377,15 @@ function FeatureTogglesSection({
 }: {
   extensions: ExtensionSettings;
 }) {
-  if (extensions.builtIn.length === 0) return null;
+  if (extensions.builtIn.length === 0)
+    return extensions.overviewLoad.status === "ready" ? (
+      <p className="settings-description">No built-in features available.</p>
+    ) : null;
 
   const disabled = new Set(extensions.disabled);
 
   return (
-    <section style={styles.section}>
-      <h3 style={styles.sectionTitle}>Features</h3>
+    <section className="settings-section">
       <div style={styles.extensionList}>
         {extensions.builtIn.map((extension) => {
           const isDisabled = disabled.has(extension.id);
@@ -243,11 +428,15 @@ function IntegrationsSection({
   extensions: ExtensionSettings;
   onConfigure: (extension: ExtensionInfo) => void;
 }) {
-  if (extensions.configurable.length === 0) return null;
-
   return (
-    <section style={styles.section}>
-      <h3 style={styles.sectionTitle}>Integrations</h3>
+    <section className="settings-section">
+      {extensions.overviewLoad.status === "ready" &&
+        extensions.configurable.length === 0 && (
+          <p className="settings-description">
+            No integrations to configure. You can add more through the extension
+            library.
+          </p>
+        )}
       <div style={styles.extensionList}>
         {extensions.configurable.map((extension) => (
           <div key={extension.id} style={styles.extensionRow}>
@@ -282,9 +471,9 @@ function ExtensionLibrarySection({
 }) {
   const installInputId = useId();
   return (
-    <section style={styles.section}>
+    <section className="settings-section">
       <div style={styles.sectionHeader}>
-        <h3 style={styles.sectionTitle}>Extension library</h3>
+        <h3 style={styles.sectionTitle}>Manage extensions</h3>
         <button
           type="button"
           onClick={() => void extensions.checkUpdates()}
@@ -451,8 +640,11 @@ function DataSection({
   };
 
   return (
-    <section style={styles.section}>
-      <h3 style={styles.sectionTitle}>Data</h3>
+    <section className="settings-section">
+      <p className="settings-description">
+        Clear messages and recorded tool history from this device. Your saved
+        memory and extension data stay.
+      </p>
       {confirm.isArmed ? (
         <div className="animate-fadeIn" style={styles.confirmActions}>
           <button
@@ -534,9 +726,6 @@ function ErrorIcon() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  section: {
-    marginBottom: "20px",
-  },
   sectionTitle: {
     fontSize: "12px",
     fontWeight: "600",
@@ -560,8 +749,8 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
   },
   smallButton: {
-    padding: "8px 12px",
-    fontSize: "13px",
+    padding: "6px 10px",
+    fontSize: "12px",
     width: "auto",
     flexShrink: 0,
   },
@@ -606,11 +795,13 @@ const styles: Record<string, CSSProperties> = {
     minWidth: 0,
   },
   extensionName: {
+    overflowWrap: "anywhere",
     fontSize: "14px",
     fontWeight: "500",
     color: "var(--text-primary)",
   },
   extensionDescription: {
+    overflowWrap: "anywhere",
     fontSize: "11px",
     color: "var(--text-dim)",
   },
@@ -633,7 +824,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "6px",
-    padding: "8px 12px",
+    padding: "6px 10px",
     fontSize: "12px",
     flexShrink: 0,
   },
@@ -661,8 +852,9 @@ const styles: Record<string, CSSProperties> = {
   },
   installInput: {
     flex: 1,
-    padding: "10px 12px",
-    fontSize: "13px",
+    minWidth: 0,
+    padding: "8px 10px",
+    fontSize: "12px",
     color: "var(--text-primary)",
     background: "var(--bg-secondary)",
     border: "1px solid var(--border)",
@@ -670,8 +862,8 @@ const styles: Record<string, CSSProperties> = {
     outline: "none",
   },
   installButton: {
-    padding: "8px 12px",
-    fontSize: "13px",
+    padding: "6px 10px",
+    fontSize: "12px",
     flexShrink: 0,
   },
   installError: {

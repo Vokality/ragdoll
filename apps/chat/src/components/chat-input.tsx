@@ -152,6 +152,7 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     maxWidth: "var(--chat-shell-width)",
     alignSelf: "center",
+    flexShrink: 0,
     display: "flex",
     flexDirection: "column",
     gap: "6px",

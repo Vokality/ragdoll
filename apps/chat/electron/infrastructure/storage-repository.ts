@@ -4,6 +4,7 @@ import { writePrivateFile } from "./write-private-file.js";
 import { z } from "zod";
 import {
   connectionRecordSchema,
+  userProfileSchema,
   CHARACTER_THEME_IDS,
   CHARACTER_VARIANT_IDS,
   DEFAULT_CHARACTER_SETTINGS,
@@ -38,6 +39,19 @@ export const storageSchema = z
           .enum(CHARACTER_VARIANT_IDS)
           .default(DEFAULT_CHARACTER_SETTINGS.variant),
         disabledExtensions: z.array(z.string()).default([]),
+      })
+      .strict()
+      .prefault({}),
+    profile: userProfileSchema.prefault({}),
+    experience: z
+      .object({
+        introduced: z.boolean().default(false),
+        firstSuccess: z
+          .object({ toolName: z.string(), occurredAt: z.number() })
+          .strict()
+          .nullable()
+          .default(null),
+        lastFocusCheckInAt: z.number().default(0),
       })
       .strict()
       .prefault({}),

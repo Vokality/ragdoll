@@ -13,10 +13,16 @@ export interface SettingsNotice {
 
 type ExtensionOperation = "update" | "uninstall";
 
+type OverviewLoad =
+  { status: "loading" | "ready" } | { status: "error"; message: string };
+
 export function useExtensionSettings(
   service: ExtensionManagementService,
   isOpen: boolean,
 ) {
+  const [overviewLoad, setOverviewLoad] = useState<OverviewLoad>({
+    status: "loading",
+  });
   const [available, setAvailable] = useState<ExtensionInfo[]>([]);
   const [builtIn, setBuiltIn] = useState<ExtensionInfo[]>([]);
   const [configurable, setConfigurable] = useState<ExtensionInfo[]>([]);
@@ -56,6 +62,7 @@ export function useExtensionSettings(
       overview: Awaited<ReturnType<ExtensionManagementService["loadOverview"]>>,
     ) => {
       if (generation !== refreshGeneration.current) return;
+      setOverviewLoad({ status: "ready" });
       setAvailable(overview.available);
       setBuiltIn(overview.builtIn);
       setConfigurable(overview.configurable);
@@ -65,36 +72,29 @@ export function useExtensionSettings(
     [],
   );
 
-  const refresh = useCallback(async () => {
+  const loadOverview = useCallback(async () => {
     const generation = ++refreshGeneration.current;
     try {
       const overview = await service.loadOverview();
       applyOverview(generation, overview);
     } catch (error) {
       if (generation !== refreshGeneration.current) return;
-      setNotice({ tone: "error", text: getErrorMessage(error) });
+      setOverviewLoad({ status: "error", message: getErrorMessage(error) });
     }
   }, [applyOverview, service]);
 
+  const refresh = useCallback(() => {
+    setOverviewLoad({ status: "loading" });
+    return loadOverview();
+  }, [loadOverview]);
+
   useEffect(() => {
     if (!isOpen) return;
-
-    const generation = ++refreshGeneration.current;
-
-    void (async () => {
-      try {
-        const overview = await service.loadOverview();
-        applyOverview(generation, overview);
-      } catch (error) {
-        if (generation !== refreshGeneration.current) return;
-        setNotice({ tone: "error", text: getErrorMessage(error) });
-      }
-    })();
-
+    void loadOverview();
     return () => {
       refreshGeneration.current += 1;
     };
-  }, [applyOverview, isOpen, service]);
+  }, [isOpen, loadOverview]);
 
   const install = useCallback(async () => {
     const url = installUrl.trim();
@@ -185,7 +185,10 @@ export function useExtensionSettings(
       const generation = ++refreshGeneration.current;
       try {
         const next = await service.toggle(extensionId);
-        if (generation === refreshGeneration.current) setDisabled(next);
+        if (generation === refreshGeneration.current) {
+          setDisabled(next);
+          setOverviewLoad({ status: "ready" });
+        }
       } catch (error) {
         if (generation !== refreshGeneration.current) return;
         setNotice({ tone: "error", text: getErrorMessage(error) });
@@ -196,6 +199,7 @@ export function useExtensionSettings(
   );
 
   return {
+    overviewLoad,
     available,
     builtIn,
     configurable,

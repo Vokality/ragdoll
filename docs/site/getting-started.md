@@ -35,9 +35,11 @@ Use the **Electron window**, not a browser tab at the renderer URL. Credentials,
 
 Lumen validates the key and stores it encrypted through Electron's OS-backed credential storage. You do not need a repository `.env` file. Key validation does not establish access to every model; if the first request fails, check the error in chat and your access to the configured model.
 
-## Try your first task
+## Your first conversation
 
-Send:
+Lumen introduces itself and asks what to call you. Reply naturally; it remembers your preferred name in a local profile. You can skip that question and start using the app immediately.
+
+Lumen then helps you do something useful in your day. The suggestion chips offer planning, a focus session, or thinking something through. Nothing runs until you ask for it. For example, send:
 
 > Show my to-do list and add “Plan the weekend.”
 

@@ -39,6 +39,7 @@ export function ConversationBubbles({
   const scrollRef = useRef<HTMLDivElement>(null);
   // Whether the user is at (or near) the bottom. Starts pinned.
   const pinnedRef = useRef(true);
+  const viewportRef = useRef({ width: 0, height: 0 });
 
   const responses = useMemo(
     () =>
@@ -83,8 +84,36 @@ export function ConversationBubbles({
     lastMessage?.role,
   ]);
 
+  const hasConversation = messages.length > 0 || isStreaming;
+
+  // Resizing the window or opening a card changes the viewport without a new
+  // message. Keep the latest reply visible only while the reader is following it.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      viewportRef.current = {
+        width: container.clientWidth,
+        height: container.clientHeight,
+      };
+      if (pinnedRef.current) container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(container);
+    if (container.firstElementChild)
+      observer.observe(container.firstElementChild);
+    return () => observer.disconnect();
+  }, [hasConversation]);
+
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight, clientWidth } =
+      event.currentTarget;
+    // A layout-driven scroll can precede ResizeObserver. It is not the reader
+    // asking to leave the bottom of the conversation.
+    if (
+      viewportRef.current.width !== clientWidth ||
+      viewportRef.current.height !== clientHeight
+    )
+      return;
     pinnedRef.current = scrollHeight - scrollTop - clientHeight < PIN_THRESHOLD;
   };
 
@@ -158,7 +187,6 @@ export function ConversationBubbles({
 const styles: Record<string, CSSProperties> = {
   scroller: {
     flex: 1,
-    minHeight: 0,
     width: "100%",
     maxWidth: "var(--chat-content-width)",
     overflowY: "auto",

@@ -19,6 +19,9 @@ const pages = [
   "apps/chat/tests/web-citations.html",
   "apps/chat/tests/message-markdown.html",
   "apps/chat/tests/agent-progress.html",
+  "apps/chat/tests/personal-memory.html",
+  "apps/chat/tests/settings-navigation.html",
+  "apps/chat/tests/app-layout.html",
   "apps/chat/tests/extension-configuration.html",
   "apps/chat/tests/extension-settings.html",
   "apps/chat/tests/connections-settings.html",
@@ -44,8 +47,9 @@ async function run(): Promise<void> {
   for (const page of pages) {
     const window = new BrowserWindow({
       show: false,
-      width: 800,
-      height: 900,
+      width: page.endsWith("app-layout.html") ? 400 : 800,
+      height: page.endsWith("app-layout.html") ? 600 : 900,
+      useContentSize: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,

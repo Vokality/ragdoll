@@ -50,7 +50,7 @@ export function CharacterView({
   );
 
   return (
-    <div style={styles.container}>
+    <div className="chat-content" style={styles.container}>
       <div className="character-stage" data-panel-open={activeSlot !== null}>
         <div className="character-extension-card" aria-hidden={!activeSlot}>
           {activeSlot && (
@@ -90,7 +90,7 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     minHeight: 0,
     position: "relative",
-    padding: "16px 20px 0",
+
     overflow: "hidden",
   },
 };

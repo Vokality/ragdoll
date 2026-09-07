@@ -58,8 +58,9 @@ function CharacterInstance({
     const scene = new CharacterScene(canvas);
 
     const resize = () => {
-      const rect = wrapper.getBoundingClientRect();
-      scene.setSize(rect.width, rect.height);
+      // CSS transforms animate the portrait into a card. The backing buffer
+      // must follow its layout size, not the temporarily scaled screen bounds.
+      scene.setSize(wrapper.clientWidth, wrapper.clientHeight);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(wrapper);
