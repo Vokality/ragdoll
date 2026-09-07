@@ -60,6 +60,7 @@ export function App({ services }: AppProps) {
       chatService={services.chat}
       characterCommands={services.characterCommands}
       extensionSlots={services.extensionSlots}
+      connections={services.connections}
       extensions={services.extensions}
       reportError={services.reportError}
       onLogout={() => setAppState("setup-api-key")}

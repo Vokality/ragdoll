@@ -1,3 +1,4 @@
+import { ConnectionManagementService } from "./connection-management-service";
 import {
   DEFAULT_CHARACTER_SETTINGS,
   type ElectronAPI,
@@ -17,6 +18,7 @@ export interface RendererServices {
   characterCommands: CharacterCommandService;
   extensionSlots: ExtensionSlotService;
   extensions: ExtensionManagementService;
+  connections: ConnectionManagementService;
   reportError(error: unknown): void;
 }
 
@@ -34,6 +36,7 @@ export function createRendererServices(api: ElectronAPI): RendererServices {
     characterCommands: new CharacterCommandService(),
     extensionSlots: new ExtensionSlotService(api, reportError),
     extensions: new ExtensionManagementService(api),
+    connections: new ConnectionManagementService(api),
     reportError,
   };
 }

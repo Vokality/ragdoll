@@ -3,13 +3,12 @@
 ## Dependency direction
 
 ```text
-apps/chat ───────────────┐
-apps/emote ──────────────┼──> @vokality/ragdoll
-                         │
-apps/chat ───────────────┼──> first-party extensions
-                         │              │
-example weather ─────────┤              v
-                         └──> @vokality/ragdoll-extensions
+apps/chat ─────────────────────> @vokality/ragdoll
+    │
+    ├──> first-party extensions ──┐
+    │                            │
+    └────────────────────────────┼──> @vokality/ragdoll-extensions
+examples/extension-weather ──────┘
 ```
 
 The framework never imports an app or a first-party extension. Extension packages never import an app or one another. Apps compose packages and implement runtime-specific adapters.
@@ -117,13 +116,6 @@ The Electron main process owns filesystem, persistence, OAuth, notification, and
 
 The React renderer consumes only browser-safe entrypoints. It does not import the loader or Electron main-process modules.
 
-### Emote
-
-VS Code owns the extension host runtime. Emote is an MCP character host: it
-bundles the VS Code entrypoint and a standalone MCP helper that drives
-`@vokality/ragdoll` over a local Unix socket (named pipe on Windows). It does
-not load Ragdoll extensions or implement `ExtensionHostEnvironment`.
-
 ## Monorepo build
 
 The root Bun workspace uses one lockfile and a dependency catalog. Build order is explicit:
@@ -136,3 +128,7 @@ The root Bun workspace uses one lockfile and a dependency catalog. Build order i
 Each workspace cleans only its own output before compilation, preventing deleted source files from surviving in publish artifacts.
 
 `scripts/verify-architecture.ts` (run by `bun run typecheck`) checks source imports and `package.json` dependency graphs for the rules above. It skips test files, does not prove `serializeSlotState` behavior, and does not inspect Electron IPC runtime wiring beyond channel-name literals in `apps/chat`.
+
+## Lumen connections
+
+Lumen owns MCP connections independently of extensions. Configuration and agent access live in the host; credentials stay encrypted in the main process. The MCP SDK executes remote tools through Lumen’s existing Responses function-tool loop and durable history. See [Connections](docs/connections.md) for lifecycle, OAuth, settings, and supported transports.

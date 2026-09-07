@@ -35,6 +35,10 @@ export class RendererEventService {
     this.send(IPC_CHANNELS.cards.changed, slotId);
   }
 
+  connectionsChanged(): void {
+    this.send(IPC_CHANNELS.connections.changed);
+  }
+
   slotsChanged(): void {
     this.send(IPC_CHANNELS.extensions.slotsChanged);
   }

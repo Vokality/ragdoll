@@ -64,18 +64,6 @@ for (const name of dependencyNames(extensionsPackage)) {
   }
 }
 
-const emotePackage = await readPackageJson("apps/emote");
-for (const name of dependencyNames(emotePackage)) {
-  if (
-    name === "@vokality/ragdoll-extensions" ||
-    name.startsWith("@vokality/ragdoll-extension-")
-  ) {
-    violations.push(
-      `apps/emote/package.json: Emote is an MCP character host and must not depend on the extension framework or first-party extensions (${name})`,
-    );
-  }
-}
-
 const extensionPackageDirs = (
   await Array.fromAsync(
     new Bun.Glob("packages/ragdoll-extension-*/package.json").scan({
@@ -196,19 +184,6 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
         file,
         specifier,
         "the chat renderer may only consume the Electron API contract",
-      );
-    }
-
-    if (
-      normalizedFile.startsWith("apps/emote/") &&
-      (specifier === "@vokality/ragdoll-extensions" ||
-        specifier.startsWith("@vokality/ragdoll-extensions/") ||
-        specifier.startsWith("@vokality/ragdoll-extension-"))
-    ) {
-      report(
-        file,
-        specifier,
-        "Emote is an MCP character host, not a Ragdoll extension host",
       );
     }
 

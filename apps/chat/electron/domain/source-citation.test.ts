@@ -25,3 +25,9 @@ it("rejects source URLs that cannot be rendered as safe external links", () => {
     ).toBe(false);
   }
 });
+
+it("citation normalization preserves Markdown examples and image syntax", () => {
+  const content =
+    "Example: `[docs](https://example.com)`\n\n```md\nSources:\n[docs](https://example.com)\n```\n\n![Diagram](https://example.com/image.png)";
+  expect(citedResponse(content)).toEqual({ content });
+});

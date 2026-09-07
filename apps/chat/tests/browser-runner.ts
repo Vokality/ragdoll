@@ -17,8 +17,11 @@ app.on("window-all-closed", () => {});
 const pages = [
   "apps/chat/tests/smooth-text.html",
   "apps/chat/tests/web-citations.html",
+  "apps/chat/tests/message-markdown.html",
+  "apps/chat/tests/agent-progress.html",
   "apps/chat/tests/extension-configuration.html",
   "apps/chat/tests/extension-settings.html",
+  "apps/chat/tests/connections-settings.html",
   "apps/chat/tests/character-card.html",
   "apps/chat/tests/canvas-panel.html",
   "apps/chat/tests/agent-card-controls.html",

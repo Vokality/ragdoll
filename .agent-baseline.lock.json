@@ -6,10 +6,6 @@
       "sha256": "41c0b807cbc5f8d7970c66b1135906957d0b70bc618afb35fb9c30284728a219"
     },
     {
-      "source": ".github/workflows/emote-extension-publish.yml",
-      "sha256": "3750e10f333771c45ac3306c36c2328af7c51ccea0385b84078afa9ce8858c87"
-    },
-    {
       "source": ".github/workflows/release.yml",
       "sha256": "c54ff8a9bb512ae00664537719431d0089c962179acc6ef29244029cec2235ad"
     },
@@ -153,13 +149,6 @@
         "json_pointer": "/compilerOptions/strict"
       },
       "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
-    },
-    {
-      "source": {
-        "path": "apps/emote/package.json",
-        "json_pointer": "/dependencies"
-      },
-      "sha256": "00f12b219cc39c4dd8efbb0c9a7ad9d9b56758dee344a410a082719b012fe293"
     },
     {
       "source": {

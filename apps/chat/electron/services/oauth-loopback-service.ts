@@ -7,6 +7,7 @@ export interface OAuthCallbackResult {
   code: string | null;
   error: string | null;
   state: string | null;
+  issuer?: string | null;
 }
 
 export interface OAuthRedirectSession {
@@ -79,6 +80,9 @@ export class OAuthLoopbackService implements OAuthRedirectService {
         code: requestUrl.searchParams.get("code"),
         error: requestUrl.searchParams.get("error"),
         state: requestUrl.searchParams.get("state"),
+        ...(requestUrl.searchParams.has("iss")
+          ? { issuer: requestUrl.searchParams.get("iss") }
+          : {}),
       });
       this.timers.clearTimeout(timeout);
       // Let the callback page finish sending before closing its connection.

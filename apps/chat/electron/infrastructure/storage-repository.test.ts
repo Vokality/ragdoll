@@ -17,6 +17,8 @@ describe("storageSchema", () => {
       },
       conversation: [],
       pendingAgentTurns: [],
+      connections: [],
+      connectionCredentials: {},
       extensionHost: {},
     });
   });

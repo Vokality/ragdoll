@@ -1,3 +1,5 @@
+import { ConnectionsSection } from "./connections-section";
+import type { ConnectionManagementService } from "../application/connection-management-service";
 import { useId, useState, type CSSProperties } from "react";
 import { ExtensionConfigModal } from "./extension-config-modal";
 import { useTimedConfirm } from "../hooks/use-timed-confirm";
@@ -22,6 +24,7 @@ interface SettingsModalProps {
   onClearConversation: () => void;
   onChangeApiKey: () => void;
   service: ExtensionManagementService;
+  connections: ConnectionManagementService;
 }
 
 const THEMES: ReadonlyArray<{
@@ -54,6 +57,7 @@ export function SettingsModal({
   onClearConversation,
   onChangeApiKey,
   service,
+  connections,
 }: SettingsModalProps) {
   const [configModalExtension, setConfigModalExtension] =
     useState<ExtensionInfo | null>(null);
@@ -82,6 +86,8 @@ export function SettingsModal({
   return (
     <ModalShell title="Settings" maxWidth={400} onClose={onClose}>
       <ApiKeySection onChangeApiKey={onChangeApiKey} />
+
+      <ConnectionsSection service={connections} />
 
       <OptionPickerSection
         title="Theme"

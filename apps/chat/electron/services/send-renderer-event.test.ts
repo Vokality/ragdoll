@@ -19,10 +19,10 @@ it("finishes and persists a streamed response after its renderer closes", async 
     { getKey: async () => "key" },
     {
       runUserTurn: async (_key, _history, stream) => {
-        stream("Hello");
+        stream.onText("Hello");
         destroyed = true;
-        stream(" there");
-        return { content: "Hello there" };
+        stream.onText(" there");
+        await stream.onMessage({ content: "Hello there" });
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     },

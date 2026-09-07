@@ -1,3 +1,4 @@
+import { MessageMarkdown } from "./message-markdown";
 import {
   citedResponse,
   type SourceCitation,
@@ -5,6 +6,7 @@ import {
 import { SourcePills } from "./source-pills";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -38,6 +40,16 @@ export function ConversationBubbles({
   // Whether the user is at (or near) the bottom. Starts pinned.
   const pinnedRef = useRef(true);
 
+  const responses = useMemo(
+    () =>
+      messages.map((message) =>
+        message.role === "assistant"
+          ? citedResponse(message.content, message.sources)
+          : { content: message.content },
+      ),
+    [messages],
+  );
+  const lastResponse = responses.at(-1);
   const lastMessage = messages[messages.length - 1];
   const lastContent = lastMessage?.content ?? "";
 
@@ -45,17 +57,13 @@ export function ConversationBubbles({
   // network-paced bursts; it keeps draining after the stream closes.
   const liveAssistant = lastMessage?.role === "assistant" ? lastMessage : null;
   const smoothedContent = useSmoothText(
-    liveAssistant
-      ? citedResponse(liveAssistant.content, liveAssistant.sources).content
-      : "",
+    liveAssistant ? (lastResponse?.content ?? "") : "",
     messages.length,
     isStreaming && liveAssistant !== null,
   );
   const isRevealing =
     liveAssistant !== null &&
-    smoothedContent.length <
-      citedResponse(liveAssistant.content, liveAssistant.sources).content
-        .length;
+    smoothedContent.length < (lastResponse?.content.length ?? 0);
 
   // Follow new content only while the user hasn't scrolled up to read;
   // their own new message always snaps the view back down.
@@ -95,7 +103,8 @@ export function ConversationBubbles({
     >
       <div style={styles.list}>
         {messages.map((message, index) => {
-          const response = citedResponse(message.content, message.sources);
+          const response = responses[index];
+          if (!response) return null;
           const isRevealTarget =
             index === messages.length - 1 && message.role === "assistant";
           const staggerDelay =
@@ -111,22 +120,19 @@ export function ConversationBubbles({
                 staggerDelay ? { animationDelay: staggerDelay } : undefined
               }
             >
-              {isRevealTarget && (isStreaming || isRevealing) ? (
-                <>
-                  {/* Screen readers get the real text as it arrives; the
-                      per-frame typewriter is visual-only. */}
-                  <span aria-hidden="true">
-                    {smoothedContent}
-                    {(isStreaming || isRevealing) && (
-                      <span className="stream-cursor">▌</span>
-                    )}
-                  </span>
-                  <span className="sr-only">{response.content}</span>
-                </>
-              ) : message.role === "assistant" ? (
-                response.content
-              ) : (
-                message.content
+              <MessageMarkdown
+                content={
+                  message.role === "user"
+                    ? message.content
+                    : isRevealTarget && (isStreaming || isRevealing)
+                      ? smoothedContent
+                      : response.content
+                }
+              />
+              {isRevealTarget && (isStreaming || isRevealing) && (
+                <span className="stream-cursor" aria-hidden="true">
+                  ▌
+                </span>
               )}
               {message.role === "assistant" && (
                 <SourcePills sources={response.sources ?? []} />

@@ -11,6 +11,24 @@ import type {
 import { IPC_CHANNELS } from "./electron-api.js";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  getConnections: () => ipcRenderer.invoke(IPC_CHANNELS.connections.list),
+  saveConnection: (input) =>
+    ipcRenderer.invoke(IPC_CHANNELS.connections.save, input),
+  connectConnection: (id) =>
+    ipcRenderer.invoke(IPC_CHANNELS.connections.connect, id),
+  disconnectConnection: (id) =>
+    ipcRenderer.invoke(IPC_CHANNELS.connections.disconnect, id),
+  setConnectionEnabled: (id, enabled) =>
+    ipcRenderer.invoke(IPC_CHANNELS.connections.setEnabled, id, enabled),
+  removeConnection: (id) =>
+    ipcRenderer.invoke(IPC_CHANNELS.connections.remove, id),
+  onConnectionsChanged: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.connections.changed, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.connections.changed, handler);
+    };
+  },
   // Auth
   hasApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.auth.hasKey),
   setApiKey: (key: string) => ipcRenderer.invoke(IPC_CHANNELS.auth.setKey, key),

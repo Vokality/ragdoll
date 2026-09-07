@@ -1,3 +1,4 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
 import { z } from "zod";
 import type {
   ConfigSchema,
@@ -96,6 +97,70 @@ export interface OAuthFailedEvent {
   error: string;
 }
 
+/** Public connection configuration; credentials never travel back to the renderer. */
+export const connectionUrlSchema = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return (
+      !url.username &&
+      !url.password &&
+      !url.hash &&
+      !url.search &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
+    );
+  }, "Use HTTPS (or local HTTP), without credentials, query parameters, or a fragment");
+
+export const connectionAuthenticationSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("none") }).strict(),
+  z.object({ type: z.literal("bearer") }).strict(),
+  z
+    .object({
+      type: z.literal("oauth"),
+      clientId: z.string().trim().min(1).optional(),
+      clientMetadataUrl: z.url({ protocol: /^https$/ }).optional(),
+      callbackPort: z.number().int().min(1024).max(65535).optional(),
+    })
+    .strict(),
+]);
+export const connectionConfigSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    serverUrl: connectionUrlSchema,
+    authentication: connectionAuthenticationSchema,
+  })
+  .strict();
+export const connectionRecordSchema = connectionConfigSchema.extend({
+  id: z.uuid(),
+  enabled: z.boolean(),
+});
+export const connectionSaveSchema = connectionConfigSchema
+  .extend({
+    id: z.uuid().optional(),
+    bearerToken: z.string().trim().min(1).max(16384).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.bearerToken && value.authentication.type !== "bearer")
+      context.addIssue({
+        code: "custom",
+        message: "Tokens require bearer authentication",
+      });
+  });
+export type ConnectionConfig = z.infer<typeof connectionConfigSchema>;
+export type ConnectionRecord = z.infer<typeof connectionRecordSchema>;
+export type ConnectionSave = z.infer<typeof connectionSaveSchema>;
+export type ConnectionStatus =
+  "disconnected" | "connecting" | "connected" | "needs_auth" | "error";
+export interface ConnectionInfo extends ConnectionRecord {
+  status: ConnectionStatus;
+  toolCount: number;
+  error?: string;
+}
+
 export const IPC_CHANNELS = {
   auth: {
     hasKey: "auth:has-key",
@@ -120,6 +185,15 @@ export const IPC_CHANNELS = {
     getActive: "cards:get-active",
     select: "cards:select",
     changed: "cards:changed",
+  },
+  connections: {
+    list: "connections:list",
+    save: "connections:save",
+    connect: "connections:connect",
+    disconnect: "connections:disconnect",
+    setEnabled: "connections:set-enabled",
+    remove: "connections:remove",
+    changed: "connections:changed",
   },
   settings: {
     get: "settings:get",
@@ -186,12 +260,21 @@ export interface UpdateCheckResult {
 }
 
 export interface ChatMessageDto {
+  phase?: AssistantPhase | null;
   sources?: SourceCitation[];
   role: "user" | "assistant";
   content: string;
 }
 
 export interface ElectronAPI {
+  getConnections(): Promise<ConnectionInfo[]>;
+  saveConnection(input: ConnectionSave): Promise<ConnectionInfo>;
+  connectConnection(id: string): Promise<OperationResult>;
+  disconnectConnection(id: string): Promise<OperationResult>;
+  setConnectionEnabled(id: string, enabled: boolean): Promise<OperationResult>;
+  removeConnection(id: string): Promise<OperationResult>;
+  onConnectionsChanged(callback: () => void): () => void;
+
   hasApiKey(): Promise<boolean>;
   setApiKey(key: string): Promise<OperationResult>;
   validateApiKey(key: string): Promise<ApiKeyValidationResult>;
@@ -266,7 +349,10 @@ export const sourceCitationSchema = z
   .strict();
 export type SourceCitation = z.infer<typeof sourceCitationSchema>;
 
+export type AssistantPhase = "commentary" | "final_answer";
+
 export interface AgentResponse {
+  phase?: AssistantPhase | null;
   content: string;
   sources?: SourceCitation[];
 }
@@ -277,22 +363,55 @@ export function citedResponse(
   sources: readonly SourceCitation[] = [],
 ): AgentResponse {
   const unique = new Map(sources.map((source) => [source.url, source]));
-  const text = content
-    .replace(
-      /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      (match, title: string, url: string) => {
-        const parsed = sourceCitationSchema.safeParse({ title, url });
-        if (!parsed.success) return match;
-        if (!unique.has(url)) unique.set(url, parsed.data);
-        return "";
-      },
-    )
-    .replace(/(?:^|\s)Sources?:\s*(?=\n|$)/gi, "")
-    .trim();
-  return unique.size
-    ? {
-        content: text.replace(/(?:^|\s)Sources?:[^\n]*$/i, "").trim(),
-        sources: [...unique.values()],
+  // Parse Markdown so citation normalization never edits fenced/inline code or images.
+  const tree = fromMarkdown(content);
+  const removals: Array<{ start: number; end: number }> = [];
+  type Node = (typeof tree.children)[number];
+  const label = (node: Node): string =>
+    "value" in node
+      ? node.value
+      : "children" in node
+        ? node.children.map(label).join("")
+        : "";
+  const visit = (node: Node): void => {
+    if (node.type === "link") {
+      const parsed = sourceCitationSchema.safeParse({
+        title: label(node),
+        url: node.url,
+      });
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      if (parsed.success && start !== undefined && end !== undefined) {
+        unique.set(parsed.data.url, unique.get(parsed.data.url) ?? parsed.data);
+        removals.push({ start, end });
+        return;
       }
-    : { content: text };
+    }
+    if ("children" in node) node.children.forEach(visit);
+  };
+  tree.children.forEach(visit);
+  if (unique.size) {
+    for (const node of tree.children) {
+      if (node.type !== "paragraph") continue;
+      for (const child of node.children) {
+        if (child.type !== "text") continue;
+        const start = child.position?.start.offset;
+        const end = child.position?.end.offset;
+        if (start !== undefined && end !== undefined) {
+          const suffix = (
+            end === content.length
+              ? /(?:^|\s)Sources?:[^\n]*$/i
+              : /(?:^|\n)Sources?:[ \t]*$/i
+          ).exec(content.slice(start, end));
+          if (suffix) removals.push({ start: start + suffix.index, end });
+        }
+      }
+    }
+  }
+  let text = content;
+  for (const { start, end } of removals.sort((a, b) => b.start - a.start))
+    text = text.slice(0, start) + text.slice(end);
+  return unique.size
+    ? { content: text.trim(), sources: [...unique.values()] }
+    : { content: text.trim() };
 }

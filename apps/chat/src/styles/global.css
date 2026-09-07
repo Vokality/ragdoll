@@ -1108,27 +1108,9 @@ dialog.modal-card::backdrop {
   transform: scale(1);
   pointer-events: auto;
 }
-.character-avatar-halo {
-  position: absolute;
-  top: 8px;
-  left: 14px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
-  opacity: 0;
-  transition: opacity 280ms ease;
-  pointer-events: none;
-  z-index: 1;
-}
-.character-stage[data-panel-open="true"] .character-avatar-halo {
-  opacity: 1;
-}
 @media (prefers-reduced-motion: reduce) {
   .character-portrait,
-  .character-extension-card,
-  .character-avatar-halo {
+  .character-extension-card {
     transition: none;
   }
 }

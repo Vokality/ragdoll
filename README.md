@@ -1,93 +1,131 @@
 <p align="center">
-  <img src="apps/chat/assets/icons/ragdoll.png" alt="Ragdoll" width="180" />
+  <img src="apps/chat/assets/icons/ragdoll.png" alt="Lumen" width="180" />
 </p>
 
-<h1 align="center">Ragdoll</h1>
+<h1 align="center">Lumen</h1>
 
-Ragdoll is a Bun monorepo for an animated React character, a host-agnostic extension framework, first-party extension packages, an Electron chat app, and the Emote VS Code extension.
+Lumen is a desktop AI assistant with an animated character and tools that act on your requests. Chat with it, manage tasks, start a focus timer, build flash cards, draw on a canvas, or connect services through MCP. Interactive cards open beside the conversation, with the character tucked into the corner so you can keep chatting while you work.
 
-## Requirements
+This is the **Ragdoll** monorepo: home to Lumen, the React character and extension frameworks that power it, and first-party extensions.
 
-- Bun 1.4.2
+## Documentation
 
-The repository declares the toolchain through `packageManager` and keeps one root `bun.lock`.
+Lumen’s documentation covers [getting started](docs/site/getting-started.md), [using the app](docs/site/using-lumen.md), [MCP connections](docs/site/mcp/index.md), and [extension development](docs/site/extensions/index.md). Read the published guides at **https://vokality.github.io/ragdoll/**. See [documentation development](docs/README.md) for local preview commands.
 
-## Setup
+## What you can do
+
+- **Chat and act.** The agent can make multiple tool calls, open and close cards, and follow up with a result. Quick requests default to a direct response; longer work can include a brief model-generated acknowledgment.
+- **Use interactive tools.** Tasks, a focus timer, flash cards, tic-tac-toe, and a drawing canvas are included. Spotify playback is available after configuring its integration.
+- **Connect your services.** Add MCP connections in Settings, sign in with OAuth or supply an access token, then choose which connections the agent may use.
+- **Search the web.** Ask for current information or research. Search citations appear as clickable source pills below the answer.
+- **Read formatted messages.** User and assistant messages support Markdown, including lists, code blocks, tables, and task lists, while assistant replies stream.
+- **Keep context between sessions.** Lumen saves conversations and tool execution history, so the agent can distinguish completed actions from interrupted work. It checks fresh state when needed.
+- **Control the character.** Ask it to smile, wink, or change its pose. Choose a character variant and visual theme in Settings.
+
+## Get started from source
+
+You need **Git**, **Bun 1.4.2**, a desktop environment that can run Electron with secure credential storage, and an **OpenAI API key** with access to the configured model. An internet connection is required for model requests and remote services.
 
 ```bash
+git clone https://github.com/Vokality/ragdoll.git
+cd ragdoll
 bun install --frozen-lockfile
 bun run build
-```
-
-Common checks:
-
-```bash
-bun run test
-bun run typecheck
-bun run lint
-```
-
-The root build is dependency-ordered: core libraries, extension packages, the example extension, then apps. Every workspace cleans its own generated output before building.
-
-## Workspaces
-
-### Libraries
-
-- `packages/ragdoll` — `@vokality/ragdoll`, the React/Three.js character framework.
-- `packages/ragdoll-extensions` — React-free extension contracts, registry, host capabilities, loader, serializable slot state, and optional React UI.
-- `packages/ragdoll-extension-character` — character control tools.
-- `packages/ragdoll-extension-tasks` — task tools, state channel, and slot.
-- `packages/ragdoll-extension-pomodoro` — focus timer tools, state channel, and slot.
-- `packages/ragdoll-extension-spotify` — Spotify tools through host-provided OAuth.
-- `packages/ragdoll-extension-tic-tac-toe` — shared-board tic-tac-toe tools, events, and slot UI.
-- `packages/ragdoll-extension-flash-cards` — deck/card tools and a typed-answer review slot.
-
-### Apps
-
-- `apps/chat` — Electron chat host (`lumen`). See [`apps/chat/README.md`](apps/chat/README.md).
-- `apps/emote` — VS Code MCP character host (React webview + Bun MCP helper). It does not load Ragdoll extensions. MCP client config is [`apps/emote/mcp-config.example.json`](apps/emote/mcp-config.example.json).
-
-### Example
-
-- `examples/extension-weather` — self-contained extension package showing the canonical package manifest and `createExtension(config)` export.
-
-## Package boundaries
-
-The extension framework has four public entrypoints:
-
-- `@vokality/ragdoll-extensions` — React-free contracts and registry.
-- `@vokality/ragdoll-extensions/loader` — discovery through host adapters.
-- `@vokality/ragdoll-extensions/slots` — React-free slot state.
-- `@vokality/ragdoll-extensions/ui` — React-only rendering helpers.
-
-First-party extensions depend only on the framework contracts. They do not import the chat app, Electron, or one another. Runtime services such as storage, IPC, notifications, config, and OAuth are injected through `ExtensionHostEnvironment`.
-
-The loader receives filesystem and module-import adapters from its host. Package metadata declares both required host capabilities and provided capability types; loading fails transactionally if either contract is false.
-
-## Development
-
-Start the Electron chat app:
-
-```bash
 bun run dev:chat
 ```
 
-Build or package Emote:
+The build prepares the shared packages and Electron application. `dev:chat` starts both the Vite renderer on `http://localhost:5173` and the Lumen desktop window. Use the desktop window: the renderer relies on Electron for credentials, storage, and tools.
+
+On first launch:
+
+1. Enter your [OpenAI API key](https://platform.openai.com/api-keys) in the setup screen. Lumen validates it and stores it encrypted through the operating system's credential storage.
+2. Send a message, or use the toolbar to open an interactive card.
+3. Open **Settings** to change the character, manage features and connections, configure integrations, or install extensions.
+
+The current default is **GPT-5.6 Sol with low reasoning**, using the OpenAI Responses API. Model configuration lives in [`apps/chat/electron/main-process-config.ts`](apps/chat/electron/main-process-config.ts); it is not currently a Settings control. API keys are entered in the app, not a repository `.env` file.
+
+### Try a few requests
+
+- “Show my to-do list and add ‘Plan the weekend.’”
+- “Start a 25-minute focus timer.”
+- “Create five flash cards for basic Spanish greetings.”
+- “Draw a simple house on the canvas.”
+- “Search for a recent NASA update and summarize it.”
+- “Close the card.”
+
+The agent uses tools to perform actions; opening a card and changing its underlying data are separate operations. You can also interact with the cards directly.
+
+## Add a connection
+
+A **connection** links Lumen to an MCP server or service account. It is independent of installed extensions.
+
+1. Open **Settings → Connections → Add connection**.
+2. Enter a connection name and a **Streamable HTTP MCP endpoint**.
+3. Choose OAuth, an access token, or no authentication, then save.
+4. Select **Connect** or **Sign in / connect**. OAuth sign-in opens your system browser. Some providers require public client settings under the optional provider configuration.
+5. Turn on the connection's switch to allow the agent to use its tools.
+
+Saving or connecting does not automatically grant agent access. **Disable** stops access but retains credentials; **Disconnect** also clears local credentials; **Remove** deletes the connection. Enabled connections reconnect in the background on subsequent launches.
+
+Lumen supports HTTPS endpoints and local HTTP servers. Legacy SSE-only endpoints and stdio servers are not supported. See [Connections](docs/connections.md) for authentication details, provider requirements, and the access model.
+
+## Extensions and cards
+
+Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
+
+Use **Settings → Integrations** to configure Spotify. Use **Settings → Extension library** to install additional Ragdoll extensions from a GitHub repository URL. An extension must follow the Ragdoll package contract; an arbitrary GitHub project or MCP server is not an installable extension.
+
+To build an extension, start with [`examples/extension-weather`](examples/extension-weather). The host provides storage, configuration, OAuth, notifications, and other runtime services through typed capabilities.
+
+## Development
+
+Run commands from the repository root. The repository uses one `bun.lock` and pins Bun through `packageManager`.
+
+| Command                                 | Purpose                                                                |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `bun run build`                         | Build libraries, extensions, the example, and apps in dependency order |
+| `bun run dev:chat`                      | Start the Lumen renderer and Electron app                              |
+| `bun run --filter lumen build:electron` | Rebuild main-process and preload code; restart Lumen afterward         |
+| `bun run test`                          | Build libraries and run workspace tests                                |
+| `bun run test:browser`                  | Run the Electron browser regression suite                              |
+| `bun run typecheck`                     | Check architecture boundaries and workspace types                      |
+| `bun run lint`                          | Lint the repository                                                    |
+| `bun run verify:packages`               | Verify packed libraries and extensions in an isolated consumer         |
+
+Renderer edits reload during development. Main-process and preload edits require a rebuild and restart; shared-library changes require rebuilding the affected packages. More details are in the [Lumen developer README](apps/chat/README.md) and [contributor guide](CONTRIBUTING.md).
+
+### Cursor Cloud
+
+After installation and building, run these in separate terminals instead of `dev:chat`:
 
 ```bash
-bun run --filter emote build
-bun run --filter emote package
+bash .cursor/start-lumen-renderer.sh
 ```
-
-Run package-specific checks with Bun workspace filters:
 
 ```bash
-bun run --filter @vokality/ragdoll-extensions test
-bun run --filter lumen typecheck
+bash .cursor/run-lumen-headless.sh
 ```
 
-Contributor workflow is in [CONTRIBUTING.md](./CONTRIBUTING.md). Agent and package-boundary rules are in [AGENTS.md](./AGENTS.md).
+The headless launcher supplies the cloud VM's keyring and graphics setup. See the [cloud instructions](AGENTS.md#cursor-cloud-specific-instructions).
+
+## Repository map
+
+| Location                                                     | Role                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`apps/chat`](apps/chat)                                     | Lumen: Electron desktop app, agent runtime, settings, connections, and extension host |
+| [`packages/ragdoll`](packages/ragdoll)                       | React/Three.js animated character framework                                           |
+| [`packages/ragdoll-extensions`](packages/ragdoll-extensions) | Extension contracts, registry, host adapters, serializable slot state, and React UI   |
+| `packages/ragdoll-extension-*`                               | First-party extensions, including the [canvas](packages/ragdoll-extension-canvas)     |
+| [`examples/extension-weather`](examples/extension-weather)   | Canonical extension package example                                                   |
+
+The character framework does not depend on apps or extensions. Shared extensions depend on the extension framework, while apps supply platform services. See [Architecture](ARCHITECTURE.md) for package boundaries and [AGENTS.md](AGENTS.md) for engineering rules.
+
+## Data and credentials
+
+Conversations, settings, tool history, and extension data are stored locally. OpenAI API keys and connection credentials are encrypted through Electron's `safeStorage`. Chat context and tool results are sent to OpenAI to produce responses; enabled remote services receive their tool requests. Lumen is not an offline assistant.
+
+Connection tokens stay in Electron's main process and are used by the MCP client, rather than included in model prompts or chat history. See [conversation events and history](docs/conversation-events.md), [internet access](docs/internet-access.md), and [host OAuth](docs/extension-host-oauth.md) for implementation details.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

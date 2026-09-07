@@ -1,3 +1,4 @@
+import type { ConnectionManagementService } from "../application/connection-management-service";
 import {
   useState,
   useSyncExternalStore,
@@ -32,6 +33,7 @@ interface ChatScreenProps {
   characterCommands: CharacterCommandService;
   extensionSlots: ExtensionSlotService;
   extensions: ExtensionManagementService;
+  connections: ConnectionManagementService;
   reportError: (error: unknown) => void;
 }
 
@@ -41,6 +43,7 @@ export function ChatScreen({
   characterCommands,
   extensionSlots: extensionSlotService,
   extensions,
+  connections,
   reportError,
 }: ChatScreenProps) {
   const [controller, setController] = useState<CharacterController | null>(
@@ -233,6 +236,7 @@ export function ChatScreen({
       />
 
       <SettingsModal
+        connections={connections}
         service={extensions}
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

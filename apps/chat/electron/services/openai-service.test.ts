@@ -1,3 +1,4 @@
+import type { AgentModelConfig } from "./openai-service.js";
 import type { AgentToolResult } from "../domain/source-citation.js";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { ToolHistoryService } from "./tool-history-service.js";
@@ -9,21 +10,26 @@ import {
 import { describe, expect, it } from "bun:test";
 import type { ToolDefinition } from "@vokality/ragdoll-extensions";
 import type {
-  ChatCompletionMessageParam,
-  ChatCompletionToolChoiceOption,
-} from "openai/resources/chat/completions";
+  ResponseInputItem,
+  ResponseCreateParamsNonStreaming,
+  ResponseOutputMessage,
+} from "openai/resources/responses/responses";
+import type { AgentResponse } from "../electron-api.js";
 import type { ExtensionConversationEvent } from "../domain/conversation.js";
 import {
   OpenAIAgentRunner,
-  type AgentCompletionSession,
-  type AgentCompletionSessionFactory,
+  type AgentResponseSession,
+  type AgentResponseSessionFactory,
   type AgentToolService,
-  type CompletionRound,
+  type PendingToolCall,
+  type AgentTurnEvents,
+  type ResponseRound,
 } from "./openai-service.js";
 
-const config = {
+const config: AgentModelConfig = {
   model: "test-model",
-  maxCompletionTokens: 500,
+  reasoningEffort: "low",
+  maxOutputTokens: 500,
   maxToolRounds: 5,
   systemPrompt: "Test prompt",
 };
@@ -43,46 +49,78 @@ function toolCall(id: string, name: string, args: Record<string, unknown>) {
   return { id, name, arguments: JSON.stringify(args) };
 }
 
-function round(...toolCalls: CompletionRound["toolCalls"]): CompletionRound {
-  return { content: "", finishReason: "tool_calls", toolCalls };
+function round(...calls: PendingToolCall[]): ResponseRound {
+  return {
+    output: calls.map((call) => ({
+      type: "function_call",
+      call_id: call.id,
+      name: call.name,
+      arguments: call.arguments,
+    })),
+  };
 }
-
-function responseRound(content: string): CompletionRound {
-  return { content, finishReason: "stop", toolCalls: [] };
+function responseMessage(
+  content: string,
+  phase: "commentary" | "final_answer" = "final_answer",
+): ResponseOutputMessage {
+  return {
+    id: crypto.randomUUID(),
+    type: "message",
+    role: "assistant",
+    status: "completed",
+    phase,
+    content: [{ type: "output_text", text: content, annotations: [] }],
+  };
 }
-
-class ScriptedCompletionSession implements AgentCompletionSession {
-  readonly toolChoices: ChatCompletionToolChoiceOption[] = [];
+function responseRound(content: string): ResponseRound {
+  return { output: content ? [responseMessage(content)] : [] };
+}
+function observe(onText: (text: string) => void = () => {}): AgentTurnEvents {
+  return { onText, onMessage: async () => {} };
+}
+class ScriptedResponseSession implements AgentResponseSession {
+  readonly toolChoices: NonNullable<
+    ResponseCreateParamsNonStreaming["tool_choice"]
+  >[] = [];
   readonly toolNames: string[][] = [];
-  readonly messages: ChatCompletionMessageParam[][] = [];
+  readonly messages: ResponseInputItem[][] = [];
 
-  constructor(private readonly rounds: CompletionRound[]) {}
+  constructor(private readonly rounds: (ResponseRound | Error)[]) {}
 
-  async complete(
-    request: Parameters<AgentCompletionSession["complete"]>[0],
-  ): Promise<CompletionRound> {
+  async respond(
+    request: Parameters<AgentResponseSession["respond"]>[0],
+  ): Promise<ResponseRound> {
     this.toolChoices.push(request.toolChoice);
     this.toolNames.push(
       request.tools.flatMap((tool) =>
-        tool.type === "function" ? [tool.function.name] : [],
+        tool.type === "function" ? [tool.name] : [],
       ),
     );
-    this.messages.push(structuredClone(request.messages));
+    this.messages.push(structuredClone(request.input));
     const next = this.rounds.shift();
     if (!next) throw new Error("No scripted completion remains");
-    if (next.content) request.onStreamingText?.(next.content);
+    if (next instanceof Error) throw next;
+    for (const item of next.output) {
+      if (item.type !== "message") continue;
+      const content = item.content
+        .map((part) => (part.type === "output_text" ? part.text : part.refusal))
+        .join("");
+      request.events?.onText(content);
+      request.signal?.throwIfAborted();
+      await request.events?.onMessage({ content, phase: item.phase });
+    }
     return next;
   }
 }
 
 function createRunner(
-  rounds: CompletionRound[],
+  rounds: (ResponseRound | Error)[],
   results: AgentToolResult[],
   storage = createInMemoryStorageRepository(),
 ): {
   storage: ReturnType<typeof createInMemoryStorageRepository>;
   runner: OpenAIAgentRunner;
-  session: ScriptedCompletionSession;
+  session: ScriptedResponseSession;
   executed: Array<{ name: string; args: Record<string, unknown> }>;
 } {
   const definitions: ToolDefinition[] = [
@@ -111,8 +149,8 @@ function createRunner(
       return result;
     },
   };
-  const session = new ScriptedCompletionSession(rounds);
-  const sessions: AgentCompletionSessionFactory = {
+  const session = new ScriptedResponseSession(rounds);
+  const sessions: AgentResponseSessionFactory = {
     create: () => session,
   };
   return {
@@ -149,7 +187,7 @@ describe("OpenAIAgentRunner event tool rounds", () => {
     expect(session.toolChoices).toEqual([
       {
         type: "function",
-        function: { name: "tic_tac_toe_place" },
+        name: "tic_tac_toe_place",
       },
     ]);
   });
@@ -177,7 +215,7 @@ describe("OpenAIAgentRunner event tool rounds", () => {
     expect(session.toolChoices).toEqual([
       {
         type: "function",
-        function: { name: "tic_tac_toe_place" },
+        name: "tic_tac_toe_place",
       },
       "required",
     ]);
@@ -186,9 +224,9 @@ describe("OpenAIAgentRunner event tool rounds", () => {
       "lumen_event_silent",
     ]);
     expect(session.messages[1]).toContainEqual({
-      role: "tool",
-      tool_call_id: "place-1",
-      content: JSON.stringify({
+      type: "function_call_output",
+      call_id: "place-1",
+      output: JSON.stringify({
         args: { row: 1, col: 1 },
         result: { success: true, data: { moveIndex: 2 } },
       }),
@@ -233,18 +271,18 @@ describe("OpenAIAgentRunner event tool rounds", () => {
     expect(session.toolChoices).toEqual([
       {
         type: "function",
-        function: { name: "tic_tac_toe_place" },
+        name: "tic_tac_toe_place",
       },
       {
         type: "function",
-        function: { name: "tic_tac_toe_place" },
+        name: "tic_tac_toe_place",
       },
       "required",
     ]);
     expect(session.messages[1]).toContainEqual({
-      role: "tool",
-      tool_call_id: "place-1",
-      content: JSON.stringify({
+      type: "function_call_output",
+      call_id: "place-1",
+      output: JSON.stringify({
         args: { row: 0, col: 0 },
         result: {
           success: false,
@@ -291,8 +329,8 @@ describe("OpenAIAgentRunner user tool rounds", () => {
     );
 
     await expect(
-      runner.runUserTurn("key", [], () => undefined),
-    ).resolves.toEqual({ content: "I moved to the center." });
+      runner.runUserTurn("key", [], observe()),
+    ).resolves.toBeUndefined();
     expect(executed).toEqual([
       { name: "tic_tac_toe_place", args: { row: 0, col: 0 } },
       { name: "tic_tac_toe_place", args: { row: 1, col: 1 } },
@@ -301,7 +339,7 @@ describe("OpenAIAgentRunner user tool rounds", () => {
       "auto",
       {
         type: "function",
-        function: { name: "tic_tac_toe_place" },
+        name: "tic_tac_toe_place",
       },
       "auto",
     ]);
@@ -318,24 +356,24 @@ describe("user-turn text recovery", () => {
       ],
       [{ success: true }],
     );
-    expect(await runner.runUserTurn("key", [], () => undefined)).toEqual({
-      content: "Done.",
-    });
+    expect(await runner.runUserTurn("key", [], observe())).toBeUndefined();
     expect(executed).toHaveLength(1);
     expect(session.toolChoices).toEqual(["auto", "auto", "none"]);
     expect(session.toolNames[2]).toEqual([]);
-    expect(session.messages[2].some((message) => message.role === "tool")).toBe(
-      true,
-    );
+    expect(
+      session.messages[2].some(
+        (message) => message.type === "function_call_output",
+      ),
+    ).toBe(true);
   });
   it("stops after one empty recovery response", async () => {
     const { runner, session } = createRunner(
       [responseRound(""), responseRound("")],
       [],
     );
-    await expect(
-      runner.runUserTurn("key", [], () => undefined),
-    ).rejects.toThrow("empty response");
+    await expect(runner.runUserTurn("key", [], observe())).rejects.toThrow(
+      "empty response",
+    );
     expect(session.toolChoices).toEqual(["auto", "none"]);
   });
 });
@@ -345,11 +383,13 @@ describe("user turn continuation", () => {
     const { runner, session, executed } = createRunner(
       [
         {
-          ...round(
-            toolCall("a", "tic_tac_toe_place", { row: 0 }),
-            toolCall("b", "tic_tac_toe_place", { row: 1 }),
-          ),
-          content: "Checking.",
+          output: [
+            responseMessage("Checking.", "commentary"),
+            ...round(
+              toolCall("a", "tic_tac_toe_place", { row: 0 }),
+              toolCall("b", "tic_tac_toe_place", { row: 1 }),
+            ).output,
+          ],
         },
         round(toolCall("c", "tic_tac_toe_place", { row: 2 })),
         responseRound(""),
@@ -359,21 +399,25 @@ describe("user turn continuation", () => {
     );
     let streamed = "";
     expect(
-      await runner.runUserTurn("key", [], (text) => {
-        streamed += text;
-      }),
-    ).toEqual({ content: "Checking.\n\nDone." });
-    expect(streamed).toBe("Checking.\n\nDone.");
+      await runner.runUserTurn(
+        "key",
+        [],
+        observe((text) => {
+          streamed += text;
+        }),
+      ),
+    ).toBeUndefined();
+    expect(streamed).toBe("Checking.Done.");
     expect(executed).toHaveLength(3);
     expect(
       session.messages[1]
-        ?.filter((message) => message.role === "tool")
-        .map((message) => message.tool_call_id),
+        ?.filter((message) => message.type === "function_call_output")
+        .map((message) => message.call_id),
     ).toEqual(["a", "b"]);
     expect(
       session.messages[3]
-        ?.filter((message) => message.role === "tool")
-        .map((message) => message.tool_call_id),
+        ?.filter((message) => message.type === "function_call_output")
+        .map((message) => message.call_id),
     ).toEqual(["a", "b", "c"]);
     expect(session.toolChoices).toEqual(["auto", "auto", "auto", "none"]);
   });
@@ -390,14 +434,16 @@ describe("user turn continuation", () => {
       ],
       [{ success: true }, { success: true }],
     );
-    await runner.runUserTurn("key", [], () => {});
+    await runner.runUserTurn("key", [], observe());
     expect(executed.map((call) => call.args)).toEqual([{ row: 1 }, { row: 0 }]);
     expect(
-      session.messages[1]?.filter((message) => message.role === "tool"),
+      session.messages[1]?.filter(
+        (message) => message.type === "function_call_output",
+      ),
     ).toHaveLength(2);
     expect(session.toolChoices[1]).toEqual({
       type: "function",
-      function: { name: "tic_tac_toe_place" },
+      name: "tic_tac_toe_place",
     });
   });
 
@@ -412,23 +458,24 @@ describe("user turn continuation", () => {
       ],
       [],
     );
-    await runner.runUserTurn("key", [], () => {});
+    await runner.runUserTurn("key", [], observe());
     expect(executed).toHaveLength(2);
     expect(session.toolChoices).toEqual(["auto", "auto"]);
     const results = session.messages[1]?.filter(
-      (message) => message.role === "tool",
+      (message) => message.type === "function_call_output",
     );
     expect(results).toHaveLength(2);
-    expect(results?.[0]?.content).toContain('"retryable":false');
+    expect(results?.[0]?.output).toContain('"retryable":false');
   });
 
-  for (const finishReason of [null, "content_filter", "length"] as const) {
-    it(`rejects an unfinished response: ${finishReason}`, async () => {
-      const { runner } = createRunner(
-        [{ ...responseRound("Partial"), finishReason }],
-        [],
-      );
-      await expect(runner.runUserTurn("key", [], () => {})).rejects.toThrow();
+  for (const failure of [
+    "stream interrupted",
+    "content_filter",
+    "max_output_tokens",
+  ]) {
+    it(`rejects an unfinished response: ${failure}`, async () => {
+      const { runner } = createRunner([new Error(failure)], []);
+      await expect(runner.runUserTurn("key", [], observe())).rejects.toThrow();
     });
   }
 
@@ -437,14 +484,21 @@ describe("user turn continuation", () => {
     const { runner, executed } = createRunner(
       [
         {
-          ...round(toolCall("a", "tic_tac_toe_place", {})),
-          content: "Starting",
+          output: [
+            responseMessage("Starting", "commentary"),
+            ...round(toolCall("a", "tic_tac_toe_place", {})).output,
+          ],
         },
       ],
       [{ success: true }],
     );
     await expect(
-      runner.runUserTurn("key", [], () => abort.abort(), abort.signal),
+      runner.runUserTurn(
+        "key",
+        [],
+        observe(() => abort.abort()),
+        abort.signal,
+      ),
     ).rejects.toThrow();
     expect(executed).toHaveLength(0);
   });
@@ -453,7 +507,7 @@ describe("user turn continuation", () => {
 it("stops the remaining tool batch when cancelled during an action", async () => {
   const abort = new AbortController();
   const executed: string[] = [];
-  const session = new ScriptedCompletionSession([
+  const session = new ScriptedResponseSession([
     round(toolCall("a", "first", {}), toolCall("b", "second", {})),
   ]);
   const tools: AgentToolService = {
@@ -474,7 +528,7 @@ it("stops the remaining tool batch when cancelled during an action", async () =>
     new ToolHistoryService(createInMemoryStorageRepository()),
   );
   await expect(
-    runner.runUserTurn("key", [], () => {}, abort.signal),
+    runner.runUserTurn("key", [], observe(), abort.signal),
   ).rejects.toThrow();
   expect(executed).toEqual(["first"]);
   expect(session.messages).toHaveLength(1);
@@ -485,10 +539,13 @@ describe("durable tool history", () => {
     const { runner, storage } = createRunner(
       [
         {
-          ...round(toolCall("draw-1", "tic_tac_toe_place", { row: 1 })),
-          content: "Working.",
+          output: [
+            responseMessage("Working.", "commentary"),
+            ...round(toolCall("draw-1", "tic_tac_toe_place", { row: 1 }))
+              .output,
+          ],
         },
-        { ...responseRound(""), finishReason: null },
+        new Error("Stream interrupted"),
       ],
       [{ success: true, data: { elementId: "sun", revision: 2 } }],
     );
@@ -513,7 +570,7 @@ describe("durable tool history", () => {
     });
     expect(await chat.getConversation()).toEqual([
       { role: "user", content: "Draw" },
-      { role: "assistant", content: "Working." },
+      { role: "assistant", content: "Working.", phase: "commentary" },
     ]);
     const restored = createInMemoryStorageRepository(persisted);
     const next = createRunner(
@@ -524,20 +581,18 @@ describe("durable tool history", () => {
     await next.runner.runUserTurn(
       "key",
       (await restored.read()).conversation,
-      () => {},
+      observe(),
     );
     const messages = next.session.messages[0] ?? [];
-    const call = messages.find(
-      (message) => message.role === "assistant" && message.tool_calls,
-    );
+    const call = messages.find((message) => message.type === "function_call");
     expect(call).toMatchObject({
-      role: "assistant",
-      tool_calls: [
-        { function: { name: "tic_tac_toe_place", arguments: '{"row":1}' } },
-      ],
+      type: "function_call",
+      name: "tic_tac_toe_place",
+      arguments: '{"row":1}',
     });
     expect(
-      messages.find((message) => message.role === "tool")?.content,
+      messages.find((message) => message.type === "function_call_output")
+        ?.output,
     ).toContain('"elementId":"sun"');
     expect(next.executed).toHaveLength(0);
     await chat.clearConversation();
@@ -555,7 +610,7 @@ describe("durable tool history", () => {
       ],
       [{ success: true }],
     );
-    await runner.runUserTurn("key", [], () => {});
+    await runner.runUserTurn("key", [], observe());
     const records = storage.snapshot().conversation.filter(isToolExecution);
     expect(
       records.map(
@@ -578,11 +633,11 @@ describe("durable tool history", () => {
       [],
       storage,
     );
-    await runner.runUserTurn("key", storage.snapshot().conversation, () => {});
+    await runner.runUserTurn("key", storage.snapshot().conversation, observe());
     const result = session.messages[0]?.find(
-      (message) => message.role === "tool",
+      (message) => message.type === "function_call_output",
     );
-    expect(result?.content).toContain('"status":"unknown"');
+    expect(result?.output).toContain('"status":"unknown"');
     expect(executed).toHaveLength(0);
     expect(projectVisibleConversation(storage.snapshot().conversation)).toEqual(
       [],
@@ -642,7 +697,7 @@ it("does not run a tool when its started record cannot be persisted", async () =
     [{ success: true }],
     storage,
   );
-  await expect(runner.runUserTurn("key", [], () => {})).rejects.toThrow(
+  await expect(runner.runUserTurn("key", [], observe())).rejects.toThrow(
     "History storage unavailable",
   );
   expect(executed).toHaveLength(0);
@@ -667,7 +722,7 @@ it("stops the batch and leaves an unknown outcome if result persistence fails", 
     [{ success: true }, { success: true }],
     storage,
   );
-  await expect(runner.runUserTurn("key", [], () => {})).rejects.toThrow(
+  await expect(runner.runUserTurn("key", [], observe())).rejects.toThrow(
     "Result storage failed",
   );
   expect(executed).toHaveLength(1);
@@ -686,12 +741,131 @@ it("streams and saves source citations even when the final model reply omits the
     [{ success: true, data: { answer: "A mission" }, sources }],
   );
   let streamed = "";
-  const response = await runner.runUserTurn("key", [], (text) => {
-    streamed += text;
+  const messages: AgentResponse[] = [];
+  await runner.runUserTurn("key", [], {
+    onText: (text) => {
+      streamed += text;
+    },
+    onMessage: async (message) => {
+      messages.push(message);
+    },
   });
-  expect(response).toEqual({ content: "NASA announced a mission.", sources });
-  expect(streamed).toBe(response.content);
+  expect(messages).toEqual([
+    { content: "NASA announced a mission.", sources, phase: "final_answer" },
+  ]);
+  expect(streamed).toBe(messages.map((message) => message.content).join(""));
   expect(
     storage.snapshot().conversation.filter(isToolExecution)[0]?.outcome,
   ).toMatchObject({ status: "completed", result: { sources } });
+});
+
+it("persists commentary before tools and replays reasoning, phases, and all call outputs", async () => {
+  const progress = responseMessage("I'll check the board.", "commentary");
+  const { runner, session, executed } = createRunner(
+    [
+      {
+        output: [
+          {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [],
+            encrypted_content: "encrypted",
+          },
+          progress,
+          ...round(toolCall("call_1", "tic_tac_toe_place", { row: 0 })).output,
+        ],
+      },
+      responseRound("Done."),
+    ],
+    [{ success: true }],
+  );
+  const messages: AgentResponse[] = [];
+  await runner.runUserTurn("key", [], {
+    onText: () => {},
+    onMessage: async (message) => {
+      if (message.phase === "commentary") expect(executed).toEqual([]);
+      messages.push(message);
+    },
+  });
+  expect(messages).toEqual([
+    { content: "I'll check the board.", phase: "commentary" },
+    { content: "Done.", phase: "final_answer" },
+  ]);
+  expect(session.messages[1]).toContainEqual(progress);
+  expect(session.messages[1]).toContainEqual({
+    type: "reasoning",
+    id: "rs_1",
+    summary: [],
+    encrypted_content: "encrypted",
+  });
+  expect(session.messages[1]).toContainEqual({
+    type: "function_call_output",
+    call_id: "call_1",
+    output: JSON.stringify({ args: { row: 0 }, result: { success: true } }),
+  });
+});
+
+it("continues a commentary-only response instead of mistaking it for the final answer", async () => {
+  const { runner, session } = createRunner(
+    [
+      { output: [responseMessage("I'll look into that.", "commentary")] },
+      responseRound("Here is the answer."),
+    ],
+    [],
+  );
+  const messages: AgentResponse[] = [];
+  await runner.runUserTurn(
+    "key",
+    [
+      { role: "assistant", content: "Old update", phase: "commentary" },
+      { role: "assistant", content: "Old answer", phase: "final_answer" },
+    ],
+    {
+      onText: () => {},
+      onMessage: async (message) => {
+        messages.push(message);
+      },
+    },
+  );
+  expect(messages).toHaveLength(2);
+  expect(session.messages).toHaveLength(2);
+  expect(session.messages[0]?.slice(0, 2)).toEqual([
+    { role: "assistant", content: "Old update", phase: "commentary" },
+    { role: "assistant", content: "Old answer", phase: "final_answer" },
+  ]);
+});
+
+it("never invents an acknowledgment when the model goes directly to a tool", async () => {
+  const { runner, executed } = createRunner(
+    [
+      round(toolCall("call_1", "tic_tac_toe_place", { row: 0 })),
+      responseRound("Done."),
+    ],
+    [{ success: true }],
+  );
+  const messages: AgentResponse[] = [];
+  await runner.runUserTurn("key", [], {
+    onText: () => {},
+    onMessage: async (message) => {
+      expect(executed).toHaveLength(1);
+      messages.push(message);
+    },
+  });
+  expect(messages).toEqual([{ content: "Done.", phase: "final_answer" }]);
+});
+
+it("does not invent a phase for legacy history or drop an explicit null phase", async () => {
+  const { runner, session } = createRunner([responseRound("Hello")], []);
+  await runner.runUserTurn(
+    "key",
+    [
+      { role: "assistant", content: "Legacy" },
+      { role: "assistant", content: "Unclassified", phase: null },
+    ],
+    observe(),
+  );
+  expect(session.messages[0]).toEqual([
+    { role: "assistant", content: "Legacy" },
+    { role: "assistant", content: "Unclassified", phase: null },
+  ]);
 });

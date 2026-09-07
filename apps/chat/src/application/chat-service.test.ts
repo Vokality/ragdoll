@@ -373,3 +373,47 @@ it("ignores errors from hydration that completed after unmount", async () => {
   await started;
   expect(service.getSnapshot().error).toBeNull();
 });
+
+it("keeps loading during work after a completed acknowledgment and renders the answer separately", async () => {
+  const testGateway = createGateway();
+  const done = Promise.withResolvers<ChatSendResult>();
+  testGateway.gateway.sendMessage = () => done.promise;
+  const service = new ChatService(testGateway.gateway, {
+    theme: "default",
+    variant: "human",
+  });
+  await service.start();
+  const sending = service.sendMessage("Check");
+  const handlers = testGateway.getStreamingHandlers();
+  const user = { role: "user", content: "Check" } satisfies ChatMessage;
+  const ack = {
+    role: "assistant",
+    content: "I'll check.",
+    phase: "commentary",
+  } satisfies ChatMessage;
+  handlers?.onConversationChanged([user]);
+  handlers?.onText(ack.content);
+  handlers?.onConversationChanged([user, ack]);
+  expect(service.getSnapshot()).toMatchObject({
+    isLoading: true,
+    isStreaming: false,
+    visibleMessages: [user, ack],
+  });
+  handlers?.onText("Done.");
+  expect(service.getSnapshot().isStreaming).toBe(true);
+  const final = {
+    role: "assistant",
+    content: "Done.",
+    phase: "final_answer",
+  } satisfies ChatMessage;
+  handlers?.onConversationChanged([user, ack, final]);
+  handlers?.onStreamEnd();
+  done.resolve({ success: true });
+  await sending;
+  expect(service.getSnapshot()).toMatchObject({
+    isLoading: false,
+    isStreaming: false,
+    visibleMessages: [user, ack, final],
+  });
+  service.stop();
+});

@@ -24,7 +24,6 @@ Use workspace filters for focused work:
 ```bash
 bun run --filter @vokality/ragdoll-extensions test
 bun run --filter lumen typecheck
-bun run --filter emote build
 ```
 
 Do not add npm, pnpm, or Yarn lockfiles or scripts. Do not execute tools by hardcoding paths under `node_modules`; use `bun run` for package scripts and `bunx --bun` for package binaries.
@@ -75,6 +74,5 @@ Cursor Cloud launch details live in [AGENTS.md](./AGENTS.md#cursor-cloud-specifi
 - Extension contracts, loader, slots, and UI: `packages/ragdoll-extensions`
 - First-party extensions: `packages/ragdoll-extension-*`
 - Electron chat host (`ExtensionHostEnvironment`): `apps/chat` (package name `lumen`)
-- VS Code MCP character host (not a Ragdoll extension host): `apps/emote`
 - Canonical new-extension example: `examples/extension-weather`
 - Agent baseline setup, audit, or refresh: `.agents/skills/baseline-project`

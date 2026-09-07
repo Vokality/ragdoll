@@ -45,7 +45,7 @@ it("uses Responses live web search and extracts source annotations", async () =>
   const requests: ResponseCreateParamsNonStreaming[] = [];
   const service = new OpenAIWebSearchService(
     { getKey: async () => "test-key" },
-    "gpt-5.4-mini",
+    { model: "gpt-5.6-sol", reasoningEffort: "low" },
     {
       create: async (key, request) => {
         expect(key).toBe("test-key");
@@ -59,7 +59,8 @@ it("uses Responses live web search and extracts source annotations", async () =>
     sources: [{ title: "NASA", url: "https://www.nasa.gov/" }],
   });
   expect(requests[0]).toMatchObject({
-    model: "gpt-5.4-mini",
+    model: "gpt-5.6-sol",
+    reasoning: { effort: "low" },
     store: false,
     tool_choice: "required",
     tools: [{ type: "web_search", external_web_access: true }],
@@ -70,7 +71,7 @@ it("rejects incomplete and uncited searches and respects cancellation", async ()
   let result = response();
   const service = new OpenAIWebSearchService(
     { getKey: async () => "key" },
-    "gpt-5.4-mini",
+    { model: "gpt-5.6-sol", reasoningEffort: "low" },
     { create: async () => result },
   );
   result = {

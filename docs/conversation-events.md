@@ -126,3 +126,11 @@ A started entry without a completed result has an unknown outcome: the process m
 Event records identify their trigger event. Retrying an event after a required action succeeded continues to its response/silent decision without repeating that action. An unknown required action outcome blocks automatic event retry until its state is reconciled. Clearing the conversation removes these records along with messages and queued event turns.
 
 Existing text and extension-event conversations remain valid. Execution history begins with this implementation; it cannot recover tool calls that were never recorded. Canvas undo history remains separately owned by the extension and session-local.
+
+## Responses message lifecycle
+
+User turns use the Responses API with `store: false`. Each completed assistant message is persisted and published separately, retaining its optional native `phase` (`commentary`, `final_answer`, or null). Historical messages without a recorded phase keep it absent; the host does not invent one. The prompt defaults to direct answers and quick actions without a preamble. A short model-authored acknowledgment is optional for work likely to take noticeable time, such as substantial research or several tool calls; tool use alone does not require one. All visible messages originate from the model; the host never inserts canned acknowledgments or fabricates progress. Commentary never finishes the user turn: the busy indicator remains active until a final response or failure. Cancellation preserves completed messages and any current partial text without duplicating already-saved progress.
+
+Within a turn, replay the complete message, function-call, and reasoning output items with each `function_call_output`, using `call_id` to associate results. Request encrypted reasoning so stateless follow-ups preserve model context. Extension-event turns retain explicit respond/silent decision tools and publish no unsolicited commentary. Function schemas remain non-strict at the provider boundary because extension schemas permit optional fields; the owning tool validates its arguments before acting.
+
+See OpenAI's [function-calling guide](https://developers.openai.com/api/docs/guides/function-calling) and [assistant phase guidance](https://developers.openai.com/api/docs/guides/reasoning#phase-parameter).

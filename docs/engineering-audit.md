@@ -1,6 +1,6 @@
 # Engineering audit — 2026-09-06
 
-This audit covered the character framework, extension framework and first-party extensions, Lumen's Electron and React layers, Emote's command transport, package boundaries, and verification workflows. Changes remain in the local worktree.
+This audit covered the character framework, extension framework and first-party extensions, Lumen's Electron and React layers, package boundaries, and verification workflows. Changes remain in the local worktree.
 
 ## Changes and evidence
 
@@ -13,12 +13,11 @@ This audit covered the character framework, extension framework and first-party 
 | OAuth and configuration                 | Cancel retired authorization/refresh work, avoid immediate refresh loops for short-lived tokens, clear refresh timers on disconnect, serialize configuration persistence, and preserve live state after failed saves.                                  | `apps/chat/electron/services/oauth-manager.test.ts`, `oauth-loopback-service.test.ts`, `config-manager.test.ts`                                                                                           |
 | Chat and React state                    | Recover missed completion without resending turns; ignore stale hydration and older acknowledgements; preserve edits during saves and installs; retain operation state for each extension row; prevent duplicate or conflicting actions.               | `apps/chat/src/application/chat-service.test.ts`, `extension-slot-service.test.ts`, configuration/settings/browser fixtures                                                                               |
 | React interaction and rendering         | Preserve IME composition, use native modal focus and inertness, restore focus after close, handle Strict Mode setup/cleanup, maintain slot subscriptions, and dispose scene resources on variant replacement/unmount.                                  | `apps/chat/tests/{composer-input,panel-dialog,panel-actions,visible-slots,smooth-text}.html`, `packages/ragdoll/tests/renderers/lifecycle.html`                                                           |
-| Emote transport                         | Preserve split UTF-8 input, execute commands in connection order, close clients on disposal, settle canceled startup, protect active sockets and unrelated files, and validate finite command arguments.                                               | `apps/emote/src/socket-command-server.test.ts`, `command-validator.test.ts`                                                                                                                               |
-| Packages and CI                         | Preserve React-free core/loader/slot boundaries, verify packed artifacts outside the workspace, and run Electron regressions from disposable profiles in the configured CI workflows.                                                                  | `scripts/verify-architecture.ts`, `scripts/verify-packages.ts`, `.github/workflows/{test,release,emote-extension-publish}.yml`                                                                            |
+| Packages and CI                         | Preserve React-free core/loader/slot boundaries, verify packed artifacts outside the workspace, and run Electron regressions from disposable profiles in the configured CI workflows.                                                                  | `scripts/verify-architecture.ts`, `scripts/verify-packages.ts`, `.github/workflows/{test,release}.yml`                                                                                                    |
 
 ## Verification
 
-The final local run passed all six gates below: 637 tests across 11 workspaces, full app/library builds, type checking and architecture checks, repository lint, all nine packed packages, and the Electron suite. `git diff --check` also passed.
+The original audit run (before subsequent workspace changes) passed all six gates below: 637 tests across 11 workspaces, full app/library builds, type checking and architecture checks, repository lint, all nine packed packages, and the Electron suite. `git diff --check` also passed.
 
 Run the repository gates from the root with Bun 1.4.2:
 

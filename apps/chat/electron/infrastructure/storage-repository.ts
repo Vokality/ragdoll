@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { writePrivateFile } from "./write-private-file.js";
 import { z } from "zod";
 import {
+  connectionRecordSchema,
   CHARACTER_THEME_IDS,
   CHARACTER_VARIANT_IDS,
   DEFAULT_CHARACTER_SETTINGS,
@@ -42,6 +43,8 @@ export const storageSchema = z
       .prefault({}),
     conversation: z.array(conversationEntrySchema).default([]),
     pendingAgentTurns: z.array(pendingAgentTurnSchema).default([]),
+    connections: z.array(connectionRecordSchema).default([]),
+    connectionCredentials: z.record(z.uuid(), z.string()).default({}),
     extensionHost: z.record(z.string(), extensionHostDataSchema).default({}),
   })
   .strict();

@@ -1,6 +1,6 @@
 # Agent instructions
 
-Ragdoll is a Bun 1.4.2 workspace monorepo: a React character framework, a host-agnostic extension framework, first-party extension packages, the Electron chat app (`lumen`), and the Emote VS Code extension.
+Ragdoll is a Bun 1.4.2 workspace monorepo: a React character framework, a host-agnostic extension framework, first-party extension packages, and the Electron chat app (`lumen`).
 
 Cursor and Claude Code also load [CLAUDE.md](./CLAUDE.md). Keep the shared engineering rules in both files aligned. Architecture detail lives in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -21,7 +21,7 @@ Focused work uses workspace filters, for example `bun run --filter @vokality/rag
 
 Browser regressions run in an isolated Electron profile. On headless Linux use `xvfb-run -a bun run test:browser`.
 
-CI on every push and pull request runs lint, test, browser regressions, typecheck, and `verify:packages` with Bun 1.4.2. Tag workflows (`chat-v*`, `emote-v*`) run the same checks before packaging.
+CI on every push and pull request runs lint, test, browser regressions, typecheck, and `verify:packages` with Bun 1.4.2. Tag workflows (`chat-v*`) run the same checks before packaging.
 
 ## Boundaries
 
@@ -75,6 +75,5 @@ Launching the Electron app in the cloud is not the same as locally. A headless V
 - Extension contracts, loader, slots, and UI: `packages/ragdoll-extensions`
 - First-party extensions: `packages/ragdoll-extension-*`
 - Electron chat host (`ExtensionHostEnvironment`): `apps/chat` (package name `lumen`)
-- VS Code MCP character host (not a Ragdoll extension host): `apps/emote`
 - Canonical new-extension example: `examples/extension-weather`
 - Agent baseline setup, audit, or refresh: `.agents/skills/baseline-project` (`$baseline-project` in Codex)

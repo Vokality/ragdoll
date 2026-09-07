@@ -1,3 +1,8 @@
+import { ConnectionService } from "./services/connection-service.js";
+import { ConnectionToolService } from "./services/connection-tool-service.js";
+import { SdkMcpConnectionFactory } from "./services/mcp-connection-client.js";
+import { ConnectionCredentialRepository } from "./infrastructure/connection-credential-repository.js";
+import { createOpenAIResponseSessionFactory } from "./services/openai-response-session.js";
 import { WebToolService } from "./services/web-tool-service.js";
 import {
   OpenAIWebSearchService,
@@ -30,10 +35,7 @@ import { GitHubReleaseService } from "./services/github-release-service.js";
 import { createHostSchedulerCapability } from "./services/host-scheduler-capability.js";
 import { createHostTimersCapability } from "./services/host-timers-capability.js";
 import { OAuthLoopbackService } from "./services/oauth-loopback-service.js";
-import {
-  createOpenAICompletionSessionFactory,
-  OpenAIAgentRunner,
-} from "./services/openai-service.js";
+import { OpenAIAgentRunner } from "./services/openai-service.js";
 import { RendererEventService } from "./services/renderer-event-service.js";
 import { WindowService } from "./services/window-service.js";
 
@@ -45,6 +47,7 @@ export class LumenApplication {
   private readonly storage: StorageRepository;
   private readonly extensions;
   private readonly cards;
+  private readonly connections;
   private readonly windows;
   private readonly oauthRedirects;
   private readonly apiKeys;
@@ -68,6 +71,23 @@ export class LumenApplication {
     this.oauthRedirects = new OAuthLoopbackService(
       config.oauth.callbackTimeoutMs,
       timers,
+    );
+    const connectionCredentials = new ConnectionCredentialRepository(
+      storage,
+      safeStorage,
+    );
+    this.connections = new ConnectionService(
+      storage,
+      connectionCredentials,
+      new SdkMcpConnectionFactory(
+        connectionCredentials,
+        this.oauthRedirects,
+        async (url) => {
+          const result = await this.navigation.open(url);
+          if (!result.success) throw new Error(result.error);
+        },
+      ),
+      () => this.rendererEvents.connectionsChanged(),
     );
     const messageBus = new ExtensionMessageBus((name, args) =>
       this.rendererEvents.functionCall(name, args),
@@ -124,16 +144,19 @@ export class LumenApplication {
       this.storage,
       this.apiKeys,
       new OpenAIAgentRunner(
-        new WebToolService(
-          new AppToolService(this.extensions, this.cards),
-          new OpenAIWebSearchService(
-            this.apiKeys,
-            this.config.chat.model,
-            createWebSearchTransport(),
+        new ConnectionToolService(
+          new WebToolService(
+            new AppToolService(this.extensions, this.cards),
+            new OpenAIWebSearchService(
+              this.apiKeys,
+              this.config.chat,
+              createWebSearchTransport(),
+            ),
           ),
+          this.connections,
         ),
         this.config.chat,
-        createOpenAICompletionSessionFactory(),
+        createOpenAIResponseSessionFactory(),
         new ToolHistoryService(this.storage),
       ),
       (conversation) => this.rendererEvents.conversationChanged(conversation),
@@ -186,13 +209,18 @@ export class LumenApplication {
     this.disposeIpc = null;
     this.unsubscribeConversationEvents();
     this.oauthRedirects.destroy();
-    await Promise.all([this.chat.destroy(), pendingIpc]);
+    await Promise.all([
+      this.chat.destroy(),
+      this.connections.destroy(),
+      pendingIpc,
+    ]);
     await this.extensions.destroy();
   }
 
   private async initialize(): Promise<void> {
     await mkdir(this.config.userExtensionsPath, { recursive: true });
     await this.extensions.initialize();
+    await this.connections.initialize();
     void this.chat.schedulePendingEventTurns();
 
     const installer = new ExtensionInstaller({
@@ -215,6 +243,7 @@ export class LumenApplication {
     this.disposeIpc = registerIpc(
       ipcMain,
       {
+        connections: this.connections,
         apiKeys: this.apiKeys,
         chat: this.chat,
         extensions: this.extensions,

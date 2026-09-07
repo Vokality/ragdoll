@@ -34,3 +34,6 @@ dist-ssr
 !.claude/skills/baseline-project
 **/dist/
 **/release/
+
+# VitePress local cache
+docs/site/.vitepress/cache/

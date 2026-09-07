@@ -1,0 +1,17 @@
+:root {
+  --vp-c-brand-1: #236d9e;
+  --vp-c-brand-2: #347fac;
+  --vp-c-brand-3: #478eba;
+  --vp-c-brand-soft: rgba(61, 144, 197, .12);
+  --vp-home-hero-name-color: var(--vp-c-brand-1);
+}
+.dark {
+  --vp-c-bg: #101827;
+  --vp-c-bg-alt: #0c1320;
+  --vp-c-bg-elv: #172233;
+  --vp-c-bg-soft: #172233;
+  --vp-c-brand-1: #8acaf0;
+  --vp-c-brand-2: #6bb6e3;
+  --vp-c-brand-3: #3983b1;
+}
+.VPHome .VPFeature { border-radius: 14px; }

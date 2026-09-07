@@ -74,19 +74,25 @@ export class ChatApplicationService {
         });
         this.publishConversation(data.conversation);
 
-        const response = await this.agent.runUserTurn(
+        await this.agent.runUserTurn(
           await this.apiKeys.getKey(),
           data.conversation,
-          (text) => {
-            streamed += text;
-            events.streamingText(text);
+          {
+            onText: (text) => {
+              streamed += text;
+              events.streamingText(text);
+            },
+            onMessage: async (response) => {
+              assistantSaveStarted = true;
+              const completed = await this.appendAssistantResponse(response);
+              streamed = "";
+              assistantSaveStarted = false;
+              this.publishConversation(completed);
+            },
           },
           abort.signal,
         );
-        assistantSaveStarted = true;
-        const completed = await this.appendAssistantResponse(response);
         events.streamEnded();
-        this.publishConversation(completed);
         return { success: true };
       } catch (error) {
         // Preserve visible progress on cancellation and failures without replaying

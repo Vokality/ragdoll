@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Connection settings regression</title></head>
+<body><p id="result">Running…</p><div id="root" style="width:360px"></div>
+<script type="module">
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import { ConnectionsSection } from "../src/components/connections-section.tsx";
+import { ConnectionManagementService } from "../src/application/connection-management-service.ts";
+import "../src/styles/global.css";
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const listeners = new Set();
+let records = [];
+let pending;
+const emit = () => listeners.forEach((listener) => listener());
+const gateway = {
+  getConnections: async () => structuredClone(records),
+  onConnectionsChanged: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+  saveConnection: async (input) => { const record = { id: crypto.randomUUID(), name: input.name, serverUrl: input.serverUrl, authentication: input.authentication, enabled: false, status: "disconnected", toolCount: 0 }; records.push(record); emit(); return record; },
+  connectConnection: async (id) => { records[0].status = "connecting"; emit(); return pending.promise; },
+  disconnectConnection: async () => { records[0].status = "disconnected"; records[0].enabled = false; pending.resolve({success:false,error:"Connection cancelled"}); emit(); return {success:true}; },
+  setConnectionEnabled: async (id, enabled) => { records[0].enabled = enabled; emit(); return {success:true}; },
+  removeConnection: async () => { records = []; emit(); return {success:true}; },
+};
+const root = createRoot(document.getElementById("root"));
+const check = (value, message) => { if (!value) throw new Error(message); };
+const button = (label) => [...document.querySelectorAll("button")].find((element) => element.textContent === label);
+const change = async (element, value) => act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element,value); element.dispatchEvent(new Event("input",{bubbles:true})); });
+try {
+ await act(async () => root.render(React.createElement(ConnectionsSection, { service: new ConnectionManagementService(gateway) })));
+ check(document.body.textContent.includes("No connections yet"), "Empty state missing");
+ await act(async () => button("Add connection").click());
+ const form = document.querySelector("form");
+ await change(form.querySelector("input"), "Workspace");
+ await change(form.querySelector('input[type="url"]'), "https://example.test/mcp");
+ await act(async () => form.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ check(records.length === 1 && records[0].enabled === false, "Saving implicitly granted agent access");
+ check(document.querySelector("article").textContent.includes("Disconnected"), "Saving fabricated connected status");
+ pending = Promise.withResolvers();
+ await act(async () => button("Sign in / connect").click());
+ check(button("Cancel") && document.body.textContent.includes("Connecting…"), "Actual pending login missing cancellation");
+ await act(async () => button("Cancel").click());
+ check(records[0].status === "disconnected", "Cancelled login remained connected");
+ await act(async () => { records[0].status = "connected"; records[0].toolCount = 4; emit(); });
+ check(document.body.textContent.includes("4 tools") && document.body.textContent.includes("Agent access off"), "Connectivity and permission not separated");
+ await act(async () => document.querySelector('[aria-label="Allow Workspace for agent"]').click());
+ check(records[0].enabled && document.body.textContent.includes("Agent access on"), "Agent switch did not persist access");
+ const row = document.querySelector("article").getBoundingClientRect();
+ check(row.width <= 360 && document.documentElement.scrollWidth <= innerWidth, "Connection row overflows compact settings");
+ await act(async () => button("Remove").click());
+ check(records.length === 1, "Remove skipped confirmation");
+ await act(async () => button("Confirm remove").click());
+ check(!document.querySelector("article"), "Removed connection stayed visible");
+ await act(async () => root.unmount());
+ check(listeners.size === 0, "Settings leaked a connection subscription");
+ document.getElementById("result").textContent = "PASS: connection form, actual status, cancellable login, explicit agent access, compact layout, removal and cleanup";
+} catch (error) { document.getElementById("result").textContent = `FAIL: ${error.stack ?? error}`; }
+</script></body></html>

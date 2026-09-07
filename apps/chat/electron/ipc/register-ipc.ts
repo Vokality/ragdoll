@@ -1,3 +1,5 @@
+import { registerConnectionIpc } from "./register-connection-ipc.js";
+import type { ConnectionService } from "../services/connection-service.js";
 import type { ExtensionCardService } from "../services/extension-card-service.js";
 import { registerCardIpc } from "./register-card-ipc.js";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
@@ -15,6 +17,7 @@ import { registerSettingsIpc } from "./register-settings-ipc.js";
 import { registerShellIpc } from "./register-shell-ipc.js";
 
 export interface IpcServices {
+  connections: ConnectionService;
   apiKeys: ApiKeyService;
   chat: ChatApplicationService;
   extensions: ExtensionManager;
@@ -31,6 +34,7 @@ export function registerIpc(
 ): () => Promise<void> {
   const registrar = new IpcRegistrar(ipcMain, authorize);
   try {
+    registerConnectionIpc(registrar, services.connections);
     registerAuthIpc(registrar, services.apiKeys);
     registerChatIpc(registrar, services.chat);
     registerExtensionIpc(

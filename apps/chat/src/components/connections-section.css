@@ -1,0 +1,178 @@
+.connections-section {
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.connections-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.connections-heading h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.connections-section button:not(.switch) {
+  width: auto;
+  padding: 5px 9px;
+  font-size: 11px;
+  min-height: 28px;
+}
+.connections-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 7px 0 10px;
+  overflow-wrap: anywhere;
+}
+.connections-empty {
+  color: var(--text-muted);
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  line-height: 1.5;
+}
+.connections-list {
+  display: grid;
+  gap: 8px;
+}
+.connection-row {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+.connection-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.connection-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.connection-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+.connection-identity strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.connection-identity > span {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 10px;
+  margin: 9px 0;
+}
+.connection-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--text-dim);
+  border-radius: 50%;
+}
+.connection-dot.connected {
+  background: var(--accent);
+}
+.connection-dot.error,
+.connection-dot.needs_auth {
+  background: var(--error);
+}
+.connection-dot.connecting {
+  border: 1px solid var(--text-dim);
+  border-top-color: transparent;
+  background: transparent;
+  width: 8px;
+  height: 8px;
+  animation: spin 1s linear infinite;
+}
+.connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.connection-remove {
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  margin-left: auto;
+  cursor: pointer;
+}
+.connection-remove:hover {
+  color: var(--error);
+}
+.connections-error {
+  color: var(--error);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.connection-editor {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.connection-editor h4 {
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+.connection-editor label {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 9px;
+}
+.connection-editor input,
+.connection-editor select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.connection-editor input:focus-visible,
+.connection-editor select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.connection-editor summary {
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  margin: 9px 0;
+}
+.connection-editor summary span {
+  color: var(--text-dim);
+}

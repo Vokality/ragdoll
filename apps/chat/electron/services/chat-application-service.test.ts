@@ -1,4 +1,3 @@
-import type { AgentResponse } from "../electron-api.js";
 import { describe, expect, it } from "bun:test";
 import type {
   ConversationEntry,
@@ -6,7 +5,7 @@ import type {
   ExtensionConversationEvent,
 } from "../domain/conversation.js";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
-import type { AgentRunner } from "./openai-service.js";
+import type { AgentRunner, AgentTurnEvents } from "./openai-service.js";
 import { ChatApplicationService } from "./chat-application-service.js";
 import { ConversationEventService } from "./conversation-event-service.js";
 
@@ -25,12 +24,12 @@ class StubAgentRunner implements AgentRunner {
   async runUserTurn(
     _apiKey: string,
     conversation: readonly ConversationEntry[],
-    onStreamingText: (text: string) => void,
-  ): Promise<AgentResponse> {
+    events: AgentTurnEvents,
+  ): Promise<void> {
     this.userConversations = [...this.userConversations, conversation];
-    onStreamingText("Hello");
-    onStreamingText(" there");
-    return { content: "Hello there" };
+    events.onText("Hello");
+    events.onText(" there");
+    await events.onMessage({ content: "Hello there" });
   }
 
   async runEventTurn(
@@ -65,7 +64,7 @@ describe("ChatApplicationService", () => {
     });
     const agent: AgentRunner = {
       runUserTurn: async (_key, _conversation, stream, signal) => {
-        stream("Partial answer");
+        stream.onText("Partial answer");
         markStarted();
         await new Promise<void>((_resolve, reject) => {
           signal?.addEventListener(
@@ -74,7 +73,7 @@ describe("ChatApplicationService", () => {
             { once: true },
           );
         });
-        return { content: "Unreachable" };
+        return;
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     };
@@ -114,7 +113,9 @@ describe("ChatApplicationService", () => {
     });
     let calls = 0;
     const agent: AgentRunner = {
-      runUserTurn: async () => ({ content: "Hello" }),
+      runUserTurn: async (_key, _history, events) => {
+        await events.onMessage({ content: "Hello" });
+      },
       runEventTurn: async () => {
         calls += 1;
         markStarted();
@@ -298,12 +299,12 @@ describe("ChatApplicationService", () => {
       releaseTurn = resolve;
     });
     const agent: AgentRunner = {
-      runUserTurn: async (_apiKey, _conversation, onStreamingText, signal) => {
-        onStreamingText("Partial ");
-        onStreamingText("answer");
+      runUserTurn: async (_apiKey, _conversation, events, signal) => {
+        events.onText("Partial ");
+        events.onText("answer");
         await turnGate;
         if (signal?.aborted) throw new Error("Request was aborted.");
-        return { content: "never reached" };
+        return;
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     };
@@ -390,12 +391,12 @@ describe("ChatApplicationService", () => {
     });
     const executionOrder: string[] = [];
     const agent: AgentRunner = {
-      runUserTurn: async () => {
+      runUserTurn: async (_key, _history, events) => {
         executionOrder.push("user-started");
         markUserTurnStarted();
         await userTurnGate;
         executionOrder.push("user-finished");
-        return { content: "Done" };
+        await events.onMessage({ content: "Done" });
       },
       runEventTurn: async () => {
         executionOrder.push("event-started");
@@ -440,9 +441,9 @@ it("preserves streamed progress on failure and accepts the next user turn", asyn
   const agent: AgentRunner = {
     runUserTurn: async (_key, _conversation, stream) => {
       calls += 1;
-      stream(calls === 1 ? "Checking." : "Recovered.");
+      stream.onText(calls === 1 ? "Checking." : "Recovered.");
       if (calls === 1) throw new Error("Connection interrupted");
-      return { content: "Recovered." };
+      await stream.onMessage({ content: "Recovered." });
     },
     runEventTurn: async () => ({ disposition: "silent" }),
   };
@@ -486,8 +487,8 @@ it("persists and publishes structured citations with user and event responses", 
     { getKey: async () => "key" },
     {
       runUserTurn: async (_key, _history, stream) => {
-        stream("News.");
-        return { content: "News.", sources };
+        stream.onText("News.");
+        await stream.onMessage({ content: "News.", sources });
       },
       runEventTurn: async () => ({
         disposition: "respond",
@@ -528,4 +529,89 @@ it("persists and publishes structured citations with user and event responses", 
     content: "Update.",
     sources,
   });
+});
+
+it("publishes an acknowledgment before slow work, then a separate final answer without ending early", async () => {
+  const gate = Promise.withResolvers<void>();
+  const acknowledged = Promise.withResolvers<void>();
+  const storage = createInMemoryStorageRepository();
+  const order: string[] = [];
+  const chat = new ChatApplicationService(
+    storage,
+    { getKey: async () => "key" },
+    {
+      runUserTurn: async (_key, _history, events) => {
+        events.onText("I'll check.");
+        await events.onMessage({ content: "I'll check.", phase: "commentary" });
+        acknowledged.resolve();
+        await gate.promise;
+        events.onText("Found it.");
+        await events.onMessage({ content: "Found it.", phase: "final_answer" });
+      },
+      runEventTurn: async () => ({ disposition: "silent" }),
+    },
+    (conversation) => order.push(conversation.at(-1)?.content ?? ""),
+    ignoreError,
+  );
+  const turn = chat.sendMessage("Check", {
+    streamingText: () => {},
+    streamEnded: () => order.push("ended"),
+  });
+  await acknowledged.promise;
+  expect(order).toEqual(["Check", "I'll check."]);
+  expect((await chat.getConversation()).at(-1)).toEqual({
+    role: "assistant",
+    content: "I'll check.",
+    phase: "commentary",
+  });
+  gate.resolve();
+  expect(await turn).toEqual({ success: true });
+  expect(order).toEqual(["Check", "I'll check.", "Found it.", "ended"]);
+  expect(
+    (await chat.getConversation()).filter(
+      (message) => message.role === "assistant",
+    ),
+  ).toHaveLength(2);
+});
+
+it("cancels after commentary without duplicating it or manufacturing a final answer", async () => {
+  const ready = Promise.withResolvers<void>();
+  const storage = createInMemoryStorageRepository();
+  const chat = new ChatApplicationService(
+    storage,
+    { getKey: async () => "key" },
+    {
+      runUserTurn: async (_key, _history, events, signal) => {
+        events.onText("I'll check.");
+        await events.onMessage({ content: "I'll check.", phase: "commentary" });
+        const cancelled = new Promise<void>((_resolve, reject) =>
+          signal?.addEventListener(
+            "abort",
+            () => reject(new Error("Cancelled")),
+            { once: true },
+          ),
+        );
+        ready.resolve();
+        await cancelled;
+      },
+      runEventTurn: async () => ({ disposition: "silent" }),
+    },
+    () => {},
+    ignoreError,
+  );
+  let ends = 0;
+  const turn = chat.sendMessage("Check", {
+    streamingText: () => {},
+    streamEnded: () => {
+      ends++;
+    },
+  });
+  await ready.promise;
+  chat.cancelActiveTurn();
+  expect(await turn).toEqual({ success: true });
+  expect(await chat.getConversation()).toEqual([
+    { role: "user", content: "Check" },
+    { role: "assistant", content: "I'll check.", phase: "commentary" },
+  ]);
+  expect(ends).toBe(1);
 });

@@ -9,6 +9,7 @@ export const conversationMessageSchema = z
   .object({
     role: z.enum(["user", "assistant"]),
     content: z.string(),
+    phase: z.enum(["commentary", "final_answer"]).nullable().optional(),
     sources: z.array(sourceCitationSchema).optional(),
   })
   .strict();

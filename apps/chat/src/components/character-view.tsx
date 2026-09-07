@@ -61,7 +61,6 @@ export function CharacterView({
             />
           )}
         </div>
-        <div className="character-avatar-halo" aria-hidden="true" />
         <div className="character-portrait">
           <RagdollCharacter
             onControllerReady={handleControllerReady}

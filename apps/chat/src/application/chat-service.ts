@@ -62,7 +62,7 @@ export class ChatService {
       onText: (text) => {
         if (this.lifecycleVersion !== lifecycleVersion) return;
         this.streamingContent += text;
-        this.publish();
+        this.publish({ isStreaming: true });
       },
       onStreamEnd: () => {
         if (this.lifecycleVersion === lifecycleVersion) this.finishStream();
@@ -71,8 +71,13 @@ export class ChatService {
         if (this.lifecycleVersion !== lifecycleVersion) return;
         this.conversationVersion += 1;
         this.messages = conversation;
+        const hadStreamingContent = this.streamingContent.length > 0;
         this.dropStreamingContentIfPersisted();
-        this.publish();
+        this.publish(
+          hadStreamingContent && !this.streamingContent
+            ? { isStreaming: false }
+            : {},
+        );
       },
     });
     this.startPromise = this.hydrate(lifecycleVersion).catch(
