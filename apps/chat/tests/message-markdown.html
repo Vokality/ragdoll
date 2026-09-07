@@ -8,6 +8,14 @@ import "../src/styles/global.css";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const root = createRoot(document.getElementById("root"));
 const check = (value,message) => { if(!value) throw new Error(message); };
+// Flush React between polls; one long act batches animation updates until it ends.
+const waitFor = async (predicate, message) => {
+ const deadline = performance.now() + 10000;
+ while (!predicate()) {
+   if (performance.now() >= deadline) throw new Error(message);
+   await act(async () => new Promise(resolve => setTimeout(resolve, 50)));
+ }
+};
 const content = '# Heading\n\n**Bold** and *italic*, ~~removed~~ and `code`.\n\n- first\n- second\n\n1. ordered\n2. list\n\n> quote\n\n- [x] done\n- [ ] next\n\n| Name | Value |\n| --- | --- |\n| Row | Cell |\n\n```js\nconst veryLongName = "' + 'x'.repeat(150) + '";\n// [literal](https://example.com)\n```';
 const render = (messages,isStreaming=false) => act(async()=>root.render(React.createElement(ConversationBubbles,{messages,isStreaming})));
 try {
@@ -25,13 +33,10 @@ try {
  check(document.querySelector('a[href="https://example.com/"]')?.target==="_blank","Safe link is not external");
  check(!document.querySelector('a[href^="javascript:"],a[href^="file:"],a[href^="/"],img,script:not([type="module"])'),"Untrusted markup created unsafe content");
  await render([{role:"assistant",content:"**Streamed**\n\n```js\nconst x = 1;\n```"}],true);
- await act(async()=>new Promise(resolve=>setTimeout(resolve,850)));
- check(document.querySelector(".bubble-assistant strong")?.textContent==="Streamed","Live text is not Markdown");
+ await waitFor(()=>document.querySelector(".bubble-assistant strong")?.textContent==="Streamed","Live text is not Markdown");
  check(document.querySelector(".stream-cursor"),"Stream cursor lost");
  await render([{role:"assistant",content:"**Streamed**\n\n```js\nconst x = 1;\n```"}],false);
- await act(async()=>new Promise(resolve=>setTimeout(resolve,850)));
- check(document.querySelector(".bubble-assistant pre")?.textContent.includes("const x = 1"),"Final code block missing");
- check(!document.querySelector(".stream-cursor"),"Cursor remained after final reveal");
+ await waitFor(()=>document.querySelector(".bubble-assistant pre")?.textContent.includes("const x = 1") && !document.querySelector(".stream-cursor"),"Final code block or completed reveal missing");
  await act(async()=>root.unmount());
  document.getElementById("result").textContent="PASS: both roles, GFM, safe links, literal code, citations, narrow overflow and streamed Markdown";
 } catch(error) { document.getElementById("result").textContent=`FAIL: ${error.stack ?? error}`; }
