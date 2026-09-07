@@ -51,7 +51,7 @@
     "verify:packages": "bun run build:libraries && bun run build:examples && bun run scripts/verify-packages.ts",
     "verify:architecture": "bun run scripts/verify-architecture.ts",
     "format": "bun run scripts/run-js-bin.ts prettier --write .",
-    "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-flash-cards/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist packages/ragdoll-extension-tic-tac-toe/dist apps/chat/dist apps/chat/release apps/emote/dist apps/emote/emote.vsix examples/extension-weather/dist",
+    "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-canvas/dist packages/ragdoll-extension-flash-cards/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist packages/ragdoll-extension-tic-tac-toe/dist apps/chat/dist apps/chat/release apps/emote/dist apps/emote/emote.vsix examples/extension-weather/dist",
     "test:browser": "bun run --filter lumen test:browser"
   },
   "devDependencies": {

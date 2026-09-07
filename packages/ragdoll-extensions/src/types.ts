@@ -47,6 +47,12 @@ export interface ToolPropertySchema {
   maximum?: number;
   maxLength?: number;
   items?: ToolPropertySchema;
+  properties?: Record<string, ToolPropertySchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+  anyOf?: ToolPropertySchema[];
+  minItems?: number;
+  maxItems?: number;
   default?: unknown;
 }
 

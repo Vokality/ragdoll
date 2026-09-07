@@ -138,3 +138,7 @@ export {
 
 export { presetIcons, getSlotIcon } from "./slot-icons.js";
 export type { IconProps } from "./icons.js";
+
+export { CanvasPanel } from "./canvas-panel.js";
+export type { CanvasPanelConfig } from "./types.js";
+export type { CanvasDocument, CanvasElement } from "../canvas.js";

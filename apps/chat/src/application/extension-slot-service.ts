@@ -211,6 +211,17 @@ export class ExtensionSlotService {
         this.executeAction(slotId, { actionType, actionId: action.id }),
     });
 
+    if (state.panel.type === "canvas") {
+      return {
+        ...state,
+        panel: {
+          ...state.panel,
+          actions: state.panel.actions?.map((action) =>
+            attachAction("panel-action", action),
+          ),
+        },
+      };
+    }
     if (state.panel.type === "grid") {
       const attachCell = (cell: SerializedGridPanelCell): GridPanelCell => {
         const { canClick, ...metadata } = cell;

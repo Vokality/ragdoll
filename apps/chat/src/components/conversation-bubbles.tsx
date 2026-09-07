@@ -1,9 +1,21 @@
-import { useEffect, useRef, useState, type CSSProperties, type UIEvent } from "react";
+import {
+  citedResponse,
+  type SourceCitation,
+} from "../../electron/electron-api";
+import { SourcePills } from "./source-pills";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type UIEvent,
+} from "react";
 import { useSmoothText } from "../hooks/use-smooth-text";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  sources?: SourceCitation[];
 }
 
 interface ConversationBubblesProps {
@@ -33,13 +45,17 @@ export function ConversationBubbles({
   // network-paced bursts; it keeps draining after the stream closes.
   const liveAssistant = lastMessage?.role === "assistant" ? lastMessage : null;
   const smoothedContent = useSmoothText(
-    liveAssistant?.content ?? "",
+    liveAssistant
+      ? citedResponse(liveAssistant.content, liveAssistant.sources).content
+      : "",
     messages.length,
     isStreaming && liveAssistant !== null,
   );
   const isRevealing =
     liveAssistant !== null &&
-    smoothedContent.length < liveAssistant.content.length;
+    smoothedContent.length <
+      citedResponse(liveAssistant.content, liveAssistant.sources).content
+        .length;
 
   // Follow new content only while the user hasn't scrolled up to read;
   // their own new message always snaps the view back down.
@@ -79,6 +95,7 @@ export function ConversationBubbles({
     >
       <div style={styles.list}>
         {messages.map((message, index) => {
+          const response = citedResponse(message.content, message.sources);
           const isRevealTarget =
             index === messages.length - 1 && message.role === "assistant";
           const staggerDelay =
@@ -94,7 +111,7 @@ export function ConversationBubbles({
                 staggerDelay ? { animationDelay: staggerDelay } : undefined
               }
             >
-              {isRevealTarget ? (
+              {isRevealTarget && (isStreaming || isRevealing) ? (
                 <>
                   {/* Screen readers get the real text as it arrives; the
                       per-frame typewriter is visual-only. */}
@@ -104,10 +121,15 @@ export function ConversationBubbles({
                       <span className="stream-cursor">▌</span>
                     )}
                   </span>
-                  <span className="sr-only">{message.content}</span>
+                  <span className="sr-only">{response.content}</span>
                 </>
+              ) : message.role === "assistant" ? (
+                response.content
               ) : (
                 message.content
+              )}
+              {message.role === "assistant" && (
+                <SourcePills sources={response.sources ?? []} />
               )}
             </div>
           );

@@ -317,3 +317,32 @@ it("agent selections arriving during hydration survive stale snapshots and stop"
   expect(service.getActiveCardSnapshot()).toBeNull();
   expect(gateway.getSelectionListener()).toBeNull();
 });
+
+it("restores canvas footer callbacks after IPC serialization", async () => {
+  const state: SerializedSlotState = {
+    visible: true,
+    badge: null,
+    panel: {
+      type: "canvas",
+      title: "Drawing",
+      document: {
+        title: "Drawing",
+        width: 640,
+        height: 400,
+        background: "#fff",
+        elements: [],
+      },
+      actions: [{ id: "undo", label: "Undo" }],
+    },
+  };
+  const { gateway, actions } = createGateway(state);
+  const service = new ExtensionSlotService(gateway, (error) => {
+    throw error;
+  });
+  await service.start();
+  const panel = service.getSnapshot()[0]?.state.getState().panel;
+  expect(panel?.type).toBe("canvas");
+  await panel?.actions?.[0]?.onClick();
+  expect(actions).toEqual([{ actionType: "panel-action", actionId: "undo" }]);
+  service.stop();
+});

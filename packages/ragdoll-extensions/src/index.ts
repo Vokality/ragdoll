@@ -182,3 +182,14 @@ export { createExtension } from "./create-extension.js";
 // =============================================================================
 
 export { ExtensionRegistry, createRegistry } from "./registry.js";
+
+export {
+  canvasDocumentSchema,
+  canvasElementSchema,
+  serializeCanvasSvg,
+} from "./canvas.js";
+export type { CanvasDocument, CanvasElement } from "./canvas.js";
+export type {
+  CanvasPanelConfig,
+  SerializedCanvasPanelConfig,
+} from "./slots.js";

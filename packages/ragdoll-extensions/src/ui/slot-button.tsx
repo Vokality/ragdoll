@@ -2,20 +2,9 @@
  * SlotButton - Renders an extension UI slot as a clickable button with badge.
  */
 
-import { type CSSProperties } from "react";
+import { createElement, type CSSProperties } from "react";
 import { useSlotState } from "./hooks.js";
-import {
-  BellIcon,
-  BookmarkIcon,
-  CalendarIcon,
-  ChecklistIcon,
-  FlagIcon,
-  GridIcon,
-  MusicIcon,
-  SettingsIcon,
-  StarIcon,
-  TimerIcon,
-} from "./icons.js";
+import { getSlotIcon } from "./slot-icons.js";
 import type {
   ExtensionUISlot,
   PresetIconName,
@@ -108,28 +97,7 @@ interface SlotButtonViewProps {
 }
 
 function SlotIcon({ name, size }: { name: PresetIconName; size: number }) {
-  switch (name) {
-    case "checklist":
-      return <ChecklistIcon size={size} />;
-    case "timer":
-      return <TimerIcon size={size} />;
-    case "calendar":
-      return <CalendarIcon size={size} />;
-    case "bell":
-      return <BellIcon size={size} />;
-    case "settings":
-      return <SettingsIcon size={size} />;
-    case "bookmark":
-      return <BookmarkIcon size={size} />;
-    case "flag":
-      return <FlagIcon size={size} />;
-    case "star":
-      return <StarIcon size={size} />;
-    case "music":
-      return <MusicIcon size={size} />;
-    case "grid":
-      return <GridIcon size={size} />;
-  }
+  return createElement(getSlotIcon(name), { size });
 }
 
 function SlotButtonView({

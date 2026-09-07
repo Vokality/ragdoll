@@ -192,3 +192,20 @@ export function GridIcon({ size = 20 }: IconProps) {
 }
 
 export type { IconProps };
+
+export function CanvasIcon({ size = 20 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="m7 16 1-4 7-7 3 3-7 7-4 1Z" />
+    </svg>
+  );
+}

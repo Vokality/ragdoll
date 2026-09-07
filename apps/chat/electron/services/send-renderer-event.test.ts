@@ -22,7 +22,7 @@ it("finishes and persists a streamed response after its renderer closes", async 
         stream("Hello");
         destroyed = true;
         stream(" there");
-        return "Hello there";
+        return { content: "Hello there" };
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     },

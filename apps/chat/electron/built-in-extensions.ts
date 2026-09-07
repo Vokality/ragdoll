@@ -1,3 +1,5 @@
+import { createExtension as createCanvasExtension } from "@vokality/ragdoll-extension-canvas";
+import canvasPackageJson from "@vokality/ragdoll-extension-canvas/manifest" with { type: "json" };
 import { createExtension as createCharacterExtension } from "@vokality/ragdoll-extension-character";
 import characterPackageJson from "@vokality/ragdoll-extension-character/manifest" with { type: "json" };
 import { createExtension as createFlashCardsExtension } from "@vokality/ragdoll-extension-flash-cards";
@@ -35,4 +37,5 @@ export const BUILT_IN_EXTENSIONS = [
   defineBuiltInExtension(spotifyPackageJson, createSpotifyExtension),
   defineBuiltInExtension(ticTacToePackageJson, createTicTacToeExtension),
   defineBuiltInExtension(flashCardsPackageJson, createFlashCardsExtension),
+  defineBuiltInExtension(canvasPackageJson, createCanvasExtension),
 ] as const satisfies readonly BuiltInExtensionDefinition[];

@@ -1,3 +1,4 @@
+import type { ChatMessage } from "../domain/chat";
 import { describe, expect, it } from "bun:test";
 import type {
   ChatGateway,
@@ -282,6 +283,33 @@ describe("ChatService", () => {
       { role: "assistant", content: "Hello back" },
     ]);
 
+    service.stop();
+  });
+
+  it("hands off inline streamed citations to structured persisted sources without duplicating the response", async () => {
+    const testGateway = createGateway();
+    const service = new ChatService(testGateway.gateway, {
+      theme: "default",
+      variant: "human",
+    });
+    await service.start();
+    const handlers = testGateway.getStreamingHandlers();
+    handlers?.onConversationChanged([{ role: "user", content: "Search" }]);
+    handlers?.onText("News. [NASA](https://www.nasa.gov/)");
+    handlers?.onStreamEnd();
+    const response = {
+      role: "assistant",
+      content: "News.",
+      sources: [{ title: "NASA", url: "https://www.nasa.gov/" }],
+    } satisfies ChatMessage;
+    handlers?.onConversationChanged([
+      { role: "user", content: "Search" },
+      response,
+    ]);
+    expect(service.getSnapshot().visibleMessages).toEqual([
+      { role: "user", content: "Search" },
+      response,
+    ]);
     service.stop();
   });
 

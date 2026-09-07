@@ -1,3 +1,4 @@
+import type { AgentResponse } from "../electron-api.js";
 import { describe, expect, it } from "bun:test";
 import type {
   ConversationEntry,
@@ -25,11 +26,11 @@ class StubAgentRunner implements AgentRunner {
     _apiKey: string,
     conversation: readonly ConversationEntry[],
     onStreamingText: (text: string) => void,
-  ): Promise<string> {
+  ): Promise<AgentResponse> {
     this.userConversations = [...this.userConversations, conversation];
     onStreamingText("Hello");
     onStreamingText(" there");
-    return "Hello there";
+    return { content: "Hello there" };
   }
 
   async runEventTurn(
@@ -73,7 +74,7 @@ describe("ChatApplicationService", () => {
             { once: true },
           );
         });
-        return "Unreachable";
+        return { content: "Unreachable" };
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     };
@@ -113,7 +114,7 @@ describe("ChatApplicationService", () => {
     });
     let calls = 0;
     const agent: AgentRunner = {
-      runUserTurn: async () => "Hello",
+      runUserTurn: async () => ({ content: "Hello" }),
       runEventTurn: async () => {
         calls += 1;
         markStarted();
@@ -302,7 +303,7 @@ describe("ChatApplicationService", () => {
         onStreamingText("answer");
         await turnGate;
         if (signal?.aborted) throw new Error("Request was aborted.");
-        return "never reached";
+        return { content: "never reached" };
       },
       runEventTurn: async () => ({ disposition: "silent" }),
     };
@@ -394,7 +395,7 @@ describe("ChatApplicationService", () => {
         markUserTurnStarted();
         await userTurnGate;
         executionOrder.push("user-finished");
-        return "Done";
+        return { content: "Done" };
       },
       runEventTurn: async () => {
         executionOrder.push("event-started");
@@ -441,7 +442,7 @@ it("preserves streamed progress on failure and accepts the next user turn", asyn
       calls += 1;
       stream(calls === 1 ? "Checking." : "Recovered.");
       if (calls === 1) throw new Error("Connection interrupted");
-      return "Recovered.";
+      return { content: "Recovered." };
     },
     runEventTurn: async () => ({ disposition: "silent" }),
   };
@@ -474,4 +475,57 @@ it("preserves streamed progress on failure and accepts the next user turn", asyn
     content: "Recovered.",
   });
   expect(ended).toBe(2);
+});
+
+it("persists and publishes structured citations with user and event responses", async () => {
+  const sources = [{ title: "NASA", url: "https://www.nasa.gov/" }];
+  const storage = createInMemoryStorageRepository();
+  const published: ConversationEntry[][] = [];
+  const chat = new ChatApplicationService(
+    storage,
+    { getKey: async () => "key" },
+    {
+      runUserTurn: async (_key, _history, stream) => {
+        stream("News.");
+        return { content: "News.", sources };
+      },
+      runEventTurn: async () => ({
+        disposition: "respond",
+        content: "Update.",
+        sources,
+      }),
+    },
+    (conversation) => published.push(conversation),
+    ignoreError,
+  );
+  await chat.sendMessage("Search", {
+    streamingText: () => {},
+    streamEnded: () => {},
+  });
+  const expected: ConversationEntry = {
+    role: "assistant",
+    content: "News.",
+    sources,
+  };
+  expect((await chat.getConversation()).at(-1)).toEqual(expected);
+  expect(published.at(-1)?.at(-1)).toEqual(expected);
+  const event: ExtensionConversationEvent = {
+    kind: "extension-event",
+    id: "citation-event",
+    extensionId: "test",
+    type: "test.update",
+    payload: {},
+    turnPolicy: "start-turn",
+    occurredAt: 1,
+  };
+  await storage.update((draft) => {
+    draft.conversation.push(event);
+    draft.pendingAgentTurns.push({ triggerEventId: event.id, createdAt: 1 });
+  });
+  await chat.schedulePendingEventTurns();
+  expect((await chat.getConversation()).at(-1)).toEqual({
+    role: "assistant",
+    content: "Update.",
+    sources,
+  });
 });

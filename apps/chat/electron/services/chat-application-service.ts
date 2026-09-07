@@ -1,3 +1,4 @@
+import type { AgentResponse } from "../electron-api.js";
 import type { ChatMessageDto, OperationResult } from "../electron-api.js";
 import {
   isExtensionConversationEvent,
@@ -94,7 +95,7 @@ export class ChatApplicationService {
           try {
             const partial = streamed.trim();
             const conversation = partial
-              ? await this.appendAssistantResponse(partial)
+              ? await this.appendAssistantResponse({ content: partial })
               : (await this.storage.read()).conversation;
             events.streamEnded();
             this.publishConversation(conversation);
@@ -171,6 +172,7 @@ export class ChatApplicationService {
           draft.conversation.push({
             role: "assistant",
             content: outcome.content,
+            ...(outcome.sources ? { sources: outcome.sources } : {}),
           });
         }
         draft.pendingAgentTurns = draft.pendingAgentTurns.filter(
@@ -185,13 +187,17 @@ export class ChatApplicationService {
   }
 
   private async appendAssistantResponse(
-    content: string,
+    response: AgentResponse,
   ): Promise<ConversationEntry[]> {
-    const trimmed = content.trim();
+    const trimmed = response.content.trim();
     if (!trimmed) throw new Error("The agent returned an empty response");
 
     const data = await this.storage.update((draft) => {
-      draft.conversation.push({ role: "assistant", content: trimmed });
+      draft.conversation.push({
+        ...response,
+        role: "assistant",
+        content: trimmed,
+      });
     });
     return data.conversation;
   }

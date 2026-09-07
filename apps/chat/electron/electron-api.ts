@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   ConfigSchema,
   SerializedSlotState,
@@ -185,6 +186,7 @@ export interface UpdateCheckResult {
 }
 
 export interface ChatMessageDto {
+  sources?: SourceCitation[];
   role: "user" | "assistant";
   content: string;
 }
@@ -247,4 +249,50 @@ export interface ElectronAPI {
   getUserInstalledExtensions(): Promise<InstalledExtension[]>;
   checkExtensionUpdates(): Promise<UpdateCheckResult[]>;
   updateExtension(extensionId: string): Promise<InstallResult>;
+}
+
+export const sourceCitationSchema = z
+  .object({
+    url: z.url().refine((value) => {
+      const url = new URL(value);
+      return (
+        (url.protocol === "https:" || url.protocol === "http:") &&
+        !url.username &&
+        !url.password
+      );
+    }, "Source must be a public HTTP(S) link"),
+    title: z.string().trim().min(1),
+  })
+  .strict();
+export type SourceCitation = z.infer<typeof sourceCitationSchema>;
+
+export interface AgentResponse {
+  content: string;
+  sources?: SourceCitation[];
+}
+
+/** Normalize old inline citations as well as structured search results. */
+export function citedResponse(
+  content: string,
+  sources: readonly SourceCitation[] = [],
+): AgentResponse {
+  const unique = new Map(sources.map((source) => [source.url, source]));
+  const text = content
+    .replace(
+      /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      (match, title: string, url: string) => {
+        const parsed = sourceCitationSchema.safeParse({ title, url });
+        if (!parsed.success) return match;
+        if (!unique.has(url)) unique.set(url, parsed.data);
+        return "";
+      },
+    )
+    .replace(/(?:^|\s)Sources?:\s*(?=\n|$)/gi, "")
+    .trim();
+  return unique.size
+    ? {
+        content: text.replace(/(?:^|\s)Sources?:[^\n]*$/i, "").trim(),
+        sources: [...unique.values()],
+      }
+    : { content: text };
 }

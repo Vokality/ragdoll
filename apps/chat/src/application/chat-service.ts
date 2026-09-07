@@ -1,3 +1,4 @@
+import { citedResponse } from "../../electron/electron-api";
 import type { ChatMessage } from "../domain/chat";
 import { getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
@@ -259,7 +260,7 @@ export class ChatService {
     if (
       this.streamingContent &&
       last?.role === "assistant" &&
-      last.content === this.streamingContent.trim()
+      last.content === citedResponse(this.streamingContent).content
     ) {
       this.streamingContent = "";
     }

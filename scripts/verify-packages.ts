@@ -92,6 +92,8 @@ import { createSlotState } from "@vokality/ragdoll-extensions/slots";
 import { SlotBar } from "@vokality/ragdoll-extensions/ui";
 import { createExtension as createCharacter } from "@vokality/ragdoll-extension-character";
 import characterManifest from "@vokality/ragdoll-extension-character/manifest" with { type: "json" };
+import { createExtension as createCanvas } from "@vokality/ragdoll-extension-canvas";
+import canvasManifest from "@vokality/ragdoll-extension-canvas/manifest" with { type: "json" };
 import { createExtension as createTasks } from "@vokality/ragdoll-extension-tasks";
 import tasksManifest from "@vokality/ragdoll-extension-tasks/manifest" with { type: "json" };
 import { createExtension as createPomodoro } from "@vokality/ragdoll-extension-pomodoro";
@@ -120,6 +122,7 @@ if (exportsToCheck.some((value) => value === undefined)) {
 const factories = [
   [createCharacter, characterManifest],
   [createTasks, tasksManifest],
+  [createCanvas, canvasManifest],
   [createPomodoro, pomodoroManifest],
   [createSpotify, spotifyManifest],
   [createTicTacToe, ticTacToeManifest],

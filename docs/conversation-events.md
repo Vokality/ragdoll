@@ -114,3 +114,15 @@ conversation ownership, scheduling, persistence, and presentation.
 - Pending event turns survive process restart.
 - Pomodoro, flash-cards, and tic-tac-toe use the core capability.
 - Type checks, package tests, chat tests, and production builds pass.
+
+## Durable tool execution history
+
+User and extension-event turns record app and extension tool executions in the same conversation timeline. A `tool-execution` entry contains a unique execution ID, original call ID, name, argument JSON, origin, start time, and a discriminated outcome. Before invoking a tool, the runner persists a `started` entry; after execution, it persists the JSON result and completion time before continuing.
+
+Only user and assistant text is projected into the visible chat. Subsequent model turns receive recorded executions as assistant tool calls paired with tool result messages. Execution IDs keep these pairs unique even if a provider reuses a call ID. Past results are observations at execution time; extensions should still be read before editing current state.
+
+A started entry without a completed result has an unknown outcome: the process may have stopped after the action ran. The model receives that uncertainty explicitly. The runner never re-executes historical calls to reconstruct context. If the start record cannot be saved, the action does not run; if saving its result fails, the turn stops and retains the unknown record.
+
+Event records identify their trigger event. Retrying an event after a required action succeeded continues to its response/silent decision without repeating that action. An unknown required action outcome blocks automatic event retry until its state is reconciled. Clearing the conversation removes these records along with messages and queued event turns.
+
+Existing text and extension-event conversations remain valid. Execution history begins with this implementation; it cannot recover tool calls that were never recorded. Canvas undo history remains separately owned by the extension and session-local.

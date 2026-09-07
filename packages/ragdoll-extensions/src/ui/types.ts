@@ -1,5 +1,6 @@
 import type {
   ExtensionSlot,
+  CanvasPanelConfig,
   CardsAnswerInput,
   CardsPanelCardBase,
   CardsPanelConfig,
@@ -25,6 +26,7 @@ import type {
 } from "../slots.js";
 
 export type {
+  CanvasPanelConfig,
   CardsAnswerInput,
   CardsPanelCardBase,
   CardsPanelConfig,

@@ -12,6 +12,7 @@ describe("built-in extension descriptors", () => {
       "spotify",
       "tic-tac-toe",
       "flash-cards",
+      "canvas",
     ]);
 
     const spotify = BUILT_IN_EXTENSIONS.find(

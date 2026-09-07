@@ -1,3 +1,9 @@
+import { WebToolService } from "./services/web-tool-service.js";
+import {
+  OpenAIWebSearchService,
+  createWebSearchTransport,
+} from "./services/web-search-service.js";
+import { ToolHistoryService } from "./services/tool-history-service.js";
 import { ExtensionCardService } from "./services/extension-card-service.js";
 import { AppToolService } from "./services/app-tool-service.js";
 import { Notification, ipcMain, safeStorage, shell } from "electron";
@@ -118,9 +124,17 @@ export class LumenApplication {
       this.storage,
       this.apiKeys,
       new OpenAIAgentRunner(
-        new AppToolService(this.extensions, this.cards),
+        new WebToolService(
+          new AppToolService(this.extensions, this.cards),
+          new OpenAIWebSearchService(
+            this.apiKeys,
+            this.config.chat.model,
+            createWebSearchTransport(),
+          ),
+        ),
         this.config.chat,
         createOpenAICompletionSessionFactory(),
+        new ToolHistoryService(this.storage),
       ),
       (conversation) => this.rendererEvents.conversationChanged(conversation),
       (error) => console.error("Failed to process extension event turn", error),

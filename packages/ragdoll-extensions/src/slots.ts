@@ -1,3 +1,10 @@
+import type { CanvasDocument } from "./canvas.js";
+export {
+  canvasDocumentSchema,
+  canvasElementSchema,
+  serializeCanvasSvg,
+} from "./canvas.js";
+export type { CanvasDocument, CanvasElement } from "./canvas.js";
 /**
  * React-free contracts and state utilities for extension-contributed slots.
  *
@@ -41,7 +48,8 @@ export type PresetIconName =
   | "flag"
   | "star"
   | "music"
-  | "grid";
+  | "grid"
+  | "canvas";
 
 /**
  * A single item in a list panel
@@ -261,7 +269,12 @@ export type CardsPanelConfig = CardsPanelFront | CardsPanelRevealed;
 /**
  * Union of panel configuration types (React-free version)
  */
-export type PanelConfig = ListPanelConfig | GridPanelConfig | CardsPanelConfig;
+export interface CanvasPanelConfig extends PanelFrame {
+  type: "canvas";
+  document: CanvasDocument;
+}
+export type PanelConfig =
+  ListPanelConfig | GridPanelConfig | CardsPanelConfig | CanvasPanelConfig;
 
 /**
  * Dynamic state exposed by a slot
@@ -361,7 +374,12 @@ export type SerializedCardsPanelConfig = Omit<
 };
 
 /** Panel data safe to send across a process boundary. */
+export type SerializedCanvasPanelConfig = Omit<CanvasPanelConfig, "actions"> & {
+  actions?: SerializedPanelAction[];
+};
+
 export type SerializedPanelConfig =
+  | SerializedCanvasPanelConfig
   | SerializedListPanelConfig
   | SerializedGridPanelConfig
   | SerializedCardsPanelConfig;
@@ -427,6 +445,17 @@ function serializeCardsPanel(
 /** Remove executable callbacks while preserving which actions the host supports. */
 export function serializeSlotState(state: SlotState): SerializedSlotState {
   const panel = state.panel;
+  if (panel.type === "canvas") {
+    return {
+      badge: state.badge,
+      visible: state.visible,
+      panel: {
+        ...panel,
+        document: structuredClone(panel.document),
+        actions: panel.actions?.map(serializeAction),
+      },
+    };
+  }
   if (panel.type === "grid") {
     return {
       badge: state.badge,

@@ -66,3 +66,11 @@ cards cannot be opened; hiding or unregistering the active slot closes it.
 Closing a card does not dispose its extension or cancel its activity.
 
 App-control tool names are reserved and cannot be shadowed by extension tools.
+
+## Canvas panels
+
+A `CanvasPanelConfig` contributes a typed `CanvasDocument` to the standard header/content/footer layout. The React-free contract, schemas, and SVG exporter are available from the extension framework's core and slots entrypoints. `CanvasPanel` is available from `/ui`; it fits SVG viewBox coordinates into the available body space while preserving aspect ratio.
+
+Canvas elements are a discriminated union of rectangles, ellipses, paths, and text. The drawing contains data, never arbitrary SVG markup or callbacks. `serializeSlotState` copies the document and removes footer callbacks; hosts restore standard `panel-action` handlers as for other panel types. Export SVG is a local renderer download control.
+
+The first-party `@vokality/ragdoll-extension-canvas` package owns document persistence, revisions, batch edits, and undo. It contributes `canvas.main`; the host's existing card tools control its visibility independently.

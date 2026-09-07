@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@vokality/ragdoll": "workspace:*",
+    "@vokality/ragdoll-extension-canvas": "workspace:*",
     "@vokality/ragdoll-extension-character": "workspace:*",
     "@vokality/ragdoll-extension-flash-cards": "workspace:*",
     "@vokality/ragdoll-extension-pomodoro": "workspace:*",

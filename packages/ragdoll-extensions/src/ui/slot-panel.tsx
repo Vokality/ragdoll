@@ -14,6 +14,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { CanvasPanel } from "./canvas-panel.js";
+import { downloadCanvasSvg } from "./download-canvas.js";
 import { usePanelAction } from "./use-panel-action.js";
 import { useSlotState } from "./hooks.js";
 import type {
@@ -81,6 +83,25 @@ function PanelContent({
   panel: PanelConfig;
   onClose: () => void;
 }) {
+  if (panel.type === "canvas") {
+    return (
+      <PanelLayout
+        panel={panel}
+        onClose={onClose}
+        input={
+          <ActionButton
+            action={{
+              id: "export-svg",
+              label: "Export SVG",
+              onClick: () => downloadCanvasSvg(panel.document),
+            }}
+          />
+        }
+      >
+        <CanvasPanel document={panel.document} />
+      </PanelLayout>
+    );
+  }
   return panel.type === "list" ? (
     <ListPanel config={panel} onClose={onClose} />
   ) : panel.type === "grid" ? (

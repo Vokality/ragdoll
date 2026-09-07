@@ -102,7 +102,22 @@
       const check = (ok, message) => {
         if (!ok) throw new Error(message);
       };
-      const settle = () => new Promise((resolve) => setTimeout(resolve, 460));
+      const settle = async () => {
+        // Flush layout before collecting transitions; software rendering in CI
+        // can start them later than a fixed wall-clock delay assumes.
+        const stage = document.querySelector(".character-stage");
+        stage.getBoundingClientRect();
+        await new Promise(requestAnimationFrame);
+        await Promise.all(
+          stage
+            .getAnimations({ subtree: true })
+            .filter(
+              (animation) =>
+                animation.effect.getComputedTiming().iterations !== Infinity,
+            )
+            .map((animation) => animation.finished),
+        );
+      };
       try {
         for (const height of [800, 600]) {
           await act(async () => state.setState({ panel: listPanel }));
@@ -119,6 +134,7 @@
           );
           const canvas = document.querySelector("canvas");
           check(!!canvas, "Character did not render");
+          await settle();
           const large = canvas.getBoundingClientRect().width;
           await act(async () =>
             document.querySelector('button[aria-label="Tasks"]').click(),
@@ -139,7 +155,7 @@
             miniature.width < large / 2 &&
               miniature.left < bounds.left + 85 &&
               miniature.top < bounds.top + 30,
-            "Character did not move into card corner",
+            `Character did not move into card corner: ${JSON.stringify({ large, miniature: miniature.toJSON(), card: bounds.toJSON() })}`,
           );
           const composer = document.getElementById("composer");
           composer.focus();

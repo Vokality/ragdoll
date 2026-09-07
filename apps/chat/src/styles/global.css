@@ -1136,3 +1136,51 @@ dialog.modal-card::backdrop {
 .extension-dock {
   --slot-button-size: 36px;
 }
+
+.source-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  white-space: normal;
+}
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #526b83;
+  border-radius: var(--radius-full);
+  background: #34495e;
+  color: #edf3f9;
+  font-size: 11px;
+  line-height: 1.3;
+  text-decoration: none;
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+.source-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-pill svg {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.source-pill:hover {
+  background: #405a73;
+  border-color: var(--text-muted);
+}
+.source-pill:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+}
+
+.source-favicon {
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 3px;
+}

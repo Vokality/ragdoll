@@ -1,3 +1,4 @@
+import { sourceCitationSchema } from "../electron-api.js";
 import {
   CONVERSATION_EVENT_TYPE_PATTERN,
   REQUIRED_TOOL_NAME_PATTERN,
@@ -8,16 +9,13 @@ export const conversationMessageSchema = z
   .object({
     role: z.enum(["user", "assistant"]),
     content: z.string(),
+    sources: z.array(sourceCitationSchema).optional(),
   })
   .strict();
 
 export const conversationEventInputSchema = z
   .object({
-    type: z
-      .string()
-      .min(1)
-      .max(100)
-      .regex(CONVERSATION_EVENT_TYPE_PATTERN),
+    type: z.string().min(1).max(100).regex(CONVERSATION_EVENT_TYPE_PATTERN),
     payload: z.record(z.string(), z.json()),
     turnPolicy: z.enum(["record-only", "start-turn"]),
     requiredToolName: z
@@ -44,9 +42,57 @@ export const extensionConversationEventSchema = z
   })
   .strict();
 
+export const toolCallSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    arguments: z.string(),
+  })
+  .strict();
+
+export const persistedToolResultSchema = z
+  .object({
+    success: z.boolean(),
+    sources: z.array(sourceCitationSchema).optional(),
+    data: z.json().optional(),
+    error: z.string().optional(),
+    retryable: z.boolean().optional(),
+  })
+  .strict();
+
+export const toolExecutionOriginSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("user") }).strict(),
+  z.object({ type: z.literal("event"), eventId: z.string().min(1) }).strict(),
+]);
+
+export const toolExecutionSchema = z
+  .object({
+    kind: z.literal("tool-execution"),
+    id: z.string().min(1),
+    call: toolCallSchema,
+    origin: toolExecutionOriginSchema,
+    startedAt: z.number().int().nonnegative(),
+    outcome: z.discriminatedUnion("status", [
+      z.object({ status: z.literal("started") }).strict(),
+      z
+        .object({
+          status: z.literal("completed"),
+          completedAt: z.number().int().nonnegative(),
+          result: persistedToolResultSchema,
+        })
+        .strict(),
+    ]),
+  })
+  .strict();
+
+export type ToolCall = z.infer<typeof toolCallSchema>;
+export type ToolExecution = z.infer<typeof toolExecutionSchema>;
+export type ToolExecutionOrigin = z.infer<typeof toolExecutionOriginSchema>;
+
 export const conversationEntrySchema = z.union([
   conversationMessageSchema,
   extensionConversationEventSchema,
+  toolExecutionSchema,
 ]);
 
 export const pendingAgentTurnSchema = z
@@ -64,7 +110,12 @@ export type ExtensionConversationEvent = z.infer<
 export type PendingAgentTurn = z.infer<typeof pendingAgentTurnSchema>;
 
 export type EventTurnOutcome =
-  { disposition: "silent" } | { disposition: "respond"; content: string };
+  | { disposition: "silent" }
+  | {
+      disposition: "respond";
+      content: string;
+      sources?: z.infer<typeof sourceCitationSchema>[];
+    };
 
 export function isConversationMessage(
   entry: ConversationEntry,
@@ -82,4 +133,10 @@ export function projectVisibleConversation(
   entries: readonly ConversationEntry[],
 ): ConversationMessage[] {
   return entries.filter(isConversationMessage);
+}
+
+export function isToolExecution(
+  entry: ConversationEntry,
+): entry is ToolExecution {
+  return "kind" in entry && entry.kind === "tool-execution";
 }

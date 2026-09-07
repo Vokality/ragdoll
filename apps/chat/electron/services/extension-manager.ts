@@ -1035,7 +1035,7 @@ export class ExtensionManager {
         };
       }
 
-      if (panel.type === "cards") {
+      if (panel.type === "cards" || panel.type === "canvas") {
         return {
           success: false,
           error: `Action not found: ${actionType}:${actionId}`,

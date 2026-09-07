@@ -16,6 +16,7 @@ import {
   StarIcon,
   MusicIcon,
   GridIcon,
+  CanvasIcon,
 } from "./icons.js";
 
 export const presetIcons: Record<PresetIconName, ComponentType<IconProps>> = {
@@ -29,6 +30,7 @@ export const presetIcons: Record<PresetIconName, ComponentType<IconProps>> = {
   star: StarIcon,
   music: MusicIcon,
   grid: GridIcon,
+  canvas: CanvasIcon,
 };
 
 export function getSlotIcon(icon: PresetIconName): ComponentType<IconProps> {

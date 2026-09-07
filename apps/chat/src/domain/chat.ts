@@ -1,8 +1,10 @@
+import type { SourceCitation } from "../../electron/electron-api";
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  sources?: SourceCitation[];
 }
 
 /**
