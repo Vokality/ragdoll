@@ -32,6 +32,7 @@
   min-width: 0;
 }
 .profile-section input:not([type="checkbox"]),
+.profile-section select,
 .profile-section textarea {
   width: 100%;
   padding: 8px;
@@ -82,4 +83,24 @@
 }
 .profile-check-ins input {
   accent-color: var(--accent);
+}
+
+.profile-section summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.profile-section details {
+  min-width: 0;
+}
+
+.profile-long-term {
+  display: grid;
+  gap: 8px;
+}
+.profile-long-term h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
 }

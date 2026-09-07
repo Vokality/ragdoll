@@ -1,11 +1,15 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import type { ExperienceService } from "../application/experience-service";
-import type { ProfileEdit } from "../../electron/electron-api";
+import {
+  memoryTierSchema,
+  type ProfileEdit,
+} from "../../electron/electron-api";
 import "./profile-section.css";
 
 export function ProfileSection({ service }: { service: ExperienceService }) {
   const snapshot = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [edit, setEdit] = useState<ProfileEdit | null>(null);
+  const [visibleFacts, setVisibleFacts] = useState(20);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const profile = snapshot?.profile;
@@ -19,7 +23,7 @@ export function ProfileSection({ service }: { service: ExperienceService }) {
   const begin = () => {
     setEdit({
       name: profile.name,
-      notes: profile.notes.map((note) => ({ ...note })),
+      notes: profile.notes.map(({ id, text, tier }) => ({ id, text, tier })),
       checkInsEnabled: profile.checkInsEnabled,
       revision: profile.revision,
     });
@@ -65,10 +69,26 @@ export function ProfileSection({ service }: { service: ExperienceService }) {
                 }
               />
             </label>
-            {edit.notes.map((note) => (
+            {edit.notes.slice(0, visibleFacts).map((note) => (
               <div className="profile-note" key={note.id}>
                 <label>
                   Remembered detail
+                  <select
+                    aria-label={`Memory type for ${note.text}`}
+                    value={note.tier}
+                    onChange={(event) => {
+                      const tier = memoryTierSchema.parse(event.target.value);
+                      setEdit({
+                        ...edit,
+                        notes: edit.notes.map((item) =>
+                          item.id === note.id ? { ...item, tier } : item,
+                        ),
+                      });
+                    }}
+                  >
+                    <option value="working">Working memory</option>
+                    <option value="long_term">Long-term memory</option>
+                  </select>
                   <textarea
                     maxLength={240}
                     value={note.text}
@@ -99,6 +119,15 @@ export function ProfileSection({ service }: { service: ExperienceService }) {
                 </button>
               </div>
             ))}
+            {edit.notes.length > visibleFacts && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setVisibleFacts(visibleFacts + 20)}
+              >
+                Show more facts
+              </button>
+            )}
             <label className="profile-check-ins">
               <input
                 type="checkbox"
@@ -133,13 +162,59 @@ export function ProfileSection({ service }: { service: ExperienceService }) {
           <p>
             <strong>{profile.name ?? "No name saved"}</strong>
           </p>
-          {profile.notes.length ? (
+          <details open>
+            <summary>
+              Working memory ·{" "}
+              {profile.notes.filter((note) => note.tier === "working").length}
+              /50
+            </summary>
+            <p>
+              Available in every conversation. When full, the least recently
+              used facts move to long-term memory.
+            </p>
             <ul>
-              {profile.notes.map((note) => (
-                <li key={note.id}>{note.text}</li>
-              ))}
+              {profile.notes
+                .filter((note) => note.tier === "working")
+                .map((note) => (
+                  <li key={note.id}>{note.text}</li>
+                ))}
             </ul>
-          ) : (
+          </details>
+          <section className="profile-long-term" aria-label="Long-term memory">
+            <h4>
+              Long-term memory ·{" "}
+              {profile.notes.filter((note) => note.tier === "long_term").length}{" "}
+              facts
+            </h4>
+            <p>
+              {profile.longTermSummary ??
+                (profile.notes.some((note) => note.tier === "long_term")
+                  ? "Summary pending. Lumen will refresh it during your next conversation."
+                  : "No long-term facts saved yet.")}
+            </p>
+            <details>
+              <summary>Browse saved facts</summary>
+              <ul>
+                {profile.notes
+                  .filter((note) => note.tier === "long_term")
+                  .slice(0, visibleFacts)
+                  .map((note) => (
+                    <li key={note.id}>{note.text}</li>
+                  ))}
+              </ul>
+              {profile.notes.filter((note) => note.tier === "long_term")
+                .length > visibleFacts && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setVisibleFacts(visibleFacts + 20)}
+                >
+                  Show more facts
+                </button>
+              )}
+            </details>
+          </section>
+          {!profile.notes.length && (
             <p>
               No details saved yet. Tell Lumen what you'd like it to remember.
             </p>

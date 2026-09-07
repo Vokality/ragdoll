@@ -22,10 +22,14 @@
         profile: {
           name: "Sam",
           nameDeclined: false,
+          longTermSummary: null,
           notes: [
             {
               id: "9a582761-bfe1-451f-b8ec-19f345e89a7f",
               text: "Prefers quiet mornings",
+              tier: "working",
+              createdAt: 1,
+              lastUsedAt: 1,
             },
           ],
           revision: 0,
@@ -47,6 +51,7 @@
         saveProfile: async (edit) => {
           if (failSave) throw new Error("Memory changed; reload");
           snapshot.profile = {
+            ...snapshot.profile,
             ...edit,
             nameDeclined: edit.name === null,
             revision: edit.revision + 1,
@@ -139,10 +144,59 @@
           document.getElementById("root").scrollWidth <= 340,
           "Profile overflowed compact settings",
         );
+        snapshot.profile.notes = Array.from({ length: 75 }, (_, i) => ({
+          id: crypto.randomUUID(),
+          text: `Birthday ${i} on May 3`,
+          tier: "long_term",
+          createdAt: 1,
+          lastUsedAt: 1,
+        }));
+        snapshot.profile.longTermSummary = "Birthdays for family and friends.";
+        await act(async () => service.refresh());
+        check(
+          document.body.textContent.includes(
+            "Birthdays for family and friends.",
+          ),
+          "Long-term summary missing",
+        );
+        check(
+          document.querySelectorAll("li").length === 20,
+          "Long-term facts were not paginated",
+        );
+        await act(async () =>
+          [...document.querySelectorAll("button")]
+            .find((b) => b.textContent === "Show more facts")
+            .click(),
+        );
+        check(
+          document.querySelectorAll("li").length === 40,
+          "More facts could not be reached",
+        );
+        await act(async () =>
+          [...document.querySelectorAll("button")]
+            .find((b) => b.textContent === "Edit memory")
+            .click(),
+        );
+        const tierSelect = document.querySelector("select");
+        await act(async () => {
+          tierSelect.value = "working";
+          tierSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await act(async () => document.querySelector("form").requestSubmit());
+        check(
+          snapshot.profile.notes[0].tier === "working",
+          "Memory tier edit was not saved",
+        );
+        check(
+          document.getElementById("root").scrollWidth <= 340,
+          "Two-tier memory overflowed compact settings",
+        );
         check(beginCount === 1, "Opening settings restarted onboarding");
-        await act(async () => root.unmount());
-        stop();
-        check(!changed, "Subscription leaked");
+        if (!new URLSearchParams(location.search).has("preview")) {
+          await act(async () => root.unmount());
+          stop();
+          check(!changed, "Subscription leaked");
+        }
         document.getElementById("result").textContent =
           "PASS: conversational suggestions, saved memory review, forgetting, save errors, compact layout and cleanup";
       } catch (error) {

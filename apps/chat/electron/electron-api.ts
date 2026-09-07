@@ -161,18 +161,49 @@ export interface ConnectionInfo extends ConnectionRecord {
   error?: string;
 }
 
+export const WORKING_MEMORY_LIMIT = 50;
+export const memoryTierSchema = z.enum(["working", "long_term"]);
+export const memoryFactSchema = z
+  .object({
+    id: z.uuid(),
+    text: z.string().trim().min(1).max(240),
+    // Defaults migrate the original local notes without losing their IDs or text.
+    tier: memoryTierSchema.default("working"),
+    createdAt: z.number().int().nonnegative().default(0),
+    lastUsedAt: z.number().int().nonnegative().default(0),
+  })
+  .strict();
+export type MemoryFact = z.infer<typeof memoryFactSchema>;
+export type MemoryTier = z.infer<typeof memoryTierSchema>;
+const memoryFactsSchema = z
+  .array(memoryFactSchema)
+  .superRefine((facts, ctx) => {
+    if (
+      facts.filter((fact) => fact.tier === "working").length >
+      WORKING_MEMORY_LIMIT
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Working memory holds at most 50 facts",
+      });
+    if (new Set(facts.map((fact) => fact.id)).size !== facts.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "Memory fact IDs must be unique",
+      });
+  });
 export const userProfileSchema = z
   .object({
     name: z.string().trim().min(1).max(80).nullable().default(null),
     nameDeclined: z.boolean().default(false),
-    notes: z
-      .array(
-        z
-          .object({ id: z.uuid(), text: z.string().trim().min(1).max(240) })
-          .strict(),
-      )
-      .max(8)
-      .default([]),
+    notes: memoryFactsSchema.default([]),
+    longTermSummary: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2000)
+      .nullable()
+      .default(null),
     checkInsEnabled: z.boolean().default(true),
     revision: z.number().int().nonnegative().default(0),
   })
@@ -181,13 +212,7 @@ export type UserProfile = z.infer<typeof userProfileSchema>;
 export const profileEditSchema = z
   .object({
     name: z.string().trim().min(1).max(80).nullable(),
-    notes: z
-      .array(
-        z
-          .object({ id: z.uuid(), text: z.string().trim().min(1).max(240) })
-          .strict(),
-      )
-      .max(8),
+    notes: z.array(memoryFactSchema.pick({ id: true, text: true, tier: true })),
     checkInsEnabled: z.boolean(),
     revision: z.number().int().nonnegative(),
   })

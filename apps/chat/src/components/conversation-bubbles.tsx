@@ -5,6 +5,7 @@ import {
 } from "../../electron/electron-api";
 import { SourcePills } from "./source-pills";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -37,6 +38,26 @@ export function ConversationBubbles({
   const [initialCount] = useState(() => messages.length);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollbarVisible, setScrollbarVisible] = useState(false);
+  const hideScrollbarRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollInputUntilRef = useRef(0);
+  const markScrollInput = () => {
+    scrollInputUntilRef.current = Date.now() + 1500;
+  };
+  const automaticScrollRef = useRef<number | null>(null);
+  const followBottom = useCallback((container: HTMLDivElement) => {
+    const bottom = Math.max(0, container.scrollHeight - container.clientHeight);
+    if (container.scrollTop === bottom) return;
+    automaticScrollRef.current = bottom;
+    container.scrollTop = bottom;
+  }, []);
+  useEffect(
+    () => () => {
+      if (hideScrollbarRef.current !== null)
+        clearTimeout(hideScrollbarRef.current);
+    },
+    [],
+  );
   // Whether the user is at (or near) the bottom. Starts pinned.
   const pinnedRef = useRef(true);
   const viewportRef = useRef({ width: 0, height: 0 });
@@ -73,10 +94,10 @@ export function ConversationBubbles({
     if (!container) return;
     if (pinnedRef.current || lastMessage?.role === "user") {
       pinnedRef.current = true;
-      const bottom = container.scrollHeight - container.clientHeight;
-      if (container.scrollTop < bottom) container.scrollTop = bottom;
+      followBottom(container);
     }
   }, [
+    followBottom,
     messages.length,
     lastContent,
     smoothedContent,
@@ -96,13 +117,13 @@ export function ConversationBubbles({
         width: container.clientWidth,
         height: container.clientHeight,
       };
-      if (pinnedRef.current) container.scrollTop = container.scrollHeight;
+      if (pinnedRef.current) followBottom(container);
     });
     observer.observe(container);
     if (container.firstElementChild)
       observer.observe(container.firstElementChild);
     return () => observer.disconnect();
-  }, [hasConversation]);
+  }, [hasConversation, followBottom]);
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight, clientWidth } =
@@ -115,6 +136,19 @@ export function ConversationBubbles({
     )
       return;
     pinnedRef.current = scrollHeight - scrollTop - clientHeight < PIN_THRESHOLD;
+    const automatic =
+      automaticScrollRef.current !== null &&
+      Math.abs(scrollTop - automaticScrollRef.current) < 1;
+    automaticScrollRef.current = null;
+    if (automatic || Date.now() > scrollInputUntilRef.current) return;
+    markScrollInput();
+    setScrollbarVisible(true);
+    if (hideScrollbarRef.current !== null)
+      clearTimeout(hideScrollbarRef.current);
+    hideScrollbarRef.current = setTimeout(
+      () => setScrollbarVisible(false),
+      1000,
+    );
   };
 
   const awaitingReply =
@@ -125,8 +159,28 @@ export function ConversationBubbles({
   return (
     <div
       ref={scrollRef}
-      className="conversation-scroller"
+      className={`conversation-scroller${scrollbarVisible ? " is-scrolling" : ""}`}
       onScroll={handleScroll}
+      onWheel={markScrollInput}
+      onTouchMove={markScrollInput}
+      onPointerDown={markScrollInput}
+      onPointerMove={(event) => {
+        if (event.buttons === 1) markScrollInput();
+      }}
+      onKeyDown={(event) => {
+        if (
+          [
+            "ArrowUp",
+            "ArrowDown",
+            "PageUp",
+            "PageDown",
+            "Home",
+            "End",
+            " ",
+          ].includes(event.key)
+        )
+          markScrollInput();
+      }}
       style={styles.scroller}
       aria-live="polite"
     >

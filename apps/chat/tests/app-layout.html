@@ -75,7 +75,16 @@
         profile: {
           name: "Sam",
           nameDeclined: false,
-          notes: [{ id: crypto.randomUUID(), text: "Prefers quiet mornings" }],
+          longTermSummary: null,
+          notes: [
+            {
+              id: crypto.randomUUID(),
+              text: "Prefers quiet mornings",
+              tier: "working",
+              createdAt: 1,
+              lastUsedAt: 1,
+            },
+          ],
           checkInsEnabled: true,
           revision: 0,
         },
@@ -393,6 +402,9 @@
           const scroller = document.querySelector(".conversation-scroller");
           scroller.scrollTop = scroller.scrollHeight;
           scroller.dispatchEvent(new Event("scroll"));
+          await act(
+            async () => new Promise((resolve) => setTimeout(resolve, 1250)),
+          );
           await act(async () => selection.set(ids[0]));
           await settle();
           check(
@@ -409,8 +421,28 @@
           );
           document.getElementById("root").style.width = "100%";
           await settle();
-          scroller.scrollTop = 0;
-          scroller.dispatchEvent(new Event("scroll"));
+          check(
+            !scroller.classList.contains("is-scrolling"),
+            "Automatic following revealed the scrollbar",
+          );
+          await act(async () => {
+            scroller.dispatchEvent(
+              new WheelEvent("wheel", { deltaY: -100, bubbles: true }),
+            );
+            scroller.scrollTop = 0;
+            scroller.dispatchEvent(new Event("scroll"));
+          });
+          check(
+            scroller.classList.contains("is-scrolling"),
+            "Reading scroll did not reveal the scrollbar",
+          );
+          await act(
+            async () => new Promise((resolve) => setTimeout(resolve, 1250)),
+          );
+          check(
+            !scroller.classList.contains("is-scrolling"),
+            "Idle scrollbar did not disappear",
+          );
           await act(async () => selection.set(null));
           await settle();
           check(

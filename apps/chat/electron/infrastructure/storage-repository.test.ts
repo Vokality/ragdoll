@@ -19,6 +19,7 @@ describe("storageSchema", () => {
         name: null,
         nameDeclined: false,
         notes: [],
+        longTermSummary: null,
         checkInsEnabled: true,
         revision: 0,
       },
@@ -76,6 +77,37 @@ it("a failed mutation preserves storage and does not poison later writes", async
       draft.settings.variant = "einstein";
     });
     expect((await repository.read()).settings.variant).toBe("einstein");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("migrates original notes into working memory and persists both tiers across restarts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lumen-memory-migration-"));
+  try {
+    const id = crypto.randomUUID();
+    const migrated = storageSchema.parse({
+      profile: { notes: [{ id, text: "Prefers mornings" }] },
+    });
+    expect(migrated.profile.notes[0]).toEqual({
+      id,
+      text: "Prefers mornings",
+      tier: "working",
+      createdAt: 0,
+      lastUsedAt: 0,
+    });
+    migrated.profile.notes.push({
+      id: crypto.randomUUID(),
+      text: "Birthday May 3",
+      tier: "long_term",
+      createdAt: 42,
+      lastUsedAt: 43,
+    });
+    migrated.profile.longTermSummary = "A birthday is saved.";
+    await createStorageRepository(root).write(migrated);
+    expect((await createStorageRepository(root).read()).profile).toEqual(
+      migrated.profile,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -571,6 +571,9 @@ button:disabled {
    content change, which makes streaming text visibly flash. */
 /* Fade scrolling messages into the surrounding surface without covering chat. */
 .conversation-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 180ms ease;
   overflow-anchor: none;
   mask-image: linear-gradient(
     to bottom,
@@ -579,6 +582,16 @@ button:disabled {
     black calc(100% - 16px),
     transparent
   );
+}
+
+.conversation-scroller.is-scrolling {
+  scrollbar-color: var(--text-dim) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-scroller {
+    transition: none;
+  }
 }
 
 .bubble {
