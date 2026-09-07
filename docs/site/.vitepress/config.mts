@@ -6,10 +6,13 @@ export default defineConfig({
   lang: "en-US",
   base: "/ragdoll/",
   cleanUrls: false,
+  appearance: "force-dark",
+  ignoreDeadLinks: false,
   lastUpdated: true,
-  head: [["meta", { name: "theme-color", content: "#101827" }]],
+  head: [["meta", { name: "theme-color", content: "#0d0d0c" }]],
   themeConfig: {
-    siteTitle: "Lumen Docs",
+    siteTitle: "Lumen",
+    logo: { src: "/vokality-wordmark.png", alt: "Vokality" },
     nav: [
       { text: "Get started", link: "/getting-started" },
       { text: "Use Lumen", link: "/using-lumen" },
