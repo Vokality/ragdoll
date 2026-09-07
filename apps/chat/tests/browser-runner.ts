@@ -33,6 +33,7 @@ const pages = [
   "apps/chat/tests/panel-actions.html",
   "apps/chat/tests/panel-dialog.html",
   "apps/chat/tests/composer-input.html",
+  "apps/chat/tests/conversation-scrollbar.html",
   "packages/ragdoll/tests/renderers/lifecycle.html",
 ];
 

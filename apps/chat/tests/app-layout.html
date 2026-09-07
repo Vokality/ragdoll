@@ -419,37 +419,8 @@
           );
           document.getElementById("root").style.width = "100%";
           await settle();
-          check(
-            !scroller.classList.contains("is-scrolling"),
-            "Automatic following revealed the scrollbar",
-          );
-          await act(async () => {
-            scroller.dispatchEvent(
-              new WheelEvent("wheel", { deltaY: -100, bubbles: true }),
-            );
-            scroller.scrollTop = 0;
-            scroller.dispatchEvent(new Event("scroll"));
-          });
-          await settle();
-          check(
-            scroller.classList.contains("is-scrolling"),
-            "Reading scroll did not reveal the scrollbar",
-          );
-          // Native scroll delivery can trail the synthetic event on software-rendered CI.
-          // Flush React between polls so the assertion observes the actual idle state.
-          const idleDeadline = performance.now() + 3000;
-          while (
-            scroller.classList.contains("is-scrolling") &&
-            performance.now() < idleDeadline
-          ) {
-            await act(
-              async () => new Promise((resolve) => setTimeout(resolve, 50)),
-            );
-          }
-          check(
-            !scroller.classList.contains("is-scrolling"),
-            "Idle scrollbar did not disappear",
-          );
+          scroller.scrollTop = 0;
+          scroller.dispatchEvent(new Event("scroll"));
           await act(async () => selection.set(null));
           await settle();
           check(
