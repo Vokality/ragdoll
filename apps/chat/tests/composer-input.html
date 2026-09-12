@@ -12,6 +12,7 @@
       import React, { act, StrictMode } from "react";
       import { createRoot } from "react-dom/client";
       import { ChatInput } from "../src/components/chat-input.tsx";
+      import { composerFocusShortcutLabel } from "../src/platform.ts";
       globalThis.IS_REACT_ACT_ENVIRONMENT = true;
       const root = createRoot(document.getElementById("root"));
       const sent = [];
@@ -37,6 +38,12 @@
           ),
         );
         const input = document.querySelector("textarea");
+        check(
+          document
+            .querySelector(".input-hint")
+            .textContent.includes(composerFocusShortcutLabel()),
+          "Composer hint must use the host modifier key",
+        );
         const setValue = Object.getOwnPropertyDescriptor(
           HTMLTextAreaElement.prototype,
           "value",

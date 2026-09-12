@@ -27,6 +27,7 @@ import type {
   CharacterThemeId,
   CharacterVariantId,
 } from "../../electron/electron-api";
+import { isApplePlatform } from "../platform";
 
 interface ChatScreenProps {
   experience: ExperienceService;
@@ -136,7 +137,11 @@ export function ChatScreen({
   // Cmd/Ctrl+, opens settings — the platform convention for preferences.
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.repeat &&
+        (event.key === "," || event.code === "Comma")
+      ) {
         event.preventDefault();
         setIsSettingsOpen(true);
       }
@@ -360,7 +365,7 @@ const styles: Record<string, CSSProperties> = {
     gap: "12px",
     flexWrap: "nowrap",
     flexShrink: 0,
-    padding: "36px 20px 12px", // Account for drag region on macOS
+    padding: isApplePlatform() ? "36px 20px 12px" : "16px 20px 12px",
     position: "relative",
     zIndex: 1,
   },
@@ -374,7 +379,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "flex-start",
     minWidth: 0,
     overflowX: "auto",
-    padding: "3px",
-    marginRight: "-3px",
+    padding: "8px 10px 4px",
+    marginRight: "-4px",
   },
 };

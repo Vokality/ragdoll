@@ -91,7 +91,7 @@ export function createMainProcessConfig(
       height: 800,
       minWidth: 400,
       minHeight: 600,
-      backgroundColor: "#0f172a",
+      backgroundColor: "#0a101f",
     },
   };
 }

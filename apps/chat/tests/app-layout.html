@@ -326,6 +326,30 @@
         } else {
           await settle();
           inspect();
+          await act(async () =>
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: ",",
+                code: "Comma",
+                ctrlKey: true,
+                bubbles: true,
+                cancelable: true,
+              }),
+            ),
+          );
+          check(
+            document
+              .querySelector("dialog[open]")
+              ?.getAttribute("aria-label") === "Settings",
+            "Ctrl+, did not open settings",
+          );
+          await act(async () =>
+            document.querySelector('[aria-label="Close Settings"]').click(),
+          );
+          check(
+            !document.querySelector("dialog[open]"),
+            "Settings stayed open after close",
+          );
           for (const slot of slots) {
             await act(async () => selection.set(slot.id));
             await settle();

@@ -1092,6 +1092,7 @@ dialog.modal-card::backdrop {
 
 .extension-dock {
   --slot-button-size: 36px;
+  padding-top: 8px;
 }
 
 .source-pills {
