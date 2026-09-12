@@ -33,7 +33,7 @@ Character, Tasks, Working List, and Notes are always enabled. Pomodoro, Canvas, 
 
 ## Notes and the working list
 
-Use **Notes** for plans, summaries, drafts, and other writing you want to keep. Ask Lumen to save the text as a note, then open Notes from the toolbar. Select a title to read its full text; **All notes** returns to the list. The body preserves line breaks and displays plain text. Notes are ordered by their most recent update.
+Use **Notes** for plans, summaries, drafts, and other writing you want to keep. Ask Lumen to save the text as a note, then open Notes from the Cards folder in the toolbar. Select a title to read its full text; **All notes** returns to the list. The body preserves line breaks and displays plain text. Notes are ordered by their most recent update.
 
 Lumen stores up to 40 notes, each with a title of up to 80 characters and a body of up to 4,000 characters. Ask to update an existing note to replace its title or body. **Delete** removes the saved note; there is no undo command. Notes survive app restarts, while the selected note resets to the list. Closing the card or clearing chat history does not delete notes.
 
@@ -41,7 +41,7 @@ Use **Working List** for a short snapshot of up to five items to handle next. Se
 
 ## Cards and actions
 
-Open a card from the toolbar or ask the agent to show it. The character becomes a small head in the card's upper-left corner. Card content scrolls separately from its controls and the conversation.
+Open the Cards folder in the toolbar, then choose a card, or ask the agent to show it. The character becomes a small head in the card's upper-left corner. Card content scrolls separately from its controls and the conversation.
 
 **Opening or closing a card changes presentation.** It does not start or stop the underlying activity. For example, “Close the timer card” hides it; ask to stop the timer if that is your intended action.
 

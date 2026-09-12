@@ -31,6 +31,7 @@ const pages = [
   "apps/chat/tests/personal-memory.html",
   "apps/chat/tests/settings-navigation.html",
   "apps/chat/tests/app-layout.html",
+  "apps/chat/tests/dock-folder.html",
   "apps/chat/tests/extension-configuration.html",
   "apps/chat/tests/extension-settings.html",
   "apps/chat/tests/connections-settings.html",

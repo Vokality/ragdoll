@@ -52,7 +52,7 @@ OpenAI uses **GPT-5.6 Sol** and Grok uses **Grok 4.6**, both with low reasoning.
 ### Try a few requests
 
 - “Show my to-do list and add ‘Plan the weekend.’”
-- “Start a 25-minute focus timer.”
+- “Start a 30-minute focus timer.”
 - “Create five flash cards for basic Spanish greetings.”
 - “Write a weekend itinerary as a note.”
 - “Draw a simple house on the canvas.”
@@ -77,7 +77,7 @@ Lumen supports HTTPS endpoints and local HTTP servers. Legacy SSE-only endpoints
 
 ## Extensions and cards
 
-Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, notes, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
+Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, the working list, notes, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
 
 Use **Settings → Extensions → Integrations** to configure Spotify. Use **Settings → Extensions → Extension library** to install additional Ragdoll extensions from a GitHub repository URL. An extension must follow the Ragdoll package contract; an arbitrary GitHub project or MCP server is not an installable extension.
 

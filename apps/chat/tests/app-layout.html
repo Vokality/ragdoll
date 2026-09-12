@@ -330,6 +330,17 @@
         } else {
           await settle();
           inspect();
+          const folder = document.querySelector(".extension-slot-folder");
+          check(folder, "Cards folder missing from the compact dock");
+          check(
+            folder.getAttribute("aria-expanded") === "false",
+            "Cards folder started expanded",
+          );
+          check(
+            getComputedStyle(document.querySelector(".extension-slot-tray"))
+              .visibility === "hidden",
+            "Dock icons were visible while the folder was closed",
+          );
           await act(async () =>
             window.dispatchEvent(
               new KeyboardEvent("keydown", {
@@ -380,10 +391,26 @@
             chat.set({ ...chat.getSnapshot(), error: null }),
           );
           const dock = document.querySelector(".extension-dock");
+          const folderControl = document.querySelector(".extension-slot-folder");
+          const visibleDockButtons = [
+            folderControl,
+            ...dock.querySelectorAll("button"),
+          ].filter((button, index, buttons) => {
+            if (!button || buttons.indexOf(button) !== index) return false;
+            const style = getComputedStyle(button);
+            const rect = button.getBoundingClientRect();
+            return (
+              style.visibility !== "hidden" &&
+              style.pointerEvents !== "none" &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
+          });
+          check(visibleDockButtons.length >= 1, "Dock has no visible control");
           dock.scrollLeft = dock.scrollWidth;
           for (const control of [
-            dock.querySelector("button"),
-            [...dock.querySelectorAll("button")].at(-1),
+            visibleDockButtons[0],
+            visibleDockButtons.at(-1),
           ]) {
             control.focus();
             const rect = control.getBoundingClientRect();

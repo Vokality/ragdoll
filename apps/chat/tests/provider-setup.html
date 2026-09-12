@@ -109,6 +109,24 @@
           grokInput.placeholder === "xai-...",
           "Provider key hint did not update",
         );
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          ).set.call(grokInput, "xai-short");
+          grokInput.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const grokHint = [...document.querySelectorAll("p")]
+          .map((paragraph) => paragraph.textContent)
+          .join("\n");
+        check(
+          grokHint.includes("xai-") && !grokHint.includes("sk-"),
+          "Grok key hint used the OpenAI prefix",
+        );
+        check(
+          document.querySelector("button[type=submit]")?.disabled === true,
+          "Get Started accepted a short Grok key",
+        );
         await click("Get a Grok API key");
         check(
           opened[0] === "https://console.x.ai/",

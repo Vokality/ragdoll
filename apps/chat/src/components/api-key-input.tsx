@@ -71,8 +71,7 @@ export function ApiKeyInput({
 
             {!error && key.length > 0 && !isValid && (
               <p className="animate-fadeIn" style={styles.hint} role="status">
-                {providerName} API keys start with “sk-”. Paste the full key to
-                continue.
+                {`${providerName} API keys start with “${prefixFromPlaceholder(keyPlaceholder)}”. Paste the full key to continue.`}
               </p>
             )}
           </>
@@ -92,6 +91,11 @@ export function ApiKeyInput({
       </Button>
     </form>
   );
+}
+
+function prefixFromPlaceholder(placeholder: string): string {
+  const prefix = placeholder.replace(/\.+$/u, "").trim();
+  return prefix.length > 0 ? prefix : placeholder;
 }
 
 function EyeIcon() {

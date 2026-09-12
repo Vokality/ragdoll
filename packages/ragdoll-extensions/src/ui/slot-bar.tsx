@@ -1,18 +1,15 @@
 /**
- * SlotBar - Container component for rendering extension UI slot buttons.
+ * SlotBar - Container for extension UI slot buttons.
  *
- * Displays a row of slot buttons and manages the active slot panel.
+ * Two or more visible slots collapse into a Cards folder. Clicking the folder
+ * expands the icons; choosing a card closes the folder again.
  */
 
 import { useState, useCallback, useMemo, type CSSProperties } from "react";
-import { SlotButton } from "./slot-button.js";
 import { SlotPanel } from "./slot-panel.js";
+import { SlotDock } from "./slot-folder.js";
 import { useVisibleSlots } from "./hooks.js";
 import type { ExtensionUISlot } from "./types.js";
-
-// =============================================================================
-// SlotBar Component
-// =============================================================================
 
 export interface SlotBarProps {
   /** Array of slots to display */
@@ -24,7 +21,7 @@ export interface SlotBarProps {
 }
 
 /**
- * Container component that renders a row of extension UI slot buttons.
+ * Container that renders extension UI slot buttons.
  *
  * Automatically filters to visible slots and sorts by priority.
  * Manages the active slot panel state internally.
@@ -45,10 +42,8 @@ export interface SlotBarProps {
 export function SlotBar({ slots, className, style }: SlotBarProps) {
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
 
-  // Get visible slots sorted by priority
   const visibleSlots = useVisibleSlots(slots);
 
-  // Find the active slot
   const activeSlot = useMemo(() => {
     if (!activeSlotId) return null;
     return visibleSlots.find((s) => s.id === activeSlotId) ?? null;
@@ -62,25 +57,20 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
     setActiveSlotId(null);
   }, []);
 
-  // Don't render if no visible slots
   if (visibleSlots.length === 0) {
     return null;
   }
 
   return (
     <>
-      <div style={{ ...styles.container, ...style }} className={className}>
-        {visibleSlots.map((slot) => (
-          <SlotButton
-            key={slot.id}
-            slot={slot}
-            isActive={slot.id === activeSlotId}
-            onClick={() => handleSlotClick(slot.id)}
-          />
-        ))}
-      </div>
+      <SlotDock
+        slots={visibleSlots}
+        activeSlotId={activeSlotId}
+        onSlotClick={handleSlotClick}
+        className={className}
+        style={style}
+      />
 
-      {/* Render active slot's panel */}
       {activeSlot && (
         <SlotPanel
           key={activeSlot.id}
@@ -91,10 +81,6 @@ export function SlotBar({ slots, className, style }: SlotBarProps) {
     </>
   );
 }
-
-// =============================================================================
-// Controlled SlotBar Component
-// =============================================================================
 
 export interface ControlledSlotBarProps {
   /** Array of slots to display */
@@ -139,7 +125,6 @@ export function ControlledSlotBar({
   className,
   style,
 }: ControlledSlotBarProps) {
-  // Get visible slots sorted by priority
   const visibleSlots = useVisibleSlots(slots);
 
   const handleSlotClick = useCallback(
@@ -149,33 +134,17 @@ export function ControlledSlotBar({
     [activeSlotId, onSlotClick],
   );
 
-  // Don't render if no visible slots
   if (visibleSlots.length === 0) {
     return null;
   }
 
   return (
-    <div style={{ ...styles.container, ...style }} className={className}>
-      {visibleSlots.map((slot) => (
-        <SlotButton
-          key={slot.id}
-          slot={slot}
-          isActive={slot.id === activeSlotId}
-          onClick={() => handleSlotClick(slot.id)}
-        />
-      ))}
-    </div>
+    <SlotDock
+      slots={visibleSlots}
+      activeSlotId={activeSlotId}
+      onSlotClick={handleSlotClick}
+      className={className}
+      style={style}
+    />
   );
 }
-
-// =============================================================================
-// Styles
-// =============================================================================
-
-const styles: Record<string, CSSProperties> = {
-  container: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-};

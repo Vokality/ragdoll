@@ -103,9 +103,20 @@ export function ChatScreen({
   const setActiveSlotId = extensionSlotService.selectCard;
   const dockRef = useRef<HTMLDivElement>(null);
   const closePanel = useCallback(() => {
-    dockRef.current
-      ?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
-      ?.focus({ preventScroll: true });
+    const dock =
+      document.querySelector<HTMLElement>(".extension-slot-dock") ??
+      dockRef.current;
+    const pressed = dock?.querySelector<HTMLButtonElement>(
+      'button[aria-pressed="true"]',
+    );
+    const folder = document.querySelector<HTMLButtonElement>(
+      ".extension-slot-folder",
+    );
+    const target =
+      pressed && pressed.getClientRects().length > 0
+        ? pressed
+        : (folder ?? pressed);
+    target?.focus({ preventScroll: true });
     void setActiveSlotId(null);
   }, [setActiveSlotId]);
 
@@ -194,7 +205,7 @@ export function ChatScreen({
         {extensionSlots.length > 0 && (
           <div
             ref={dockRef}
-            className="extension-dock"
+            className="extension-dock no-drag"
             style={styles.extensionDock}
           >
             <ControlledSlotBar
@@ -374,9 +385,9 @@ const styles: Record<string, CSSProperties> = {
   extensionDock: {
     marginLeft: "auto",
     display: "flex",
-    justifyContent: "flex-start",
+    justifyContent: "flex-end",
     minWidth: 0,
-    overflowX: "auto",
+    overflow: "visible",
     padding: "8px 10px 4px",
     marginRight: "-4px",
   },
