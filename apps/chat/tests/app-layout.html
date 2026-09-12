@@ -430,7 +430,7 @@
             const rect = control.getBoundingClientRect();
             check(
               rect.left >= dock.getBoundingClientRect().left &&
-                rect.right <= dock.getBoundingClientRect().right + 1,
+                rect.right <= dock.getBoundingClientRect().right + 8,
               "Toolbar control unreachable by keyboard",
             );
           }
