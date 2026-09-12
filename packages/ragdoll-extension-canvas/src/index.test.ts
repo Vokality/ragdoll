@@ -180,6 +180,35 @@ it("serializes the document and footer actions without callbacks", async () => {
     await registry.destroy();
   }
 });
+it("rejects empty and missing-shape batches without advancing revision or consuming undo", async () => {
+  const { registry, saved } = await setup();
+  try {
+    await registry.executeTool("canvas_draw", {
+      expectedRevision: 0,
+      elements: [rect],
+      removeIds: [],
+    });
+    const before = structuredClone(saved());
+    for (const elements of [[], [{}]]) {
+      expect(
+        await registry.executeTool("canvas_draw", {
+          expectedRevision: 1,
+          elements,
+          removeIds: [],
+        }),
+      ).toMatchObject({ success: false, retryable: true });
+      expect(saved()).toEqual(before);
+    }
+    expect(
+      await registry.executeTool("canvas_undo", { expectedRevision: 1 }),
+    ).toMatchObject({
+      success: true,
+      data: { revision: 2, document: { elements: [] } },
+    });
+  } finally {
+    await registry.destroy();
+  }
+});
 it("rejects corrupt stored documents", async () => {
   await expect(
     setup({ revision: 0, document: { elements: [] } }),

@@ -39,9 +39,13 @@ export interface ToolParameterSchema {
   additionalProperties?: boolean;
 }
 
-export interface ToolPropertySchema {
-  type: "string" | "number" | "boolean" | "array" | "object";
+interface ToolSchemaMetadata {
   description?: string;
+  default?: unknown;
+}
+
+interface ToolValueSchema extends ToolSchemaMetadata {
+  type: "string" | "number" | "boolean" | "array" | "object";
   enum?: readonly (string | number)[];
   minimum?: number;
   maximum?: number;
@@ -50,11 +54,18 @@ export interface ToolPropertySchema {
   properties?: Record<string, ToolPropertySchema>;
   required?: string[];
   additionalProperties?: boolean;
-  anyOf?: ToolPropertySchema[];
+  anyOf?: never;
   minItems?: number;
   maxItems?: number;
-  default?: unknown;
 }
+
+interface ToolUnionSchema extends ToolSchemaMetadata {
+  anyOf: ToolPropertySchema[];
+  type?: never;
+}
+
+/** Describe either a typed value or a union whose branches own their types. */
+export type ToolPropertySchema = ToolValueSchema | ToolUnionSchema;
 
 /**
  * Tool function definition (OpenAI format)

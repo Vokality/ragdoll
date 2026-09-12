@@ -37,7 +37,7 @@ function shape(
   };
 }
 const element: ToolPropertySchema = {
-  type: "object",
+  // Keep the union untyped: Grok treats an object sibling as an empty shape.
   anyOf: [
     shape("rect", {
       x: number,
@@ -72,7 +72,13 @@ export const editSchema = revisionSchema
     elements: z.array(canvasElementSchema).max(100),
     removeIds: z.array(z.string().min(1).max(80)).max(100),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ elements, removeIds }) => elements.length > 0 || removeIds.length > 0,
+    {
+      message: "Provide at least one element to draw or an ID to remove.",
+    },
+  );
 export const newSchema = revisionSchema
   .extend({
     title: z.string().trim().min(1).max(120),
@@ -109,7 +115,7 @@ export const editParameters: ToolParameterSchema = {
       items: element,
       maxItems: 100,
       description:
-        "Complete new or replacement elements, in back-to-front order. Existing IDs retain their layer positions.",
+        "Complete new or replacement elements, in back-to-front order. Existing IDs retain their layer positions. Supply at least one element or an ID in removeIds.",
     },
     removeIds: { type: "array", items: { type: "string" }, maxItems: 100 },
   },

@@ -13,7 +13,7 @@ The `canvas.main` slot uses the framework's `canvas` panel. Its header shows the
 - `canvas_undo { expectedRevision }`: undo the last edit (up to 20 edits in the current extension session).
 - `canvas_export {}`: return standalone SVG text.
 
-Each successful edit returns the next revision and document. Read again after a revision conflict. Writes are serialized and published only after storage succeeds. Documents survive restarts; undo history is session-local.
+Each successful edit returns the next revision and document. A draw batch must contain at least one element or removal ID; empty batches are rejected without changing the revision or undo history. Read again after a revision conflict. Writes are serialized and published only after storage succeeds. Documents survive restarts; undo history is session-local.
 
 ## Drawing contract
 

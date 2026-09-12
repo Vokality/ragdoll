@@ -1,5 +1,10 @@
 import { expect, it } from "bun:test";
 import { z } from "zod";
+import {
+  createRegistry,
+  serializeSlotState,
+} from "@vokality/ragdoll-extensions";
+import { createExtension as createCanvasExtension } from "@vokality/ragdoll-extension-canvas";
 import { createResponsesProvider } from "./responses-provider.js";
 import { createModelProviders } from "./model-provider.js";
 import {
@@ -10,6 +15,176 @@ import { ToolHistoryService } from "./tool-history-service.js";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 
 for (const id of ["openai", "grok"] as const) {
+  it(`${id}: sends drawable canvas variants and preserves returned shapes through execution and slot serialization`, async () => {
+    const catalog = createModelProviders().get(id);
+    if (!catalog) throw new Error("Provider missing");
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: (error) => {
+        throw error;
+      },
+    });
+    await registry.register(createCanvasExtension(), {
+      host: {
+        capabilities: new Set(["storage", "logger"]),
+        storage: {
+          read: async () => undefined,
+          write: async () => {},
+          delete: async () => {},
+          list: async () => [],
+        },
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+      },
+    });
+    const circle = {
+      type: "ellipse",
+      id: "circle",
+      fill: "#ff0000",
+      stroke: "none",
+      strokeWidth: 0,
+      opacity: 1,
+      cx: 200,
+      cy: 200,
+      rx: 80,
+      ry: 80,
+    };
+    const args = { expectedRevision: 0, elements: [circle], removeIds: [] };
+    const storage = createInMemoryStorageRepository();
+    let rounds = 0;
+    const provider = createResponsesProvider(
+      {
+        ...catalog.info,
+        baseURL:
+          id === "grok" ? "https://api.x.ai/v1" : "https://api.openai.com/v1",
+        messagePhases: id === "openai",
+        searchTool: { type: "web_search" },
+      },
+      async (_url, init) => {
+        if (typeof init?.body !== "string")
+          throw new Error("Expected JSON request");
+        const body = z
+          .object({
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                parameters: z.record(z.string(), z.unknown()),
+              }),
+            ),
+          })
+          .parse(JSON.parse(init.body));
+        const draw = body.tools.find((tool) => tool.name === "canvas_draw");
+        const schema = z
+          .object({
+            properties: z.object({
+              elements: z.object({
+                items: z.object({
+                  type: z.never().optional(),
+                  anyOf: z.array(
+                    z.object({
+                      type: z.literal("object"),
+                      properties: z.object({
+                        type: z.object({ enum: z.array(z.string()) }),
+                      }),
+                    }),
+                  ),
+                }),
+              }),
+            }),
+          })
+          .parse(draw?.parameters);
+        expect(
+          schema.properties.elements.items.anyOf.map(
+            (branch) => branch.properties.type.enum,
+          ),
+        ).toEqual([["rect"], ["ellipse"], ["path"], ["text"]]);
+        rounds += 1;
+        const output =
+          rounds === 1
+            ? [
+                {
+                  type: "function_call",
+                  call_id: "draw_circle",
+                  name: "canvas_draw",
+                  arguments: JSON.stringify(args),
+                },
+              ]
+            : [
+                {
+                  type: "message",
+                  id: "drawn",
+                  role: "assistant",
+                  status: "completed",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: "Drew a circle.",
+                      annotations: [],
+                    },
+                  ],
+                },
+              ];
+        return new Response(
+          `event: response.completed\ndata: ${JSON.stringify({
+            type: "response.completed",
+            response: { output },
+          })}\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      },
+    );
+    try {
+      const runner = new ToolCallingAgentRunner(
+        {
+          getTools: () => registry.getAllTools(),
+          getToolsForExtension: (extensionId) =>
+            registry.getToolsByExtension(extensionId),
+          executeTool: (name, input) => registry.executeTool(name, input),
+        },
+        {
+          model: catalog.info.model,
+          reasoningEffort: "low",
+          maxOutputTokens: 2048,
+          maxToolRounds: 2,
+          systemPrompt: "Draw the requested shape.",
+        },
+        provider.sessions,
+        new ToolHistoryService(storage),
+      );
+      await runner.runUserTurn(
+        "test-key",
+        [{ id: "request", role: "user", content: "Draw a circle." }],
+        {
+          onText() {},
+          onMessage: async () => {},
+        },
+      );
+      expect(rounds).toBe(2);
+      expect((await storage.read()).conversation).toMatchObject([
+        {
+          call: { name: "canvas_draw", arguments: JSON.stringify(args) },
+          outcome: {
+            status: "completed",
+            result: {
+              success: true,
+              data: {
+                revision: 1,
+                document: { elements: [circle] },
+              },
+            },
+          },
+        },
+      ]);
+      const slot = registry.getSlot("canvas.main");
+      if (!slot) throw new Error("Missing canvas slot");
+      expect(
+        structuredClone(serializeSlotState(slot.slot.state.getState())),
+      ).toMatchObject({
+        panel: { type: "canvas", document: { elements: [circle] } },
+      });
+    } finally {
+      await registry.destroy();
+    }
+  });
   it(`${id}: uses its endpoint and key for validation, tool streaming, replay and cited search`, async () => {
     const catalog = createModelProviders().get(id);
     if (!catalog) throw new Error("Provider missing");
