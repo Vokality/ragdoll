@@ -47,6 +47,10 @@ export class WindowService {
       },
     });
     this.window = window;
+    if (process.platform !== "darwin") {
+      window.setAutoHideMenuBar(true);
+      window.setMenuBarVisibility(false);
+    }
     this.rendererEvents.attach(window);
 
     window.webContents.setWindowOpenHandler(({ url }) => {

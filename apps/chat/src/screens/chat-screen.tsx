@@ -137,7 +137,11 @@ export function ChatScreen({
   // Cmd/Ctrl+, opens settings — the platform convention for preferences.
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.repeat &&
+        (event.key === "," || event.code === "Comma")
+      ) {
         event.preventDefault();
         setIsSettingsOpen(true);
       }
