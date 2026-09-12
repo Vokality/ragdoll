@@ -1,15 +1,15 @@
 # Getting started
 
-Build and launch Lumen, add your OpenAI key, and try your first task.
+Build and launch Lumen, choose OpenAI or Grok and add your key, and try your first task.
 
 ## Requirements
 
 - Git and **Bun 1.4.2**.
 - A desktop environment that can run Electron and provide secure credential storage.
-- An **OpenAI API key** with access to Lumen's configured model.
+- An **OpenAI or xAI API key** with access to Lumen's configured model.
 - Internet access for model requests, web search, and remote services.
 
-The current default is `gpt-5.6-sol` with low reasoning, using the Responses API. It is configured in [`main-process-config.ts`](https://github.com/Vokality/ragdoll/blob/main/apps/chat/electron/main-process-config.ts), rather than a model picker in Settings.
+OpenAI uses `gpt-5.6-sol` and Grok uses `grok-4.6`, both with low reasoning. Choose a provider during setup or in Settings → AI provider.
 
 ## Install and launch
 
@@ -19,17 +19,16 @@ From a terminal:
 git clone https://github.com/Vokality/ragdoll.git
 cd ragdoll
 bun install --frozen-lockfile
-bun run build
 bun run dev:chat
 ```
 
-The initial build prepares the shared frameworks, extensions, and Electron app. The development command starts the renderer at `http://localhost:5173` and opens Lumen. Keep the terminal running.
+The development command builds shared packages and the Electron main process, starts the renderer at `http://localhost:5173`, and opens Lumen. Keep the terminal running.
 
 Use the **Electron window**, not a browser tab at the renderer URL. Credentials, storage, and tool execution depend on Electron's main process.
 
 ## Add your API key
 
-1. On the setup screen, follow the link to [OpenAI API keys](https://platform.openai.com/api-keys) if you need a key.
+1. On the setup screen, choose OpenAI or Grok and follow its API-key link if you need a key.
 2. Paste your key into Lumen and submit it.
 3. Once setup completes, the chat composer appears.
 
@@ -51,14 +50,13 @@ Next, try [other built-in features](./using-lumen.md) or [connect an MCP service
 
 Run `bun run dev:chat` from the repository root on subsequent launches. Conversations, settings, and saved extension data are retained locally.
 
-Renderer edits reload during development. After changing main-process or preload code, quit Lumen, rebuild, and restart:
+Renderer edits reload during development. After changing main-process, preload, or shared-package code, stop the previous development command and restart it:
 
 ```bash
-bun run --filter lumen build:electron
 bun run dev:chat
 ```
 
-Stop the previous development command before starting another one. Rebuild shared package changes with `bun run build:libraries`.
+Startup rebuilds shared packages and the Electron bundle before launching, including newly registered built-in extensions. Do not leave an older development command running alongside it.
 
 ## Cursor Cloud
 

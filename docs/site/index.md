@@ -17,7 +17,7 @@ features:
     link: /getting-started
     linkText: Set up Lumen
   - title: Use Lumen
-    details: Manage tasks, focus with a timer, study flash cards, draw on a canvas, and research the web while keeping the conversation visible.
+    details: Manage tasks, save longer notes, focus with a timer, study flash cards, draw on a canvas, and research the web while keeping the conversation visible.
     link: /using-lumen
     linkText: Explore the app
   - title: Connect through MCP
@@ -52,7 +52,7 @@ features:
 
 ## What is Lumen?
 
-Lumen is an Electron desktop assistant powered by OpenAI and the Ragdoll character framework. Its agent can perform tool actions, control which extension card is open, and continue through several steps before replying. The animated character stays visible alongside your work.
+Lumen is an Electron desktop assistant powered by your choice of OpenAI or Grok and the Ragdoll character framework. Its agent can perform tool actions, control which extension card is open, and continue through several steps before replying. The animated character stays visible alongside your work.
 
 These pages document the current source version of Lumen in the [Ragdoll repository](https://github.com/Vokality/ragdoll). Lumen runs on your desktop; this website contains documentation, not a browser version of the app.
 

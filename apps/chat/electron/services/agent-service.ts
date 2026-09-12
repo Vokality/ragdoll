@@ -1,4 +1,3 @@
-import type { ReasoningEffort } from "openai/resources/shared";
 import type { AgentToolResult } from "../domain/source-citation.js";
 import {
   citedResponse,
@@ -9,12 +8,6 @@ import type {
   ToolDefinition,
   ToolParameterSchema,
 } from "@vokality/ragdoll-extensions";
-import type {
-  FunctionTool,
-  ResponseInputItem,
-  ResponseOutputItem,
-  ResponseCreateParamsNonStreaming,
-} from "openai/resources/responses/responses";
 import { z } from "zod";
 import {
   isConversationMessage,
@@ -30,7 +23,7 @@ import type { AgentToolHistory } from "./tool-history-service.js";
 
 export interface AgentModelConfig {
   model: string;
-  reasoningEffort: NonNullable<ReasoningEffort>;
+  reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh";
   maxOutputTokens: number;
   maxToolRounds: number;
   systemPrompt: string;
@@ -68,19 +61,47 @@ export interface AgentTurnEvents {
   onMessage(message: AgentResponse): Promise<void>;
 }
 
-export type AgentResponseOutput = Extract<
-  ResponseOutputItem,
-  { type: "message" | "function_call" | "reasoning" }
->;
+export interface ModelMessage {
+  type?: "message";
+  role: "user" | "assistant" | "developer";
+  content: string;
+  phase?: "commentary" | "final_answer" | null;
+}
+export interface ModelToolCall {
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
+}
+export type ModelInput =
+  | ModelMessage
+  | ModelToolCall
+  | {
+      type: "function_call_output";
+      call_id: string;
+      output: string;
+    };
+export type AgentResponseOutput =
+  (ModelMessage & { type: "message"; role: "assistant" }) | ModelToolCall;
+export interface ModelTool {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  strict: boolean;
+}
+export type ModelToolChoice =
+  "auto" | "none" | "required" | { type: "function"; name: string };
 
 export interface ResponseRound {
   output: AgentResponseOutput[];
 }
 
 export interface AgentResponseRequest {
-  input: ResponseInputItem[];
-  tools: FunctionTool[];
-  toolChoice: NonNullable<ResponseCreateParamsNonStreaming["tool_choice"]>;
+  /** New input since the preceding round. The session owns replay state. */
+  input: ModelInput[];
+  tools: ModelTool[];
+  toolChoice: ModelToolChoice;
   events?: AgentTurnEvents;
   signal?: AbortSignal;
 }
@@ -110,12 +131,12 @@ interface ExecutedToolCall {
 const EVENT_RESPOND_TOOL = "lumen_event_respond";
 const EVENT_SILENT_TOOL = "lumen_event_silent";
 
-const eventResponseSchema = z
-  .object({ content: z.string().trim().min(1).max(500) })
-  .strict();
-const eventSilentSchema = z.object({}).strict();
+const eventResponseSchema = z.strictObject({
+  content: z.string().trim().min(1).max(500),
+});
+const eventSilentSchema = z.strictObject({});
 
-const EVENT_DECISION_TOOLS: FunctionTool[] = [
+const EVENT_DECISION_TOOLS: ModelTool[] = [
   {
     type: "function",
     strict: false,
@@ -148,17 +169,17 @@ const EVENT_DECISION_TOOLS: FunctionTool[] = [
   },
 ];
 
-function toOpenAITools(extensionManager: AgentToolService): FunctionTool[] {
+function toModelTools(extensionManager: AgentToolService): ModelTool[] {
   return extensionManager.getTools().map((tool) => ({
     type: "function",
     strict: false,
     name: tool.function.name,
     description: tool.function.description,
-    parameters: toOpenAIParameters(tool.function.parameters),
+    parameters: toModelParameters(tool.function.parameters),
   }));
 }
 
-function toOpenAIParameters(
+function toModelParameters(
   schema: ToolParameterSchema,
 ): Record<string, unknown> {
   return Object.fromEntries(
@@ -195,8 +216,8 @@ function serializeExtensionEvent(event: AgentConversationEvent): string {
 
 function toModelInput(
   conversation: readonly ConversationEntry[],
-): ResponseInputItem[] {
-  return conversation.flatMap((entry): ResponseInputItem[] => {
+): ModelInput[] {
+  return conversation.flatMap((entry): ModelInput[] => {
     if (isConversationMessage(entry)) {
       return [
         entry.role === "assistant"
@@ -288,7 +309,7 @@ function parseEventDecision(call: PendingToolCall): EventTurnOutcome {
   return { disposition: "silent" };
 }
 
-export class OpenAIAgentRunner implements AgentRunner {
+export class ToolCallingAgentRunner implements AgentRunner {
   constructor(
     private readonly extensions: AgentToolService,
     private readonly config: AgentModelConfig,
@@ -311,7 +332,7 @@ export class OpenAIAgentRunner implements AgentRunner {
       signal?.throwIfAborted();
       const response = await session.respond({
         input,
-        tools: recoveringEmpty ? [] : toOpenAITools(this.extensions),
+        tools: recoveringEmpty ? [] : toModelTools(this.extensions),
         toolChoice: recoveringEmpty
           ? "none"
           : retryToolName
@@ -329,8 +350,8 @@ export class OpenAIAgentRunner implements AgentRunner {
         },
       });
       signal?.throwIfAborted();
-      // Replay the complete output, including encrypted reasoning and message phases.
-      input.push(...response.output);
+      // The session retains its own output and private continuation state.
+      input.length = 0;
       const calls = toolCalls(response);
       if (calls.length) {
         this.assertToolRoundCanContinue(round, calls);
@@ -350,14 +371,7 @@ export class OpenAIAgentRunner implements AgentRunner {
         (item) => item.type === "message",
       );
       const last = messages.at(-1);
-      if (
-        last &&
-        last.phase !== "commentary" &&
-        last.content.some((part) =>
-          (part.type === "output_text" ? part.text : part.refusal).trim(),
-        )
-      )
-        return;
+      if (last && last.phase !== "commentary" && last.content.trim()) return;
       if (last?.phase === "commentary") {
         input.push({
           role: "developer",
@@ -393,7 +407,7 @@ export class OpenAIAgentRunner implements AgentRunner {
       trigger.kind === "extension-event"
         ? (trigger.requiredToolName ?? null)
         : null;
-    const input: ResponseInputItem[] = [
+    const input: ModelInput[] = [
       ...toModelInput(conversation),
       {
         role: "developer",
@@ -409,7 +423,7 @@ export class OpenAIAgentRunner implements AgentRunner {
             : ""),
       },
     ];
-    const tools = [...toOpenAITools(this.extensions), ...EVENT_DECISION_TOOLS];
+    const tools = [...toModelTools(this.extensions), ...EVENT_DECISION_TOOLS];
     if (
       trigger.kind === "extension-event" &&
       requiredToolName &&
@@ -469,7 +483,7 @@ export class OpenAIAgentRunner implements AgentRunner {
           : "required",
       });
       signal?.throwIfAborted();
-      input.push(...response.output);
+      input.length = 0;
       const calls = toolCalls(response);
       const decisions = calls.filter(isEventDecisionTool);
       if (decisions.length > 1) {
@@ -559,7 +573,7 @@ export class OpenAIAgentRunner implements AgentRunner {
   }
 
   private async appendToolResults(
-    input: ResponseInputItem[],
+    input: ModelInput[],
     calls: PendingToolCall[],
     origin: ToolExecutionOrigin,
     signal?: AbortSignal,
@@ -567,6 +581,7 @@ export class OpenAIAgentRunner implements AgentRunner {
     const results: ExecutedToolCall[] = [];
     for (const call of calls) {
       signal?.throwIfAborted();
+      // eslint-disable-next-line react-doctor/async-await-in-loop -- Tools may depend on earlier mutations; persist each execution and honor cancellation before starting the next.
       const executionId = await this.toolHistory.start(call, origin);
       if (signal?.aborted) {
         await this.toolHistory.complete(executionId, {
@@ -581,7 +596,7 @@ export class OpenAIAgentRunner implements AgentRunner {
       results.push(executed);
     }
     input.push(
-      ...results.map(({ call, content }): ResponseInputItem => ({
+      ...results.map(({ call, content }): ModelInput => ({
         type: "function_call_output",
         call_id: call.id,
         output: content,

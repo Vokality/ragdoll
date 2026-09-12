@@ -1,3 +1,4 @@
+import { configuredAgent } from "../test-support/configured-agent.js";
 import { describe, expect, it } from "bun:test";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { ExperienceService } from "./experience-service.js";
@@ -11,14 +12,13 @@ describe("agent-guided experience", () => {
     const triggers: AgentConversationEvent[] = [];
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "test" },
-      {
+      configuredAgent({
         runUserTurn: async () => {},
         runEventTurn: async (_key, _history, trigger) => {
           triggers.push(trigger);
           return { disposition: "respond", content: "What should I call you?" };
         },
-      },
+      }),
       () => {},
       (error) => {
         throw error;
@@ -34,7 +34,11 @@ describe("agent-guided experience", () => {
     await experience.begin();
     expect(triggers).toHaveLength(1);
     expect(await chat.getConversation()).toEqual([
-      { role: "assistant", content: "What should I call you?" },
+      {
+        id: expect.any(String),
+        role: "assistant",
+        content: "What should I call you?",
+      },
     ]);
     await chat.clearConversation();
     await experience.begin();
@@ -90,13 +94,12 @@ describe("agent-guided experience", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "test" },
-      {
+      configuredAgent({
         runUserTurn: async () => {},
         runEventTurn: async () => {
           throw new Error("offline");
         },
-      },
+      }),
       () => {},
       () => {},
     );

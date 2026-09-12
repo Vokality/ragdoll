@@ -117,6 +117,22 @@
             .find((b) => b.textContent === "Edit memory")
             .click(),
         );
+        const detail = document.querySelector("textarea");
+        const memoryType = document.querySelector("select");
+        check(
+          detail.labels.length === 1 &&
+            memoryType.labels.length === 1 &&
+            detail.labels[0] !== memoryType.labels[0],
+          "Memory type and remembered detail must have separate labels",
+        );
+        check(
+          [...document.querySelectorAll("label")].every(
+            (label) =>
+              label.querySelectorAll("input, select, textarea, button")
+                .length <= 1,
+          ),
+          "A profile label wraps multiple controls",
+        );
         await act(async () =>
           [...document.querySelectorAll("button")]
             .find((b) => b.textContent === "Forget")

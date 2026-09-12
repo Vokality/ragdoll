@@ -1,16 +1,16 @@
 import { z } from "zod";
 import {
-  longTermSignature,
+  longTermSnapshot,
   type UserProfileService,
 } from "./user-profile-service.js";
 import type {
   AgentModelConfig,
   AgentResponseSessionFactory,
-} from "./openai-service.js";
+} from "./agent-service.js";
 
-const summarySchema = z
-  .object({ summary: z.string().trim().min(1).max(2000) })
-  .strict();
+const summarySchema = z.strictObject({
+  summary: z.string().trim().min(1).max(2000),
+});
 
 /** Rebuilds from current facts in bounded batches, so forgotten facts cannot linger. */
 export async function refreshMemorySummary(
@@ -70,7 +70,7 @@ export async function refreshMemorySummary(
       summary = summarySchema.parse(JSON.parse(call.arguments)).summary;
     }
     signal?.throwIfAborted();
-    await profile.saveSummary(longTermSignature(snapshot), summary);
+    await profile.saveSummary(longTermSnapshot(snapshot), summary);
   } catch (error) {
     signal?.throwIfAborted();
     // A saved fact must survive a model/network failure. Null stays pending for the next turn.

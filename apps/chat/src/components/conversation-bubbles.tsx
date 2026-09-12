@@ -1,8 +1,6 @@
 import { MessageMarkdown } from "./message-markdown";
-import {
-  citedResponse,
-  type SourceCitation,
-} from "../../electron/electron-api";
+import { citedResponse } from "../../electron/electron-api";
+import type { ChatMessage } from "../domain/chat";
 import { SourcePills } from "./source-pills";
 import {
   useCallback,
@@ -15,14 +13,8 @@ import {
 } from "react";
 import { useSmoothText } from "../hooks/use-smooth-text";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  sources?: SourceCitation[];
-}
-
 interface ConversationBubblesProps {
-  messages: Message[];
+  messages: ChatMessage[];
   isStreaming: boolean;
 }
 
@@ -71,21 +63,14 @@ export function ConversationBubbles({
       ),
     [messages],
   );
-  const lastResponse = responses.at(-1);
   const lastMessage = messages[messages.length - 1];
   const lastContent = lastMessage?.content ?? "";
 
-  // Reveal the newest assistant reply at a steady pace instead of
-  // network-paced bursts; it keeps draining after the stream closes.
-  const liveAssistant = lastMessage?.role === "assistant" ? lastMessage : null;
-  const smoothedContent = useSmoothText(
-    liveAssistant ? (lastResponse?.content ?? "") : "",
-    messages.length,
-    isStreaming && liveAssistant !== null,
+  const { smoothedContent, isRevealing } = useAssistantReveal(
+    lastMessage,
+    responses.at(-1),
+    isStreaming,
   );
-  const isRevealing =
-    liveAssistant !== null &&
-    smoothedContent.length < (lastResponse?.content.length ?? 0);
 
   // Follow new content only while the user hasn't scrolled up to read;
   // their own new message always snaps the view back down.
@@ -190,12 +175,13 @@ export function ConversationBubbles({
           if (!response) return null;
           const isRevealTarget =
             index === messages.length - 1 && message.role === "assistant";
+          const reveal = isRevealTarget && (isStreaming || isRevealing);
           const staggerDelay =
             index < initialCount ? `${Math.min(index * 60, 300)}ms` : undefined;
 
           return (
             <div
-              key={index}
+              key={message.id}
               className={`bubble ${
                 message.role === "user" ? "bubble-user" : "bubble-assistant"
               }`}
@@ -204,15 +190,9 @@ export function ConversationBubbles({
               }
             >
               <MessageMarkdown
-                content={
-                  message.role === "user"
-                    ? message.content
-                    : isRevealTarget && (isStreaming || isRevealing)
-                      ? smoothedContent
-                      : response.content
-                }
+                content={reveal ? smoothedContent : response.content}
               />
-              {isRevealTarget && (isStreaming || isRevealing) && (
+              {reveal && (
                 <span className="stream-cursor" aria-hidden="true">
                   ▌
                 </span>
@@ -236,6 +216,25 @@ export function ConversationBubbles({
       </div>
     </div>
   );
+}
+
+/** Reveal state belongs to a message ID, including when the visible history window shifts. */
+function useAssistantReveal(
+  message: ChatMessage | undefined,
+  response: ReturnType<typeof citedResponse> | undefined,
+  streaming: boolean,
+) {
+  const assistant = message?.role === "assistant" ? message : null;
+  const content = assistant ? (response?.content ?? "") : "";
+  const smoothedContent = useSmoothText(
+    content,
+    assistant?.id ?? "",
+    streaming && assistant !== null,
+  );
+  return {
+    smoothedContent,
+    isRevealing: assistant !== null && smoothedContent.length < content.length,
+  };
 }
 
 const styles: Record<string, CSSProperties> = {

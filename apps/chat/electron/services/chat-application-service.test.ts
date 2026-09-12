@@ -1,3 +1,5 @@
+import type { ChatMessageDto } from "../electron-api.js";
+import { configuredAgent } from "../test-support/configured-agent.js";
 import { describe, expect, it } from "bun:test";
 import type {
   ConversationEntry,
@@ -5,7 +7,7 @@ import type {
   ExtensionConversationEvent,
 } from "../domain/conversation.js";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
-import type { AgentRunner, AgentTurnEvents } from "./openai-service.js";
+import type { AgentRunner, AgentTurnEvents } from "./agent-service.js";
 import { ChatApplicationService } from "./chat-application-service.js";
 import { ConversationEventService } from "./conversation-event-service.js";
 
@@ -45,11 +47,10 @@ class StubAgentRunner implements AgentRunner {
 
 function createChat(agent = new StubAgentRunner()) {
   const storage = createInMemoryStorageRepository();
-  const projections: Array<Array<{ role: string; content: string }>> = [];
+  const projections: ChatMessageDto[][] = [];
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "api-key" },
-    agent,
+    configuredAgent(agent),
     (conversation) => projections.push(conversation),
     ignoreError,
   );
@@ -80,8 +81,7 @@ describe("ChatApplicationService", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "key" },
-      agent,
+      configuredAgent(agent),
       () => {},
       ignoreError,
     );
@@ -97,8 +97,8 @@ describe("ChatApplicationService", () => {
     });
     expect(await chat.clearConversation()).toMatchObject({ success: false });
     expect(storage.snapshot().conversation).toEqual([
-      { role: "user", content: "First" },
-      { role: "assistant", content: "Partial answer" },
+      { id: expect.any(String), role: "user", content: "First" },
+      { id: expect.any(String), role: "assistant", content: "Partial answer" },
     ]);
   });
 
@@ -126,8 +126,7 @@ describe("ChatApplicationService", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "key" },
-      agent,
+      configuredAgent(agent),
       () => {},
       ignoreError,
     );
@@ -158,6 +157,7 @@ describe("ChatApplicationService", () => {
       { triggerEventId: second.eventId },
     ]);
     expect(storage.snapshot().conversation.at(-1)).toEqual({
+      id: expect.any(String),
       role: "assistant",
       content: "Finished",
     });
@@ -180,12 +180,12 @@ describe("ChatApplicationService", () => {
     expect(streamed).toEqual(["Hello", " there"]);
     expect(streamEnded).toBe(1);
     expect(storage.snapshot().conversation).toEqual([
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Hello there" },
+      { id: expect.any(String), role: "user", content: "Hi" },
+      { id: expect.any(String), role: "assistant", content: "Hello there" },
     ]);
     expect(projections.at(-1)).toEqual([
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Hello there" },
+      { id: expect.any(String), role: "user", content: "Hi" },
+      { id: expect.any(String), role: "assistant", content: "Hello there" },
     ]);
   });
 
@@ -229,7 +229,7 @@ describe("ChatApplicationService", () => {
         extensionId: "calendar",
         type: "calendar.synchronized",
       },
-      { role: "user", content: "What changed?" },
+      { id: expect.any(String), role: "user", content: "What changed?" },
     ]);
     expect(storage.snapshot().pendingAgentTurns).toEqual([]);
   });
@@ -251,11 +251,13 @@ describe("ChatApplicationService", () => {
     await chat.schedulePendingEventTurns();
 
     expect(storage.snapshot().conversation?.at(-1)).toEqual({
+      id: expect.any(String),
       role: "assistant",
       content: "Your focus session is complete.",
     });
     expect(projections.at(-1)).toEqual([
       {
+        id: expect.any(String),
         role: "assistant",
         content: "Your focus session is complete.",
       },
@@ -270,8 +272,7 @@ describe("ChatApplicationService", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "api-key" },
-      agent,
+      configuredAgent(agent),
       () => {},
       (error) => reportedErrors.push(error),
     );
@@ -309,11 +310,10 @@ describe("ChatApplicationService", () => {
       runEventTurn: async () => ({ disposition: "silent" }),
     };
     const storage = createInMemoryStorageRepository();
-    const projections: Array<Array<{ role: string; content: string }>> = [];
+    const projections: ChatMessageDto[][] = [];
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "api-key" },
-      agent,
+      configuredAgent(agent),
       (conversation) => projections.push(conversation),
       ignoreError,
     );
@@ -332,12 +332,12 @@ describe("ChatApplicationService", () => {
     expect(await turn).toEqual({ success: true });
     expect(streamEnded).toBe(1);
     expect(storage.snapshot().conversation).toEqual([
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Partial answer" },
+      { id: expect.any(String), role: "user", content: "Hi" },
+      { id: expect.any(String), role: "assistant", content: "Partial answer" },
     ]);
     expect(projections.at(-1)).toEqual([
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Partial answer" },
+      { id: expect.any(String), role: "user", content: "Hi" },
+      { id: expect.any(String), role: "assistant", content: "Partial answer" },
     ]);
   });
 
@@ -356,8 +356,7 @@ describe("ChatApplicationService", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "api-key" },
-      agent,
+      configuredAgent(agent),
       () => {},
       ignoreError,
     );
@@ -376,7 +375,7 @@ describe("ChatApplicationService", () => {
     expect(await turn).toEqual({ success: true });
     expect(streamEnded).toBe(1);
     expect(storage.snapshot().conversation).toEqual([
-      { role: "user", content: "Hi" },
+      { id: expect.any(String), role: "user", content: "Hi" },
     ]);
   });
 
@@ -406,8 +405,7 @@ describe("ChatApplicationService", () => {
     const storage = createInMemoryStorageRepository();
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "api-key" },
-      agent,
+      configuredAgent(agent),
       () => {},
       ignoreError,
     );
@@ -450,8 +448,7 @@ it("preserves streamed progress on failure and accepts the next user turn", asyn
   const storage = createInMemoryStorageRepository();
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "key" },
-    agent,
+    configuredAgent(agent),
     () => {},
     ignoreError,
   );
@@ -467,11 +464,13 @@ it("preserves streamed progress on failure and accepts the next user turn", asyn
     error: "Connection interrupted",
   });
   expect(storage.snapshot().conversation).toContainEqual({
+    id: expect.any(String),
     role: "assistant",
     content: "Checking.",
   });
   expect(await chat.sendMessage("Continue", events)).toEqual({ success: true });
   expect(storage.snapshot().conversation).toContainEqual({
+    id: expect.any(String),
     role: "assistant",
     content: "Recovered.",
   });
@@ -484,8 +483,7 @@ it("persists and publishes structured citations with user and event responses", 
   const published: ConversationEntry[][] = [];
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "key" },
-    {
+    configuredAgent({
       runUserTurn: async (_key, _history, stream) => {
         stream.onText("News.");
         await stream.onMessage({ content: "News.", sources });
@@ -495,7 +493,7 @@ it("persists and publishes structured citations with user and event responses", 
         content: "Update.",
         sources,
       }),
-    },
+    }),
     (conversation) => published.push(conversation),
     ignoreError,
   );
@@ -504,6 +502,7 @@ it("persists and publishes structured citations with user and event responses", 
     streamEnded: () => {},
   });
   const expected: ConversationEntry = {
+    id: expect.any(String),
     role: "assistant",
     content: "News.",
     sources,
@@ -525,6 +524,7 @@ it("persists and publishes structured citations with user and event responses", 
   });
   await chat.schedulePendingEventTurns();
   expect((await chat.getConversation()).at(-1)).toEqual({
+    id: expect.any(String),
     role: "assistant",
     content: "Update.",
     sources,
@@ -538,8 +538,7 @@ it("publishes an acknowledgment before slow work, then a separate final answer w
   const order: string[] = [];
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "key" },
-    {
+    configuredAgent({
       runUserTurn: async (_key, _history, events) => {
         events.onText("I'll check.");
         await events.onMessage({ content: "I'll check.", phase: "commentary" });
@@ -549,7 +548,7 @@ it("publishes an acknowledgment before slow work, then a separate final answer w
         await events.onMessage({ content: "Found it.", phase: "final_answer" });
       },
       runEventTurn: async () => ({ disposition: "silent" }),
-    },
+    }),
     (conversation) => order.push(conversation.at(-1)?.content ?? ""),
     ignoreError,
   );
@@ -560,6 +559,7 @@ it("publishes an acknowledgment before slow work, then a separate final answer w
   await acknowledged.promise;
   expect(order).toEqual(["Check", "I'll check."]);
   expect((await chat.getConversation()).at(-1)).toEqual({
+    id: expect.any(String),
     role: "assistant",
     content: "I'll check.",
     phase: "commentary",
@@ -579,8 +579,7 @@ it("cancels after commentary without duplicating it or manufacturing a final ans
   const storage = createInMemoryStorageRepository();
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "key" },
-    {
+    configuredAgent({
       runUserTurn: async (_key, _history, events, signal) => {
         events.onText("I'll check.");
         await events.onMessage({ content: "I'll check.", phase: "commentary" });
@@ -595,7 +594,7 @@ it("cancels after commentary without duplicating it or manufacturing a final ans
         await cancelled;
       },
       runEventTurn: async () => ({ disposition: "silent" }),
-    },
+    }),
     () => {},
     ignoreError,
   );
@@ -610,8 +609,13 @@ it("cancels after commentary without duplicating it or manufacturing a final ans
   chat.cancelActiveTurn();
   expect(await turn).toEqual({ success: true });
   expect(await chat.getConversation()).toEqual([
-    { role: "user", content: "Check" },
-    { role: "assistant", content: "I'll check.", phase: "commentary" },
+    { id: expect.any(String), role: "user", content: "Check" },
+    {
+      id: expect.any(String),
+      role: "assistant",
+      content: "I'll check.",
+      phase: "commentary",
+    },
   ]);
   expect(ends).toBe(1);
 });

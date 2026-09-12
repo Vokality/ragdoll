@@ -11,7 +11,7 @@ header or action bar.
 | -------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity | `PanelFrame.title`                                          | Fixed header, stable extension name, host-reserved leading avatar space, close control on the right.                                                             |
 | State    | `PanelFrame.status`, `PanelFrame.progress`                  | Compact header state and progress; use these instead of adding status rows to a list or replacing the title with a changing state.                               |
-| Content  | `ListPanelConfig`, `GridPanelConfig`, or `CardsPanelConfig` | Takes the remaining height. Lists scroll; boards fit the available width and height; study text scrolls within its face.                                         |
+| Content  | `ListPanelConfig`, `GridPanelConfig`, `CardsPanelConfig`, `CanvasPanelConfig`, or `DocumentPanelConfig` | Takes the remaining height. Lists and documents scroll; boards fit the available width and height; study text scrolls within its face.                                         |
 | Controls | `PanelFrame.actions`, study `answerInput`                   | Fixed footer, ordered actions, consistent button sizing. Study answer input and submit occupy this same region. Controls remain available while content scrolls. |
 
 `PanelFrame` is the shared React-free contract inherited by each panel kind.
@@ -25,6 +25,10 @@ before IPC, and the host restores action routing to the owning extension. Region
 metadata passes through that same contract. Layout changes do not create new IPC
 channels or alternate action paths.
 
+Action IDs must also identify their target. Notes uses `delete:<noteId>` so a
+delayed Delete request cannot apply to a different note after the selection
+changes. Reuse an ID only while the target stays the same.
+
 ## Authoring
 
 - Keep the title stable. Put “Your turn”, “Paused”, and similar state in `status`.
@@ -32,8 +36,9 @@ channels or alternate action paths.
   order; the renderer does not infer priority from an extension-specific ID.
 - Keep section actions attached to their section. Panel actions always go in the
   footer, including empty and completed states.
-- Choose lists for growing collections and small grids for bounded boards. Avoid
-  using list rows to simulate toolbars, progress bars, or forms.
+- Choose lists for growing collections, documents for long-form text, and small
+  grids for bounded boards. Avoid using list rows to simulate toolbars, progress
+  bars, forms, or a note body.
 - Use `answerInput` for study submission. It stays beside the other footer controls;
   the host handles pending and failed submissions without replacing the input.
 - Supply meaningful empty messages that explain the next step in user language.
@@ -74,3 +79,9 @@ A `CanvasPanelConfig` contributes a typed `CanvasDocument` to the standard heade
 Canvas elements are a discriminated union of rectangles, ellipses, paths, and text. The drawing contains data, never arbitrary SVG markup or callbacks. `serializeSlotState` copies the document and removes footer callbacks; hosts restore standard `panel-action` handlers as for other panel types. Export SVG is a local renderer download control.
 
 The first-party `@vokality/ragdoll-extension-canvas` package owns document persistence, revisions, batch edits, and undo. It contributes `canvas.main`; the host's existing card tools control its visibility independently.
+
+## Document panels
+
+A `DocumentPanelConfig` contributes a plain-text `body` to the standard header/content/footer layout. The renderer preserves line breaks and scrolls the body; it does not interpret markup. `serializeSlotState` copies the body and removes footer callbacks; hosts restore standard `panel-action` handlers as for canvas.
+
+The first-party `@vokality/ragdoll-extension-notes` package owns note persistence and list/detail projection. It contributes `notes.main` and stores a validated `{ notes }` document before publishing a new slot state. Selected-note identity remains runtime view state; opening a note or returning to the list does not write storage. Writing a note does not open the card; use the host's card tools independently.

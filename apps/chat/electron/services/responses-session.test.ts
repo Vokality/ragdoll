@@ -1,4 +1,4 @@
-import type { AgentModelConfig } from "./openai-service.js";
+import type { AgentModelConfig } from "./agent-service.js";
 import { expect, it } from "bun:test";
 import type {
   Response,
@@ -6,8 +6,7 @@ import type {
   ResponseStreamEvent,
   ResponseCreateParamsStreaming,
 } from "openai/resources/responses/responses";
-import { OpenAIResponseSession } from "./openai-response-session.js";
-import type { AgentResponseOutput } from "./openai-service.js";
+import { ResponsesSession } from "./responses-session.js";
 import type { AgentResponse } from "../electron-api.js";
 
 const config: AgentModelConfig = {
@@ -66,7 +65,10 @@ function delta(itemId: string, text: string): ResponseStreamEvent {
 it("streams and awaits separate message persistence, preserves phases and completed encrypted reasoning", async () => {
   const first = message("ack", "commentary", "I'll check.");
   const final = message("answer", "final_answer", "Done.");
-  const output: AgentResponseOutput[] = [
+  const output: Extract<
+    Response["output"][number],
+    { type: "message" | "function_call" | "reasoning" }
+  >[] = [
     {
       type: "reasoning",
       id: "reasoning",
@@ -80,9 +82,17 @@ it("streams and awaits separate message persistence, preserves phases and comple
   const order: string[] = [];
   const messages: AgentResponse[] = [];
   const abort = new AbortController();
-  const session = new OpenAIResponseSession(config, {
+  const session = new ResponsesSession(config, {
     stream: async (params, signal) => {
       requests.push(params);
+      if (requests.length > 1)
+        return (async function* (): AsyncGenerator<ResponseStreamEvent> {
+          yield {
+            type: "response.completed",
+            response: response([]),
+            sequence_number: 1,
+          };
+        })();
       expect(signal).toBe(abort.signal);
       return (async function* (): AsyncGenerator<ResponseStreamEvent> {
         yield delta(first.id, "I'll check.");
@@ -122,10 +132,33 @@ it("streams and awaits separate message persistence, preserves phases and comple
       },
     },
   });
-  expect(result.output).toEqual(output);
+  expect(result.output).toEqual([
+    {
+      type: "message",
+      role: "assistant",
+      content: "I'll check.",
+      phase: "commentary",
+    },
+    {
+      type: "message",
+      role: "assistant",
+      content: "Done.",
+      phase: "final_answer",
+    },
+  ]);
   expect(messages).toEqual([
     { content: "I'll check.", phase: "commentary" },
     { content: "Done.", phase: "final_answer" },
+  ]);
+  await session.respond({
+    input: [{ role: "developer", content: "Continue" }],
+    tools: [],
+    toolChoice: "none",
+  });
+  expect(requests[1]?.input).toEqual([
+    { role: "user", content: "Check" },
+    ...output,
+    { role: "developer", content: "Continue" },
   ]);
   expect(requests[0]).toMatchObject({
     store: false,
@@ -167,7 +200,7 @@ it("rejects incomplete, failed, and disconnected streams without inventing a com
   ];
   for (const events of cases) {
     const messages: AgentResponse[] = [];
-    const session = new OpenAIResponseSession(config, {
+    const session = new ResponsesSession(config, {
       stream: async () =>
         (async function* () {
           yield* events;
@@ -193,7 +226,7 @@ it("rejects incomplete, failed, and disconnected streams without inventing a com
 it("cancels before processing another streamed item", async () => {
   const abort = new AbortController();
   const messages: AgentResponse[] = [];
-  const session = new OpenAIResponseSession(config, {
+  const session = new ResponsesSession(config, {
     stream: async () =>
       (async function* (): AsyncGenerator<ResponseStreamEvent> {
         yield delta("partial", "Partial");

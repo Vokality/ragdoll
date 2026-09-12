@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@vokality/ragdoll-extensions";
 import type { AgentToolResult } from "../domain/source-citation.js";
-import type { AgentToolService } from "./openai-service.js";
+import type { AgentToolService } from "./agent-service.js";
 import type { ConnectionService } from "./connection-service.js";
 
-const idSchema = z.object({ connectionId: z.uuid() }).strict();
+const idSchema = z.strictObject({ connectionId: z.uuid() });
 const callSchema = idSchema.extend({
   toolName: z.string().min(1),
   arguments: z.record(z.string(), z.unknown()),
@@ -84,7 +84,7 @@ export class ConnectionToolService implements AgentToolService {
       return this.delegate.executeTool(name, args, signal);
     try {
       if (name === "lumen_list_connections") {
-        z.object({}).strict().parse(args);
+        z.strictObject({}).parse(args);
         return {
           success: true,
           data: this.connections

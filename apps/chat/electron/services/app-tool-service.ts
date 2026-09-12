@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResult } from "@vokality/ragdoll-extensions";
-import type { AgentToolService } from "./openai-service.js";
+import type { AgentToolService } from "./agent-service.js";
 import type { ExtensionCardService } from "./extension-card-service.js";
 
-const openCardSchema = z.object({ slotId: z.string().min(1) }).strict();
-const emptySchema = z.object({}).strict();
+const openCardSchema = z.strictObject({ slotId: z.string().min(1) });
+const emptySchema = z.strictObject({});
 const CARD_TOOLS: ToolDefinition[] = [
   {
     type: "function",

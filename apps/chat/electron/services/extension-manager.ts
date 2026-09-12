@@ -498,12 +498,15 @@ export class ExtensionManager {
     }
 
     const packages = await this.loader.discoverPackages();
-    for (const packageName of packages) {
-      const info = await this.loader.getPackageInfo(packageName);
+    const packageInfos = await Promise.all(
+      packages.map((packageName) => this.loader.getPackageInfo(packageName)),
+    );
+    for (const info of packageInfos) {
       if (info) this.cachePackageDescriptor(info);
     }
 
     for (const descriptor of this.packageInfoCache.values()) {
+      // eslint-disable-next-line react-doctor/async-await-in-loop -- Initialization can refresh and persist OAuth tokens; finish each lifecycle before advancing to the next.
       await this.initializePackageInfo(descriptor);
     }
 
@@ -515,6 +518,7 @@ export class ExtensionManager {
       ) {
         continue;
       }
+      // eslint-disable-next-line react-doctor/async-await-in-loop -- Registration order determines slot order and startup must stop at the first failed built-in.
       const result = await this.loadBuiltInExtension(definition);
       if (!result.success) throw new Error(result.error);
     }
@@ -611,6 +615,7 @@ export class ExtensionManager {
     for (const packageName of packages) {
       const info =
         this.getCachedPackageInfo(packageName) ??
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Metadata initialization and registration are one ordered package lifecycle.
         (await this.loader.getPackageInfo(packageName));
 
       if (!info) {
@@ -778,6 +783,7 @@ export class ExtensionManager {
         );
         if (
           isLoaded &&
+          // eslint-disable-next-line react-doctor/async-await-in-loop -- Record successful teardown in order so a later failure can roll it back in reverse.
           !(await this.unloadPackageRuntime(extension.packageName))
         ) {
           throw new Error(`Failed to disable extension '${extension.id}'`);
@@ -793,6 +799,7 @@ export class ExtensionManager {
         }
         if (!this.isConfigured(descriptor)) continue;
 
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Enabling mutates the shared registry and must stop before the next activation on failure.
         const result = await this.loadPackageRuntime(extension.packageName);
         if (!result.success) {
           throw new Error(
@@ -804,11 +811,13 @@ export class ExtensionManager {
     } catch (error) {
       const rollbackErrors: string[] = [];
       for (const extension of loaded.reverse()) {
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Undo successful activations in reverse order.
         if (!(await this.unloadPackageRuntime(extension.packageName))) {
           rollbackErrors.push(`could not unload '${extension.id}'`);
         }
       }
       for (const extension of unloaded.reverse()) {
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Restore earlier teardown steps in reverse order before completing rollback.
         const result = await this.loadPackageRuntime(extension.packageName);
         if (!result.success) {
           rollbackErrors.push(
@@ -1035,7 +1044,7 @@ export class ExtensionManager {
         };
       }
 
-      if (panel.type === "cards" || panel.type === "canvas") {
+      if (panel.type !== "list") {
         return {
           success: false,
           error: `Action not found: ${actionType}:${actionId}`,
@@ -1155,6 +1164,8 @@ export class ExtensionManager {
     info: ExtensionPackageDescriptor,
   ): Promise<void> {
     this.cachePackageDescriptor(info);
+    // Required packages override disabled preferences saved before a metadata change.
+    if (!info.canDisable) this.disabledExtensions.delete(info.extensionId);
     if (info.configSchema) {
       await this.getOrCreateConfigManager(
         info.extensionId,

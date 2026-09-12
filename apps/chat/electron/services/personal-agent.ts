@@ -7,13 +7,13 @@ import type {
 import type { AgentToolResult } from "../domain/source-citation.js";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 import {
-  OpenAIAgentRunner,
+  ToolCallingAgentRunner,
   type AgentRunner,
   type AgentModelConfig,
   type AgentResponseSessionFactory,
   type AgentToolService,
   type AgentTurnEvents,
-} from "./openai-service.js";
+} from "./agent-service.js";
 import type { AgentToolHistory } from "./tool-history-service.js";
 import type { UserProfileService } from "./user-profile-service.js";
 import { refreshMemorySummary } from "./memory-summary-service.js";
@@ -171,7 +171,7 @@ export class PersonalAgent implements AgentRunner {
     userTurn: boolean,
     key: string,
     signal?: AbortSignal,
-  ): Promise<OpenAIAgentRunner> {
+  ): Promise<ToolCallingAgentRunner> {
     const refreshSummary = (abort?: AbortSignal) =>
       refreshMemorySummary(
         this.profile,
@@ -187,7 +187,7 @@ export class PersonalAgent implements AgentRunner {
       firstSuccessfulAction: data.experience.firstSuccess,
       localTime: new Date().toString(),
     });
-    return new OpenAIAgentRunner(
+    return new ToolCallingAgentRunner(
       new PersonalTools(this.tools, this.profile, userTurn),
       {
         ...this.config,

@@ -23,7 +23,7 @@
         await act(async () =>
           root.render(
             React.createElement(ConversationBubbles, {
-              messages: [{ role: "assistant", content, sources }],
+              messages: [{ id: "answer", role: "assistant", content, sources }],
               isStreaming: false,
             }),
           ),
@@ -59,6 +59,7 @@
             React.createElement(ConversationBubbles, {
               messages: [
                 {
+                  id: "legacy-answer",
                   role: "assistant",
                   content: "Saved news.\nSource: [NASA](https://www.nasa.gov/)",
                 },

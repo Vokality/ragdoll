@@ -1,3 +1,4 @@
+import { configuredAgent } from "../test-support/configured-agent.js";
 import { expect, it } from "bun:test";
 import { sendRendererEvent } from "./send-renderer-event.js";
 import { ChatApplicationService } from "./chat-application-service.js";
@@ -16,8 +17,7 @@ it("finishes and persists a streamed response after its renderer closes", async 
   const storage = createInMemoryStorageRepository();
   const chat = new ChatApplicationService(
     storage,
-    { getKey: async () => "key" },
-    {
+    configuredAgent({
       runUserTurn: async (_key, _history, stream) => {
         stream.onText("Hello");
         destroyed = true;
@@ -25,7 +25,7 @@ it("finishes and persists a streamed response after its renderer closes", async 
         await stream.onMessage({ content: "Hello there" });
       },
       runEventTurn: async () => ({ disposition: "silent" }),
-    },
+    }),
     (history) => sendRendererEvent(contents, "history", history),
     () => {},
   );
@@ -36,12 +36,12 @@ it("finishes and persists a streamed response after its renderer closes", async 
     }),
   ).toEqual({ success: true });
   expect(delivered).toEqual([
-    ["history", [{ role: "user", content: "Hi" }]],
+    ["history", [{ id: expect.any(String), role: "user", content: "Hi" }]],
     ["text", "Hello"],
   ]);
   expect(await chat.getConversation()).toEqual([
-    { role: "user", content: "Hi" },
-    { role: "assistant", content: "Hello there" },
+    { id: expect.any(String), role: "user", content: "Hi" },
+    { id: expect.any(String), role: "assistant", content: "Hello there" },
   ]);
 });
 

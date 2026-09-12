@@ -2,11 +2,11 @@
 
 ## Lumen does not launch
 
-Run `bun run build` from the repository root before `bun run dev:chat`. Missing workspace builds or `apps/chat/dist/electron/main.js` prevent startup.
+Run `bun install --frozen-lockfile`, then `bun run dev:chat` from the repository root. Development startup builds the shared packages and Electron bundle before opening the app. If a build fails, fix the error shown in the terminal; startup stops before launching an older bundle.
 
 ## The window is blank
 
-Check that the renderer terminal is serving `http://localhost:5173`. Restart the development process and Electron after dependency changes. Rebuild main-process changes with `bun run --filter lumen build:electron` before restarting.
+Check that the renderer terminal is serving `http://localhost:5173`. Stop the previous development command and restart `bun run dev:chat` after main-process, preload, shared-package, or dependency changes. Renderer-only edits reload through Vite.
 
 A browser tab at the renderer URL is not a standalone Lumen client; use the Electron window.
 
@@ -16,7 +16,7 @@ Lumen requires a working OS credential store. In Cursor Cloud, use the [headless
 
 ## The key is accepted but chat fails
 
-Setup validates the API key, but does not prove access to Lumen's configured model. Read the request error in chat and check access to the model in `apps/chat/electron/main-process-config.ts`.
+Setup validates the selected provider's API key, but does not prove access to its configured model. Read the request error in chat and check **Settings → AI provider**. Current defaults are listed in [Getting started](./getting-started.md#requirements); the source catalog is `apps/chat/electron/services/model-provider.ts`.
 
 ## A connection will not connect
 
@@ -31,6 +31,14 @@ Check its switch in **Settings → Connections**. A connected service with **Age
 ## An extension will not install
 
 The extension library expects a GitHub release with a Ragdoll extension archive, not arbitrary repository source. Check the [distribution requirements](./extensions/distribution.md), package manifest, and missing host configuration reported by Lumen.
+
+## A built-in extension is missing
+
+Built-ins such as Notes appear in **Settings → Extensions → Features**. The **Extension library** manages separately installed packages. Notes also has a toolbar button when the host has loaded its slot.
+
+During development, creating or building an extension package does not register it in Lumen. Check its app dependency and built-in catalog entry, then stop the previous development command and run `bun run dev:chat`. This rebuilds both the package and the Electron bundle containing the catalog. See [testing a first-party package in Lumen](./extensions/first-extension.md#test-a-first-party-package-in-lumen).
+
+If the entry is present but activation fails, inspect the terminal error and the extension's required host capabilities and configuration. Invalid saved extension data is rejected during activation; keep the saved data while investigating the schema error.
 
 ## A card closed but its activity continued
 

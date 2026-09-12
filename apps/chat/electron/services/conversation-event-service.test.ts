@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { createExtension as createWorkingListExtension } from "@vokality/ragdoll-extension-working-list";
+import { createRegistry } from "@vokality/ragdoll-extensions";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { ConversationEventService } from "./conversation-event-service.js";
 
@@ -8,6 +10,98 @@ const dependencies = {
 };
 
 describe("ConversationEventService", () => {
+  it.each([1, 158, 159, 200])(
+    "persists a turn for each working-list selection with a %i-character item ID",
+    async (idLength) => {
+      const storage = createInMemoryStorageRepository();
+      const service = new ConversationEventService(storage, dependencies);
+      const registry = createRegistry({
+        now: Date.now,
+        onListenerError: (error) => {
+          throw error;
+        },
+      });
+      let saved: unknown;
+      let queued = 0;
+      service.onTurnQueued(() => {
+        queued += 1;
+      });
+      try {
+        await registry.register(createWorkingListExtension(), {
+          host: {
+            capabilities: new Set(["storage", "logger", "conversationEvents"]),
+            storage: {
+              read: async () => structuredClone(saved),
+              write: async (_extensionId, _key, value) => {
+                saved = structuredClone(value);
+              },
+              delete: async () => {},
+              list: async () => [],
+            },
+            logger: {
+              debug: () => {},
+              info: () => {},
+              warn: () => {},
+              error: () => {},
+            },
+            conversationEvents: {
+              publish: (event) => service.publish("working-list", event),
+            },
+          },
+        });
+        const item = {
+          id: "x".repeat(idLength),
+          label: "Reply to email",
+          sublabel: "Waiting for a response",
+          ref: "email-1",
+        };
+        expect(
+          (
+            await registry.executeTool("working_list_set_items", {
+              title: "Reply next",
+              items: [item],
+            })
+          ).success,
+        ).toBe(true);
+        const panel = registry.getSlots()[0]?.slot.state.getState().panel;
+        if (panel?.type !== "list") throw new Error("Expected a list panel");
+        const row = panel.items?.[0];
+        if (!row?.onClick) throw new Error("Expected a selectable row");
+        expect(row.id).toBe(item.id);
+
+        await row.onClick();
+        await row.onClick();
+
+        const snapshot = storage.snapshot();
+        expect(snapshot.conversation).toHaveLength(2);
+        expect(queued).toBe(2);
+        expect(snapshot.pendingAgentTurns).toEqual(
+          snapshot.conversation.map((event) => ({
+            triggerEventId: event.id,
+            createdAt: expect.any(Number),
+          })),
+        );
+        for (const event of snapshot.conversation) {
+          expect(event).toMatchObject({
+            kind: "extension-event",
+            extensionId: "working-list",
+            type: "list.item.selected",
+            turnPolicy: "start-turn",
+            payload: {
+              itemId: item.id,
+              label: item.label,
+              sublabel: item.sublabel,
+              ref: item.ref,
+              title: "Reply next",
+            },
+          });
+        }
+      } finally {
+        await registry.destroy();
+      }
+    },
+  );
+
   it("records an internal event without scheduling a turn", async () => {
     const storage = createInMemoryStorageRepository();
     const service = new ConversationEventService(storage, dependencies);

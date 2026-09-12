@@ -25,6 +25,7 @@ import type {
   ListPanelConfig,
   GridPanelConfig,
   CardsPanelConfig,
+  DocumentPanelConfig,
   CardsPanelResult,
   GridPanelCell,
   GridPanelResult,
@@ -94,32 +95,36 @@ function PanelContent({
   panel: PanelConfig;
   onClose: () => void;
 }) {
-  if (panel.type === "canvas") {
-    return (
-      <PanelLayout
-        panel={panel}
-        onClose={onClose}
-        input={
-          <ActionButton
-            action={{
-              id: "export-svg",
-              label: "Export SVG",
-              onClick: () => downloadCanvasSvg(panel.document),
-            }}
-          />
-        }
-      >
-        <CanvasPanel document={panel.document} />
-      </PanelLayout>
-    );
+  switch (panel.type) {
+    case "canvas":
+      return (
+        <PanelLayout
+          panel={panel}
+          onClose={onClose}
+          input={
+            <ActionButton
+              action={{
+                id: "export-svg",
+                label: "Export SVG",
+                onClick: () => downloadCanvasSvg(panel.document),
+              }}
+            />
+          }
+        >
+          <CanvasPanel document={panel.document} />
+        </PanelLayout>
+      );
+    case "document":
+      return <DocumentPanel config={panel} onClose={onClose} />;
+    case "list":
+      return <ListPanel config={panel} onClose={onClose} />;
+    case "grid":
+      return <GridPanel config={panel} onClose={onClose} />;
+    case "cards":
+      return (
+        <CardsPanel key={panel.card.attemptId} config={panel} onClose={onClose} />
+      );
   }
-  return panel.type === "list" ? (
-    <ListPanel config={panel} onClose={onClose} />
-  ) : panel.type === "grid" ? (
-    <GridPanel config={panel} onClose={onClose} />
-  ) : (
-    <CardsPanel config={panel} onClose={onClose} />
-  );
 }
 
 /** One layout owns all fixed regions; renderers contribute only body and input. */
@@ -283,6 +288,41 @@ export function SlotPanelBase({ isOpen, onClose, panel }: SlotPanelBaseProps) {
 }
 
 // =============================================================================
+// Document Panel Renderer
+// =============================================================================
+
+interface DocumentPanelProps {
+  config: DocumentPanelConfig;
+  onClose: () => void;
+}
+
+function DocumentPanel({ config, onClose }: DocumentPanelProps) {
+  const hasBody = config.body.length > 0;
+  return (
+    <PanelLayout panel={config} onClose={onClose}>
+      <div
+        className="slot-panel-body slot-panel-document-content"
+        style={styles.content}
+      >
+        {hasBody ? (
+          <article
+            className="slot-panel-document-body"
+            style={styles.documentBody}
+            aria-label={config.title}
+          >
+            {config.body}
+          </article>
+        ) : (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>{config.emptyMessage ?? "No note yet"}</p>
+          </div>
+        )}
+      </div>
+    </PanelLayout>
+  );
+}
+
+// =============================================================================
 // Cards Panel Renderer
 // =============================================================================
 
@@ -291,65 +331,42 @@ interface CardsPanelProps {
   onClose: () => void;
 }
 
-function CardsPanel({ config, onClose }: CardsPanelProps) {
-  const { card } = config;
-  const [form, setForm] = useState({
-    attemptId: card.attemptId,
-    draft: "",
-    pending: false,
-    error: "",
-  });
-
-  if (form.attemptId !== card.attemptId) {
-    setForm({
-      attemptId: card.attemptId,
-      draft: "",
-      pending: false,
-      error: "",
-    });
-  }
-
-  const draft = form.attemptId === card.attemptId ? form.draft : "";
-  const pending = form.attemptId === card.attemptId ? form.pending : false;
-
+function useCardAnswer(config: CardsPanelConfig) {
+  const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const submitting = useRef(false);
   const canSubmit =
-    card.face === "front" &&
+    config.card.face === "front" &&
     typeof config.onSubmitAnswer === "function" &&
     config.answerInput?.disabled !== true &&
     !pending;
 
-  const submittingAttempt = useRef<string | null>(null);
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (
-      !canSubmit ||
-      !config.onSubmitAnswer ||
-      submittingAttempt.current === card.attemptId
-    )
-      return;
+    if (!canSubmit || !config.onSubmitAnswer || submitting.current) return;
     const answer = draft.trim();
     if (!answer) return;
-    submittingAttempt.current = card.attemptId;
-    setForm((current) => ({ ...current, pending: true, error: "" }));
+    submitting.current = true;
+    setPending(true);
+    setError("");
     try {
       await config.onSubmitAnswer(answer);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setForm((current) =>
-        current.attemptId === card.attemptId
-          ? { ...current, error: message }
-          : current,
-      );
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
-      if (submittingAttempt.current === card.attemptId)
-        submittingAttempt.current = null;
-      setForm((current) =>
-        current.attemptId === card.attemptId
-          ? { ...current, pending: false }
-          : current,
-      );
+      submitting.current = false;
+      setPending(false);
     }
   };
+  return { draft, setDraft, pending, error, canSubmit, handleSubmit };
+}
+
+// Keyed by attemptId in PanelContent: late results only update their own attempt.
+function CardsPanel({ config, onClose }: CardsPanelProps) {
+  const { card } = config;
+  const { draft, setDraft, pending, error, canSubmit, handleSubmit } =
+    useCardAnswer(config);
 
   return (
     <PanelLayout
@@ -363,11 +380,7 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
               type="text"
               value={draft}
               onChange={(event) => {
-                const value = event.currentTarget.value;
-                setForm((current) => ({
-                  ...current,
-                  draft: value,
-                }));
+                setDraft(event.currentTarget.value);
               }}
               placeholder={config.answerInput.placeholder ?? "Type your answer"}
               maxLength={config.answerInput.maxLength}
@@ -397,9 +410,7 @@ function CardsPanel({ config, onClose }: CardsPanelProps) {
         className="slot-panel-body slot-panel-cards-content"
         style={styles.cardsContent}
       >
-        {form.attemptId === card.attemptId && form.error ? (
-          <p role="alert">{form.error}</p>
-        ) : null}
+        {error ? <p role="alert">{error}</p> : null}
         <div
           key={card.attemptId}
           className={`slot-panel-flip-scene ${card.face === "back" ? "flipped" : ""}`}
@@ -999,6 +1010,8 @@ const panelStyles = `
   .slot-panel-progress-track { height: 3px; width: 64px; background: var(--bg-tertiary, #334155); border-radius: 4px; overflow: hidden; }
   .slot-panel-progress-track > span { display: block; height: 100%; background: var(--accent, #5a9bc4); }
   .slot-panel-body { min-width: 0; overscroll-behavior: contain; }
+  .slot-panel-document-content { min-height: 0; }
+  .slot-panel-document-body { min-width: 0; }
   .slot-panel-grid-viewport { container-type: size; }
   .slot-panel-grid-cell { min-width: 0; min-height: 0; }
   .slot-panel-footer { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border, #334155); overflow-x: auto; }
@@ -1248,6 +1261,14 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     overflow: "auto",
     padding: "var(--slot-panel-content-padding, 16px 20px 24px)",
+  },
+  documentBody: {
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: 1.55,
+    color: "var(--text-primary, #f1f5f9)",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
   },
   gridContent: {
     flex: 1,

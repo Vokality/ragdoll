@@ -15,6 +15,18 @@ bun run --filter @example/ragdoll-extension-weather typecheck
 
 Building an example does not automatically activate it in Lumen. See [distribution](./distribution.md) for installation.
 
+## Test a first-party package in Lumen
+
+For a first-party package under `packages/ragdoll-extension-*`:
+
+1. Add the package as a `workspace:*` dependency in `apps/chat/package.json`.
+2. Import its factory and canonical `package.json` descriptor in `apps/chat/electron/built-in-extensions.ts`, and register them in `BUILT_IN_EXTENSIONS` using `defineBuiltInExtension`.
+3. Run `bun install` to register the workspace dependency. Add host integration coverage and include the package in `scripts/verify-packages.ts`.
+4. Stop the previous development command, then run `bun run dev:chat`. It rebuilds the shared packages and Electron bundle before launching.
+5. Verify the entry in **Settings → Extensions → Features**, its agent tools, and any visible card. Required configuration can delay activation; the descriptor still appears in Settings.
+
+The [Notes package](https://github.com/Vokality/ragdoll/tree/main/packages/ragdoll-extension-notes) is a stateful example with a list and document card. Its package README describes the tools and limits. Creating a directory or building a package alone does not add it to the built-in catalog. Independently distributed extensions use the [release installation path](./distribution.md#install-in-lumen).
+
 ## Create your package
 
 Copy the example to a new directory under `examples/`. Change its package name, descriptor ID and display name, runtime ID and name, tool names, and tests to describe your domain. Keep the `workspace:*` framework dependency while developing inside this monorepo, then run `bun install` to register the new workspace.

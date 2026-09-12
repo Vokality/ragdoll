@@ -4,7 +4,7 @@
 
 <h1 align="center">Lumen</h1>
 
-Lumen is a desktop AI assistant with an animated character and tools that act on your requests. Chat with it, manage tasks, start a focus timer, build flash cards, draw on a canvas, or connect services through MCP. Interactive cards open beside the conversation, with the character tucked into the corner so you can keep chatting while you work.
+Lumen is a desktop AI assistant with an animated character and tools that act on your requests. Chat with it, manage tasks, save longer notes on a card, start a focus timer, build flash cards, draw on a canvas, or connect services through MCP. Interactive cards open beside the conversation, with the character tucked into the corner so you can keep chatting while you work.
 
 <p align="center">
   <img src="docs/site/public/screenshots/lumen-chat.png" alt="Lumen suggesting a morning plan in a conversation" width="340" />
@@ -20,7 +20,7 @@ Lumen’s documentation covers [getting started](docs/site/getting-started.md), 
 ## What you can do
 
 - **Chat and act.** The agent can make multiple tool calls, open and close cards, and follow up with a result. Quick requests default to a direct response; longer work can include a brief model-generated acknowledgment.
-- **Use interactive tools.** Tasks, a focus timer, flash cards, tic-tac-toe, and a drawing canvas are included. Spotify playback is available after configuring its integration.
+- **Use interactive tools.** Tasks, notes, a focus timer, flash cards, tic-tac-toe, and a drawing canvas are included. Spotify playback is available after configuring its integration.
 - **Connect your services.** Add MCP connections in Settings, sign in with OAuth or supply an access token, then choose which connections the agent may use.
 - **Search the web.** Ask for current information or research. Search citations appear as clickable source pills below the answer.
 - **Read formatted messages.** User and assistant messages support Markdown, including lists, code blocks, tables, and task lists, while assistant replies stream.
@@ -30,31 +30,31 @@ Lumen’s documentation covers [getting started](docs/site/getting-started.md), 
 
 ## Get started from source
 
-You need **Git**, **Bun 1.4.2**, a desktop environment that can run Electron with secure credential storage, and an **OpenAI API key** with access to the configured model. An internet connection is required for model requests and remote services.
+You need **Git**, **Bun 1.4.2**, a desktop environment that can run Electron with secure credential storage, and an **OpenAI or xAI API key** with access to the configured model. An internet connection is required for model requests and remote services.
 
 ```bash
 git clone https://github.com/Vokality/ragdoll.git
 cd ragdoll
 bun install --frozen-lockfile
-bun run build
 bun run dev:chat
 ```
 
-The build prepares the shared packages and Electron application. `dev:chat` starts both the Vite renderer on `http://localhost:5173` and the Lumen desktop window. Use the desktop window: the renderer relies on Electron for credentials, storage, and tools.
+`dev:chat` builds the shared packages and Electron main process before starting the Vite renderer on `http://localhost:5173` and the Lumen desktop window. Use the desktop window: the renderer relies on Electron for credentials, storage, and tools.
 
 On first launch:
 
-1. Enter your [OpenAI API key](https://platform.openai.com/api-keys) in the setup screen. Lumen validates it and stores it encrypted through the operating system's credential storage.
+1. Choose OpenAI or Grok in the setup screen and enter that provider’s API key. Lumen validates it and stores it encrypted through the operating system's credential storage.
 2. Lumen introduces itself in chat and asks what to call you. Tell it what you need, or choose a suggestion to try your first action.
 3. Open **Settings** to change the character, manage features and connections, configure integrations, or install extensions.
 
-The current default is **GPT-5.6 Sol with low reasoning**, using the OpenAI Responses API. Model configuration lives in [`apps/chat/electron/main-process-config.ts`](apps/chat/electron/main-process-config.ts); it is not currently a Settings control. API keys are entered in the app, not a repository `.env` file.
+OpenAI uses **GPT-5.6 Sol** and Grok uses **Grok 4.6**, both with low reasoning. Switch providers through Settings → AI provider. The [provider facade](docs/model-providers.md) keeps chat, extensions, and memory shared across providers. API keys are entered in the app, not a repository `.env` file.
 
 ### Try a few requests
 
 - “Show my to-do list and add ‘Plan the weekend.’”
 - “Start a 25-minute focus timer.”
 - “Create five flash cards for basic Spanish greetings.”
+- “Write a weekend itinerary as a note.”
 - “Draw a simple house on the canvas.”
 - “Search for a recent NASA update and summarize it.”
 - “Close the card.”
@@ -77,7 +77,7 @@ Lumen supports HTTPS endpoints and local HTTP servers. Legacy SSE-only endpoints
 
 ## Extensions and cards
 
-Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
+Extensions add capabilities and, when applicable, an interactive card. Included extensions cover character controls, tasks, notes, the focus timer, flash cards, tic-tac-toe, canvas drawing, and Spotify tools.
 
 Use **Settings → Extensions → Integrations** to configure Spotify. Use **Settings → Extensions → Extension library** to install additional Ragdoll extensions from a GitHub repository URL. An extension must follow the Ragdoll package contract; an arbitrary GitHub project or MCP server is not an installable extension.
 
@@ -90,7 +90,7 @@ Run commands from the repository root. The repository uses one `bun.lock` and pi
 | Command                                 | Purpose                                                                |
 | --------------------------------------- | ---------------------------------------------------------------------- |
 | `bun run build`                         | Build libraries, extensions, the example, and apps in dependency order |
-| `bun run dev:chat`                      | Start the Lumen renderer and Electron app                              |
+| `bun run dev:chat`                      | Rebuild shared packages and Electron, then launch Lumen                |
 | `bun run --filter lumen build:electron` | Rebuild main-process and preload code; restart Lumen afterward         |
 | `bun run test`                          | Build libraries and run workspace tests                                |
 | `bun run test:browser`                  | Run the Electron browser regression suite                              |
@@ -98,7 +98,7 @@ Run commands from the repository root. The repository uses one `bun.lock` and pi
 | `bun run lint`                          | Lint the repository                                                    |
 | `bun run verify:packages`               | Verify packed libraries and extensions in an isolated consumer         |
 
-Renderer edits reload during development. Main-process and preload edits require a rebuild and restart; shared-library changes require rebuilding the affected packages. More details are in the [Lumen developer README](apps/chat/README.md) and [contributor guide](CONTRIBUTING.md).
+Renderer edits reload during development. After main-process, preload, or shared-package edits, stop the development command and restart it; startup rebuilds those packages before launching Electron. More details are in the [Lumen developer README](apps/chat/README.md) and [contributor guide](CONTRIBUTING.md).
 
 ### Cursor Cloud
 
@@ -128,7 +128,7 @@ The character framework does not depend on apps or extensions. Shared extensions
 
 ## Data and credentials
 
-Conversations, settings, tool history, and extension data are stored locally. OpenAI API keys and connection credentials are encrypted through Electron's `safeStorage`. Chat context and tool results are sent to OpenAI to produce responses; enabled remote services receive their tool requests. Lumen is not an offline assistant.
+Conversations, settings, tool history, and extension data are stored locally. Model provider API keys and connection credentials are encrypted through Electron's `safeStorage`. Chat context and tool results are sent to the selected model provider to produce responses; enabled remote services receive their tool requests. Lumen is not an offline assistant.
 
 Connection tokens stay in Electron's main process and are used by the MCP client, rather than included in model prompts or chat history. See [conversation events and history](docs/conversation-events.md), [internet access](docs/internet-access.md), and [host OAuth](docs/extension-host-oauth.md) for implementation details.
 

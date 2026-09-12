@@ -1,4 +1,9 @@
-import OpenAI from "openai";
+import type {
+  ModelProviderId,
+  ModelProviderInfo,
+  ProviderKey,
+} from "../domain/model-provider.js";
+import type { ModelProvider } from "./model-provider.js";
 import type {
   ApiKeyValidationResult,
   OperationResult,
@@ -12,14 +17,16 @@ export class ApiKeyService {
   constructor(
     private readonly storage: StorageRepository,
     private readonly encryption: EncryptionService,
+    private readonly providers: ReadonlyMap<ModelProviderId, ModelProvider>,
   ) {}
 
   async hasKey(): Promise<boolean> {
-    return Boolean((await this.storage.read()).apiKeyEncrypted);
+    const data = await this.storage.read();
+    return Boolean(data.providerKeysEncrypted[data.modelProvider]);
   }
 
-  async setKey(key: string): Promise<OperationResult> {
-    if (!key.startsWith("sk-") || key.length < 20) {
+  async setKey({ provider, key }: ProviderKey): Promise<OperationResult> {
+    if (!this.providers.has(provider) || key.trim().length < 20) {
       return { success: false, error: "Invalid API key format" };
     }
     if (!this.encryption.isEncryptionAvailable()) {
@@ -31,33 +38,66 @@ export class ApiKeyService {
 
     const encrypted = this.encryption.encryptString(key).toString("base64");
     await this.storage.update((draft) => {
-      draft.apiKeyEncrypted = encrypted;
+      draft.providerKeysEncrypted[provider] = encrypted;
+      draft.modelProvider = provider;
     });
     return { success: true };
   }
 
-  async getKey(): Promise<string> {
+  async getCredentials(): Promise<ProviderKey> {
     if (!this.encryption.isEncryptionAvailable()) {
       throw new Error("Secure credential storage is unavailable");
     }
-    const encrypted = (await this.storage.read()).apiKeyEncrypted;
+    const data = await this.storage.read();
+    const encrypted = data.providerKeysEncrypted[data.modelProvider];
     if (!encrypted) throw new Error("No API key configured");
-    return this.encryption.decryptString(Buffer.from(encrypted, "base64"));
+    return {
+      provider: data.modelProvider,
+      key: this.encryption.decryptString(Buffer.from(encrypted, "base64")),
+    };
   }
 
-  async clearKey(): Promise<OperationResult> {
+  async clearKey(provider?: ModelProviderId): Promise<OperationResult> {
     await this.storage.update((draft) => {
-      delete draft.apiKeyEncrypted;
+      delete draft.providerKeysEncrypted[provider ?? draft.modelProvider];
     });
     return { success: true };
   }
 
-  async validateKey(key: string): Promise<ApiKeyValidationResult> {
-    if (!key.startsWith("sk-") || key.length < 20) {
+  provider(id: ModelProviderId): ModelProvider {
+    const provider = this.providers.get(id);
+    if (!provider) throw new Error(`Unsupported model provider: ${id}`);
+    return provider;
+  }
+
+  async listProviders(): Promise<ModelProviderInfo[]> {
+    const data = await this.storage.read();
+    return [...this.providers.values()].map(({ info }) => ({
+      ...info,
+      configured: Boolean(data.providerKeysEncrypted[info.id]),
+      selected: info.id === data.modelProvider,
+    }));
+  }
+
+  async selectProvider(id: ModelProviderId): Promise<OperationResult> {
+    this.provider(id);
+    await this.storage.update((draft) => {
+      if (!draft.providerKeysEncrypted[id])
+        throw new Error("No API key configured for this provider");
+      draft.modelProvider = id;
+    });
+    return { success: true };
+  }
+
+  async validateKey({
+    provider,
+    key,
+  }: ProviderKey): Promise<ApiKeyValidationResult> {
+    if (!this.providers.has(provider) || key.trim().length < 20) {
       return { valid: false, error: "Invalid API key format" };
     }
     try {
-      await new OpenAI({ apiKey: key }).models.list();
+      await this.provider(provider).validateKey(key);
       return { valid: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

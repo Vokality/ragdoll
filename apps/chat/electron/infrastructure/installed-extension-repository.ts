@@ -4,16 +4,14 @@ import { writePrivateFile } from "./write-private-file.js";
 import { z } from "zod";
 import type { InstalledExtension } from "../electron-api.js";
 
-const installedExtensionSchema = z
-  .object({
-    id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/),
-    name: z.string().min(1),
-    version: z.string().min(1),
-    description: z.string(),
-    repoUrl: z.url(),
-    installedAt: z.iso.datetime(),
-  })
-  .strict();
+const installedExtensionSchema = z.strictObject({
+  id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/),
+  name: z.string().min(1),
+  version: z.string().min(1),
+  description: z.string(),
+  repoUrl: z.url(),
+  installedAt: z.iso.datetime(),
+});
 
 const registrySchema = z
   .object({

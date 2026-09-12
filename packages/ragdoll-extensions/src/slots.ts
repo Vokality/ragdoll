@@ -273,8 +273,27 @@ export interface CanvasPanelConfig extends PanelFrame {
   type: "canvas";
   document: CanvasDocument;
 }
+
+/**
+ * Configuration for a long-form text panel (React-free version).
+ *
+ * Body is plain text. The renderer preserves line breaks and scrolls the
+ * content region; keep titles and actions on PanelFrame.
+ */
+export interface DocumentPanelConfig extends PanelFrame {
+  type: "document";
+  /** Full note text shown in the scrolling content region. */
+  body: string;
+  /** Message to show when body is empty */
+  emptyMessage?: string;
+}
+
 export type PanelConfig =
-  ListPanelConfig | GridPanelConfig | CardsPanelConfig | CanvasPanelConfig;
+  | ListPanelConfig
+  | GridPanelConfig
+  | CardsPanelConfig
+  | CanvasPanelConfig
+  | DocumentPanelConfig;
 
 /**
  * Dynamic state exposed by a slot
@@ -378,8 +397,17 @@ export type SerializedCanvasPanelConfig = Omit<CanvasPanelConfig, "actions"> & {
   actions?: SerializedPanelAction[];
 };
 
+/** Document panel data with executable callbacks removed. */
+export type SerializedDocumentPanelConfig = Omit<
+  DocumentPanelConfig,
+  "actions"
+> & {
+  actions?: SerializedPanelAction[];
+};
+
 export type SerializedPanelConfig =
   | SerializedCanvasPanelConfig
+  | SerializedDocumentPanelConfig
   | SerializedListPanelConfig
   | SerializedGridPanelConfig
   | SerializedCardsPanelConfig;
@@ -452,6 +480,16 @@ export function serializeSlotState(state: SlotState): SerializedSlotState {
       panel: {
         ...panel,
         document: structuredClone(panel.document),
+        actions: panel.actions?.map(serializeAction),
+      },
+    };
+  }
+  if (panel.type === "document") {
+    return {
+      badge: state.badge,
+      visible: state.visible,
+      panel: {
+        ...panel,
         actions: panel.actions?.map(serializeAction),
       },
     };
@@ -698,6 +736,37 @@ export function createGridSlotState(
       columns,
       cells: options.cells ?? [],
       emptyMessage: options.emptyMessage,
+    },
+  };
+}
+
+/**
+ * Create a slot state for a cards study panel in the front phase
+ */
+/**
+ * Create a slot state for a long-form document panel
+ */
+export function createDocumentSlotState(
+  title: string,
+  body: string,
+  options: {
+    badge?: number | string | null;
+    visible?: boolean;
+    emptyMessage?: string;
+    status?: PanelStatus;
+    actions?: PanelAction[];
+  } = {},
+): SlotState {
+  return {
+    badge: options.badge ?? null,
+    visible: options.visible ?? true,
+    panel: {
+      type: "document",
+      title,
+      body,
+      emptyMessage: options.emptyMessage,
+      status: options.status,
+      actions: options.actions,
     },
   };
 }

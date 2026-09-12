@@ -9,10 +9,16 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ExtensionInstaller } from "./extension-installer.js";
+import {
+  ExtensionInstaller,
+  type ExtensionInstallerConfig,
+} from "./extension-installer.js";
 import type { InstalledExtension } from "../electron-api.js";
 
-async function fixture(releaseId = "example") {
+async function fixture(
+  releaseId = "example",
+  resolveRelease?: ExtensionInstallerConfig["releases"]["resolve"],
+) {
   const root = await mkdtemp(join(tmpdir(), "ragdoll-installer-test-"));
   const path = join(root, "example");
   await mkdir(path);
@@ -45,12 +51,14 @@ async function fixture(releaseId = "example") {
       },
     },
     releases: {
-      resolve: async () => ({
-        repoUrl: original.repoUrl,
-        tag: "v2.0.0",
-        downloadUrl:
-          "https://github.com/example/example/releases/download/v2.0.0/package.tar.gz",
-      }),
+      resolve:
+        resolveRelease ??
+        (async () => ({
+          repoUrl: original.repoUrl,
+          tag: "v2.0.0",
+          downloadUrl:
+            "https://github.com/example/example/releases/download/v2.0.0/package.tar.gz",
+        })),
     },
     archives: {
       downloadAndExtract: async (_url, _archive, destination) => {
@@ -151,6 +159,54 @@ test("committing an update keeps the new package and removes its recovery copy",
     expect(await readdir(f.root)).toEqual(["example"]);
     await expect(update.rollback()).rejects.toThrow("settled");
   } finally {
+    await f.dispose();
+  }
+});
+
+test("checks independent releases concurrently and preserves installed extension order", async () => {
+  type Release = Awaited<
+    ReturnType<ExtensionInstallerConfig["releases"]["resolve"]>
+  >;
+  const first = Promise.withResolvers<Release>();
+  const second = Promise.withResolvers<Release>();
+  const requests: string[] = [];
+  const f = await fixture("example", (repoUrl) => {
+    requests.push(repoUrl);
+    return repoUrl.endsWith("/second") ? second.promise : first.promise;
+  });
+  const secondUrl = "https://github.com/example/second";
+  f.entries.set("second", { ...f.original, id: "second", repoUrl: secondUrl });
+  const checks = f.installer.checkForUpdates();
+  try {
+    // repository.list is the only prerequisite; neither release depends on the other.
+    await Promise.resolve();
+    expect(requests).toEqual([f.original.repoUrl, secondUrl]);
+    second.resolve({
+      repoUrl: secondUrl,
+      tag: "v3.0.0",
+      downloadUrl: "https://example.com/second.tar.gz",
+    });
+    first.resolve({
+      repoUrl: f.original.repoUrl,
+      tag: "v2.0.0",
+      downloadUrl: "https://example.com/first.tar.gz",
+    });
+    expect(await checks).toMatchObject([
+      { extensionId: "example", latestVersion: "2.0.0", hasUpdate: true },
+      { extensionId: "second", latestVersion: "3.0.0", hasUpdate: true },
+    ]);
+  } finally {
+    first.resolve({
+      repoUrl: f.original.repoUrl,
+      tag: "v2.0.0",
+      downloadUrl: "https://example.com/first.tar.gz",
+    });
+    second.resolve({
+      repoUrl: secondUrl,
+      tag: "v3.0.0",
+      downloadUrl: "https://example.com/second.tar.gz",
+    });
+    await checks;
     await f.dispose();
   }
 });

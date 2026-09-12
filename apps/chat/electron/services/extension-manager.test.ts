@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createExtension,
   createSlotState,
@@ -6,6 +9,7 @@ import {
   type ExtensionHostEnvironment,
 } from "@vokality/ragdoll-extensions";
 import type { ExtensionPackageDescriptor } from "@vokality/ragdoll-extensions/loader";
+import { BUILT_IN_EXTENSIONS } from "../built-in-extensions.js";
 import {
   ExtensionManager,
   type BuiltInExtensionDefinition,
@@ -76,6 +80,8 @@ function createManager(
     publish: async () => ({ eventId: "event-id" }),
   },
   hostDataStore: ExtensionHostDataStore = hostData,
+  disabledExtensions: readonly string[] = [],
+  storageRoot = "/tmp/ragdoll-extension-manager-test",
 ): ExtensionManager {
   return new ExtensionManager({
     packageRoots: [],
@@ -85,7 +91,7 @@ function createManager(
       readDirectory: async () => [],
       pathExists: async () => false,
     },
-    storage: new ExtensionStorage("/tmp/ragdoll-extension-manager-test"),
+    storage: new ExtensionStorage(storageRoot),
     messageBus: new ExtensionMessageBus(() => undefined),
     conversationEvents,
     logger: {
@@ -100,7 +106,7 @@ function createManager(
     now: Date.now,
     hostData: hostDataStore,
     oauthRedirects,
-    disabledExtensions: [],
+    disabledExtensions,
     openExternal: async () => {},
     events: {
       ...noOpEvents,
@@ -478,6 +484,163 @@ describe("ExtensionManager slot integration", () => {
 });
 
 describe("ExtensionManager built-in boundaries", () => {
+  it("rejects a stale Notes delete action after the selected note changes", async () => {
+    const notes = BUILT_IN_EXTENSIONS.find(
+      ({ descriptor }) => descriptor.extensionId === "notes",
+    );
+    if (!notes) throw new Error("Notes is missing from the built-in catalog");
+    const storageRoot = await mkdtemp(join(tmpdir(), "ragdoll-notes-actions-"));
+    const manager = createManager(
+      undefined,
+      [notes],
+      undefined,
+      undefined,
+      [],
+      storageRoot,
+    );
+    try {
+      await manager.initialize();
+      const registry = manager.getRegistry();
+      expect(
+        (
+          await registry.executeTool("notes_write", {
+            id: "first",
+            title: "First note",
+            body: "Keep this note",
+          })
+        ).success,
+      ).toBe(true);
+      const firstDelete = manager
+        .getSlotState("notes.main")
+        ?.panel.actions?.find((action) => action.label === "Delete");
+      if (!firstDelete) throw new Error("Missing first note delete action");
+
+      const secondId = "s".repeat(80);
+      expect(
+        (
+          await registry.executeTool("notes_write", {
+            id: secondId,
+            title: "Second note",
+            body: "Keep this one too",
+          })
+        ).success,
+      ).toBe(true);
+      const staleResult = await manager.executeSlotAction("notes.main", {
+        actionType: "panel-action",
+        actionId: firstDelete.id,
+      });
+      expect(staleResult.success).toBe(false);
+      for (const noteId of ["first", secondId]) {
+        expect(
+          (await registry.executeTool("notes_get", { noteId })).success,
+        ).toBe(true);
+      }
+
+      const secondDelete = manager
+        .getSlotState("notes.main")
+        ?.panel.actions?.find((action) => action.label === "Delete");
+      if (!secondDelete) throw new Error("Missing second note delete action");
+      expect(
+        await manager.executeSlotAction("notes.main", {
+          actionType: "panel-action",
+          actionId: secondDelete.id,
+        }),
+      ).toEqual({ success: true });
+      expect(
+        (await registry.executeTool("notes_get", { noteId: secondId })).success,
+      ).toBe(false);
+      expect(
+        (await registry.executeTool("notes_get", { noteId: "first" })).success,
+      ).toBe(true);
+    } finally {
+      await manager.destroy();
+      await rm(storageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers Notes and exposes its tools and card through the host", async () => {
+    const notes = BUILT_IN_EXTENSIONS.find(
+      ({ descriptor }) => descriptor.extensionId === "notes",
+    );
+    if (!notes) throw new Error("Notes is missing from the built-in catalog");
+    const manager = createManager(undefined, [notes]);
+    try {
+      await manager.initialize();
+      expect(manager.getDiscoveredExtensions()).toEqual([
+        expect.objectContaining({
+          id: "notes",
+          name: "Notes",
+          canDisable: false,
+          hasConfigSchema: false,
+          hasOAuth: false,
+        }),
+      ]);
+      expect(manager.getAllSlots()).toEqual([
+        expect.objectContaining({ extensionId: "notes", slotId: "notes.main" }),
+      ]);
+      expect(manager.getSlotState("notes.main")?.panel).toMatchObject({
+        type: "list",
+        title: "Notes",
+      });
+      expect(
+        (await manager.getRegistry().executeTool("notes_list", {})).success,
+      ).toBe(true);
+    } finally {
+      await manager.destroy();
+    }
+  });
+
+  it.each([false, true])(
+    "keeps Working List active while toggling Pomodoro (previously disabled: %s)",
+    async (previouslyDisabled) => {
+      const disabledExtensions = previouslyDisabled
+        ? ["working-list", "pomodoro"]
+        : [];
+      const features = BUILT_IN_EXTENSIONS.filter(({ descriptor }) =>
+        ["working-list", "pomodoro"].includes(descriptor.extensionId),
+      );
+      const manager = createManager(
+        undefined,
+        features,
+        undefined,
+        undefined,
+        disabledExtensions,
+      );
+      try {
+        await manager.initialize();
+        const registry = manager.getRegistry();
+        expect(registry.has("working-list")).toBe(true);
+        expect(registry.getSlot("working-list.main")).toBeDefined();
+        expect(manager.getDisabledExtensions()).not.toContain("working-list");
+        expect(registry.has("pomodoro")).toBe(
+          !disabledExtensions.includes("pomodoro"),
+        );
+
+        await expect(
+          manager.setDisabledExtensions(["working-list"]),
+        ).rejects.toThrow("Extension 'working-list' is required");
+        expect(registry.has("working-list")).toBe(true);
+
+        await manager.setDisabledExtensions([]);
+        expect(registry.has("pomodoro")).toBe(true);
+        expect(registry.getSlot("pomodoro.main")).toBeDefined();
+
+        await manager.setDisabledExtensions(["pomodoro"]);
+        expect(registry.has("pomodoro")).toBe(false);
+        expect(registry.getSlot("pomodoro.main")).toBeUndefined();
+        expect(manager.getDisabledExtensions()).toEqual(["pomodoro"]);
+        expect(registry.has("working-list")).toBe(true);
+
+        await manager.setDisabledExtensions([]);
+        expect(registry.has("pomodoro")).toBe(true);
+        expect(registry.getSlot("pomodoro.main")).toBeDefined();
+        expect(manager.getDisabledExtensions()).toEqual([]);
+      } finally {
+        await manager.destroy();
+      }
+    },
+  );
+
   it("disables and re-enables an unconfigured extension without activating it", async () => {
     let activationCount = 0;
     const manager = createManager(undefined, [

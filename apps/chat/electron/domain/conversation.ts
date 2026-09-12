@@ -5,43 +5,41 @@ import {
 } from "@vokality/ragdoll-extensions";
 import { z } from "zod";
 
-export const conversationMessageSchema = z
-  .object({
-    role: z.enum(["user", "assistant"]),
-    content: z.string(),
-    phase: z.enum(["commentary", "final_answer"]).nullable().optional(),
-    sources: z.array(sourceCitationSchema).optional(),
-  })
-  .strict();
+export const conversationMessageSchema = z.strictObject({
+  id: z
+    .string()
+    .min(1)
+    .default(() => globalThis.crypto.randomUUID()),
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+  phase: z.enum(["commentary", "final_answer"]).nullable().optional(),
+  sources: z.array(sourceCitationSchema).optional(),
+});
 
-export const conversationEventInputSchema = z
-  .object({
-    type: z.string().min(1).max(100).regex(CONVERSATION_EVENT_TYPE_PATTERN),
-    payload: z.record(z.string(), z.json()),
-    turnPolicy: z.enum(["record-only", "start-turn"]),
-    requiredToolName: z
-      .string()
-      .min(1)
-      .max(100)
-      .regex(REQUIRED_TOOL_NAME_PATTERN)
-      .optional(),
-    deduplicationKey: z.string().min(1).max(200).optional(),
-  })
-  .strict();
+export const conversationEventInputSchema = z.strictObject({
+  type: z.string().min(1).max(100).regex(CONVERSATION_EVENT_TYPE_PATTERN),
+  payload: z.record(z.string(), z.json()),
+  turnPolicy: z.enum(["record-only", "start-turn"]),
+  requiredToolName: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(REQUIRED_TOOL_NAME_PATTERN)
+    .optional(),
+  deduplicationKey: z.string().min(1).max(200).optional(),
+});
 
-export const extensionConversationEventSchema = z
-  .object({
-    kind: z.literal("extension-event"),
-    id: z.string().min(1),
-    extensionId: z.string().min(1),
-    type: conversationEventInputSchema.shape.type,
-    payload: conversationEventInputSchema.shape.payload,
-    turnPolicy: conversationEventInputSchema.shape.turnPolicy,
-    requiredToolName: conversationEventInputSchema.shape.requiredToolName,
-    deduplicationKey: conversationEventInputSchema.shape.deduplicationKey,
-    occurredAt: z.number().int().nonnegative(),
-  })
-  .strict();
+export const extensionConversationEventSchema = z.strictObject({
+  kind: z.literal("extension-event"),
+  id: z.string().min(1),
+  extensionId: z.string().min(1),
+  type: conversationEventInputSchema.shape.type,
+  payload: conversationEventInputSchema.shape.payload,
+  turnPolicy: conversationEventInputSchema.shape.turnPolicy,
+  requiredToolName: conversationEventInputSchema.shape.requiredToolName,
+  deduplicationKey: conversationEventInputSchema.shape.deduplicationKey,
+  occurredAt: z.number().int().nonnegative(),
+});
 
 export const appConversationEventSchema = extensionConversationEventSchema
   .omit({ extensionId: true, requiredToolName: true })
@@ -61,48 +59,40 @@ export function isAgentConversationEvent(
   );
 }
 
-export const toolCallSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    arguments: z.string(),
-  })
-  .strict();
+export const toolCallSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  arguments: z.string(),
+});
 
-export const persistedToolResultSchema = z
-  .object({
-    success: z.boolean(),
-    sources: z.array(sourceCitationSchema).optional(),
-    data: z.json().optional(),
-    error: z.string().optional(),
-    retryable: z.boolean().optional(),
-  })
-  .strict();
+export const persistedToolResultSchema = z.strictObject({
+  success: z.boolean(),
+  sources: z.array(sourceCitationSchema).optional(),
+  data: z.json().optional(),
+  error: z.string().optional(),
+  retryable: z.boolean().optional(),
+});
 
 export const toolExecutionOriginSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("user") }).strict(),
-  z.object({ type: z.literal("event"), eventId: z.string().min(1) }).strict(),
+  z.strictObject({ type: z.literal("user") }),
+  z.strictObject({ type: z.literal("event"), eventId: z.string().min(1) }),
 ]);
 
-export const toolExecutionSchema = z
-  .object({
-    kind: z.literal("tool-execution"),
-    id: z.string().min(1),
-    call: toolCallSchema,
-    origin: toolExecutionOriginSchema,
-    startedAt: z.number().int().nonnegative(),
-    outcome: z.discriminatedUnion("status", [
-      z.object({ status: z.literal("started") }).strict(),
-      z
-        .object({
-          status: z.literal("completed"),
-          completedAt: z.number().int().nonnegative(),
-          result: persistedToolResultSchema,
-        })
-        .strict(),
-    ]),
-  })
-  .strict();
+export const toolExecutionSchema = z.strictObject({
+  kind: z.literal("tool-execution"),
+  id: z.string().min(1),
+  call: toolCallSchema,
+  origin: toolExecutionOriginSchema,
+  startedAt: z.number().int().nonnegative(),
+  outcome: z.discriminatedUnion("status", [
+    z.strictObject({ status: z.literal("started") }),
+    z.strictObject({
+      status: z.literal("completed"),
+      completedAt: z.number().int().nonnegative(),
+      result: persistedToolResultSchema,
+    }),
+  ]),
+});
 
 export type ToolCall = z.infer<typeof toolCallSchema>;
 export type ToolExecution = z.infer<typeof toolExecutionSchema>;
@@ -115,12 +105,10 @@ export const conversationEntrySchema = z.union([
   toolExecutionSchema,
 ]);
 
-export const pendingAgentTurnSchema = z
-  .object({
-    triggerEventId: z.string().min(1),
-    createdAt: z.number().int().nonnegative(),
-  })
-  .strict();
+export const pendingAgentTurnSchema = z.strictObject({
+  triggerEventId: z.string().min(1),
+  createdAt: z.number().int().nonnegative(),
+});
 
 export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
 export type ConversationEntry = z.infer<typeof conversationEntrySchema>;

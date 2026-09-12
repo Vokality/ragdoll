@@ -46,6 +46,36 @@ describe("serializeSlotState", () => {
     );
   });
 
+  it("strips document footer callbacks", () => {
+    const serialized = serializeSlotState({
+      badge: 2,
+      visible: true,
+      panel: {
+        type: "document",
+        title: "Weekend plan",
+        body: "Saturday: market\nSunday: rest",
+        emptyMessage: "No note yet",
+        status: { label: "1 note" },
+        actions: [{ id: "back", label: "All notes", onClick: () => undefined }],
+      },
+    });
+
+    expect(serialized.panel.type).toBe("document");
+    if (serialized.panel.type !== "document") {
+      throw new Error("expected document");
+    }
+    expect(serialized.panel.body).toBe("Saturday: market\nSunday: rest");
+    expect(serialized.panel.emptyMessage).toBe("No note yet");
+    expect(serialized.panel.status).toEqual({ label: "1 note" });
+    expect(serialized.panel.actions).toEqual([
+      { id: "back", label: "All notes" },
+    ]);
+    expect(
+      "onClick" in
+        ((serialized.panel.actions?.[0] ?? {}) as Record<string, unknown>),
+    ).toBe(false);
+  });
+
   it("strips grid cell callbacks and sets canClick", () => {
     const serialized = serializeSlotState({
       badge: null,

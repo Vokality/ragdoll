@@ -10,17 +10,16 @@ From the repository root, with Bun 1.4.2 installed:
 
 ```bash
 bun install --frozen-lockfile
-bun run build
 bun run dev:chat
 ```
 
-`dev:chat` starts Vite on `http://localhost:5173` and launches Electron. Keep it running while using the desktop app. A browser tab alone does not provide the Electron APIs Lumen needs.
+`dev:chat` rebuilds the shared packages and Electron main process, then starts Vite on `http://localhost:5173` and launches Electron. Keep it running while using the desktop app. A browser tab alone does not provide the Electron APIs Lumen needs.
 
-On first launch, enter your [OpenAI API key](https://platform.openai.com/api-keys). No repository `.env` file is needed. The current model is `gpt-5.6-sol` with low reasoning, configured in [`electron/main-process-config.ts`](electron/main-process-config.ts). The key must have access to that model; setup's key validation does not guarantee model access.
+On first launch, choose OpenAI or Grok and enter that provider’s API key. No repository `.env` file is needed. The provider catalog uses `gpt-5.6-sol` and `grok-4.6` with low reasoning. The key must have access to its model; setup’s key validation does not guarantee model access. See [Model providers](../../docs/model-providers.md).
 
 ## Settings
 
-- **API Key:** change the stored OpenAI key.
+- **AI provider:** switch between OpenAI and Grok, reuse saved keys, or replace/remove a provider’s key.
 - **Connections:** add/edit MCP servers, connect or sign in, grant agent access, disconnect, and remove. Supports Streamable HTTP with OAuth, bearer tokens, or no authentication. See [Connections](../../docs/connections.md).
 - **Theme / Character:** change the avatar's appearance.
 - **Features:** enable or disable supported built-in extensions.
@@ -32,10 +31,10 @@ In chat, Enter sends, Shift+Enter inserts a newline, and Cmd/Ctrl+K focuses the 
 
 ## Working on the app
 
-Renderer changes reload through Vite. Main-process and preload changes need rebuilding and an Electron restart:
+Renderer changes reload through Vite. After changing main-process, preload, or shared-package code, stop the development command and restart it from the repository root. Startup rebuilds the libraries and Electron bundle so newly added extensions are included:
 
 ```bash
-bun run --filter lumen build:electron
+bun run dev:chat
 ```
 
 For a complete Lumen build after shared packages are available:
@@ -44,7 +43,7 @@ For a complete Lumen build after shared packages are available:
 bun run --filter lumen build
 ```
 
-Rebuild shared libraries after changing their source with `bun run build:libraries`. Each package cleans only its own generated output.
+For standalone builds or package tests, rebuild shared libraries with `bun run build:libraries`. Each package cleans only its own generated output.
 
 Focused checks:
 
@@ -73,8 +72,8 @@ The second script launches Electron with the cloud VM's keyring and software-ren
 
 ### Startup troubleshooting
 
-- **Missing built packages or Electron entrypoint:** run `bun run build` before launching.
-- **Blank window or renderer unavailable:** confirm the Vite terminal is running on port 5173. After changing dependencies, restart the dev process and Electron. Main-process changes also need `build:electron`.
+- **Missing newly added extensions:** stop the previous development command and run `bun run dev:chat`; it rebuilds shared packages and the Electron bundle before launching. Check the terminal for build errors.
+- **Blank window or renderer unavailable:** confirm the Vite terminal is running on port 5173. After changing dependencies, restart the development command.
 - **“Secure credential storage is unavailable”:** Lumen requires working OS credential storage. In Cursor Cloud, use the headless launcher above.
 - **Key accepted but a model request fails:** check access to the model configured in `main-process-config.ts`, along with the request error shown in chat.
 

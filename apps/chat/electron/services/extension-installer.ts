@@ -164,19 +164,20 @@ export class ExtensionInstaller {
   }
 
   async checkForUpdates(): Promise<UpdateCheckResult[]> {
-    const results: UpdateCheckResult[] = [];
-    for (const extension of await this.config.repository.list()) {
-      const release = await this.config.releases.resolve(extension.repoUrl);
-      const latestVersion = this.parseVersion(release.tag);
-      results.push({
-        extensionId: extension.id,
-        currentVersion: extension.version,
-        latestVersion,
-        hasUpdate: compareSemver(latestVersion, extension.version) > 0,
-        repoUrl: extension.repoUrl,
-      });
-    }
-    return results;
+    const extensions = await this.config.repository.list();
+    return Promise.all(
+      extensions.map(async (extension) => {
+        const release = await this.config.releases.resolve(extension.repoUrl);
+        const latestVersion = this.parseVersion(release.tag);
+        return {
+          extensionId: extension.id,
+          currentVersion: extension.version,
+          latestVersion,
+          hasUpdate: compareSemver(latestVersion, extension.version) > 0,
+          repoUrl: extension.repoUrl,
+        };
+      }),
+    );
   }
 
   async prepareUpdate(

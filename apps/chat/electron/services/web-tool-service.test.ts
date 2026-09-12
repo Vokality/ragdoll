@@ -1,6 +1,6 @@
 import { expect, it } from "bun:test";
 import { WebToolService } from "./web-tool-service.js";
-import type { AgentToolService } from "./openai-service.js";
+import type { AgentToolService } from "./agent-service.js";
 
 it("exposes live search independently and forwards other tools and citations", async () => {
   const calls: string[] = [];

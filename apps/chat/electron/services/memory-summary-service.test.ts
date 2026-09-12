@@ -6,7 +6,7 @@ import type {
   AgentModelConfig,
   AgentResponseSessionFactory,
   ResponseRound,
-} from "./openai-service.js";
+} from "./agent-service.js";
 
 const config: AgentModelConfig = {
   model: "test",

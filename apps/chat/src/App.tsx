@@ -64,7 +64,7 @@ export function App({ services }: AppProps) {
       connections={services.connections}
       extensions={services.extensions}
       reportError={services.reportError}
-      onLogout={() => setAppState("setup-api-key")}
+      onConfigureProvider={() => setAppState("setup-api-key")}
     />
   );
 }

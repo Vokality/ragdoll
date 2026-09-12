@@ -1,18 +1,28 @@
-import { useState, useId, type CSSProperties, type FormEvent } from "react";
+import { Field } from "./ui/field";
+import { Button, IconButton } from "./ui/button";
+import { TextInput } from "./ui/input";
+import { useState, type CSSProperties, type FormEvent } from "react";
 
 interface ApiKeyInputProps {
+  providerName: string;
+  keyPlaceholder: string;
   onSubmit: (key: string) => void;
   isLoading?: boolean;
   error?: string | null;
 }
 
-export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
-  const inputId = useId();
+export function ApiKeyInput({
+  onSubmit,
+  isLoading,
+  error,
+  providerName,
+  keyPlaceholder,
+}: ApiKeyInputProps) {
   const [key, setKey] = useState("");
   const [showKey, setShowKey] = useState(false);
 
   const normalizedKey = key.trim();
-  const isValid = normalizedKey.startsWith("sk-") && normalizedKey.length > 20;
+  const isValid = normalizedKey.length >= 20;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -23,80 +33,63 @@ export function ApiKeyInput({ onSubmit, isLoading, error }: ApiKeyInputProps) {
 
   return (
     <form onSubmit={handleSubmit} style={styles.form}>
-      <label htmlFor={inputId} style={styles.label}>
-        OpenAI API key
-      </label>
-      <div
-        className={error ? "animate-shake" : undefined}
-        style={styles.inputWrapper}
+      <Field
+        label={`${providerName} API key`}
+        labelStyle={styles.label}
+        style={{ gap: 12 }}
+        error={error}
+        description="Your key is encrypted and stored locally on your device."
+        descriptionStyle={styles.hint}
       >
-        <input
-          id={inputId}
-          aria-describedby={`${inputId}-privacy${error ? ` ${inputId}-error` : ""}`}
-          aria-invalid={!!error}
-          spellCheck={false}
-          autoCapitalize="none"
-          type={showKey ? "text" : "password"}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-..."
-          style={{
-            ...styles.input,
-            borderColor: error ? "var(--error)" : undefined,
-          }}
-          disabled={isLoading}
-          autoFocus
-        />
-        <button
-          type="button"
-          onClick={() => setShowKey(!showKey)}
-          style={styles.toggleButton}
-          aria-label={showKey ? "Hide API key" : "Show API key"}
-          aria-pressed={showKey}
-        >
-          {showKey ? <EyeOffIcon /> : <EyeIcon />}
-        </button>
-      </div>
-
-      {error && (
-        <p
-          id={`${inputId}-error`}
-          className="animate-fadeIn"
-          role="alert"
-          style={styles.error}
-        >
-          {error}
-        </p>
-      )}
-
-      {!error && key.length > 0 && !isValid && (
-        <p className="animate-fadeIn" style={styles.hint} role="status">
-          OpenAI API keys start with “sk-”. Paste the full key to continue.
-        </p>
-      )}
-
-      <p id={`${inputId}-privacy`} style={styles.hint}>
-        Your key is encrypted and stored locally on your device.
-      </p>
-
-      <button
-        type="submit"
-        className="btn-primary"
-        style={styles.submitButton}
-        disabled={!isValid || isLoading}
-      >
-        {isLoading ? (
+        {(control) => (
           <>
-            <span className="spinner-sm" />
-            Validating…
-          </>
-        ) : (
-          <>
-            Get Started
-            <ArrowIcon />
+            <div
+              className={error ? "animate-shake" : undefined}
+              style={styles.inputWrapper}
+            >
+              <TextInput
+                {...control}
+                spellCheck={false}
+                autoCapitalize="none"
+                type={showKey ? "text" : "password"}
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder={keyPlaceholder}
+                style={styles.input}
+                disabled={isLoading}
+              />
+              <IconButton
+                variant="plain"
+                onClick={() => setShowKey(!showKey)}
+                style={styles.toggleButton}
+                aria-label={showKey ? "Hide API key" : "Show API key"}
+                aria-pressed={showKey}
+              >
+                {showKey ? <EyeOffIcon /> : <EyeIcon />}
+              </IconButton>
+            </div>
+
+            {!error && key.length > 0 && !isValid && (
+              <p className="animate-fadeIn" style={styles.hint} role="status">
+                {providerName} API keys start with “sk-”. Paste the full key to
+                continue.
+              </p>
+            )}
           </>
         )}
-      </button>
+      </Field>
+
+      <Button
+        variant="primary"
+        type="submit"
+        style={styles.submitButton}
+        disabled={!isValid}
+        loading={isLoading}
+        loadingLabel="Validating…"
+      >
+        Get Started
+        <ArrowIcon />
+      </Button>
     </form>
   );
 }
@@ -180,11 +173,6 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--text-dim)",
     transition: "color var(--transition-fast)",
     cursor: "pointer",
-  },
-  error: {
-    color: "var(--error)",
-    fontSize: "13px",
-    margin: "0",
   },
   hint: {
     color: "var(--text-dim)",

@@ -18,7 +18,9 @@ function createGateway() {
     },
     fetchSettings: async () => ({ theme: "robot", variant: "einstein" }),
     persistSettings: async () => undefined,
-    fetchConversation: async () => [{ role: "assistant", content: "Hello" }],
+    fetchConversation: async () => [
+      { id: "assistant-hello", role: "assistant", content: "Hello" },
+    ],
     clearConversation: async () => undefined,
     sendMessage: async (message) => {
       sentMessage = message;
@@ -31,7 +33,6 @@ function createGateway() {
       };
     },
     onFunctionCall: () => () => undefined,
-    clearApiKey: async () => undefined,
   };
 
   return {
@@ -55,10 +56,14 @@ describe("ChatService", () => {
     testGateway.gateway.fetchConversation = async () =>
       persisted
         ? [
-            { role: "user", content: "Hi" },
-            { role: "assistant", content: "Complete answer" },
+            { id: "user-hi", role: "user", content: "Hi" },
+            {
+              id: "assistant-complete-answer",
+              role: "assistant",
+              content: "Complete answer",
+            },
           ]
-        : [{ role: "user", content: "Hi" }];
+        : [{ id: "user-hi", role: "user", content: "Hi" }];
     const service = new ChatService(testGateway.gateway, {
       theme: "default",
       variant: "human",
@@ -66,10 +71,10 @@ describe("ChatService", () => {
     await service.start();
     const send = service.sendMessage("Hi");
     const retiredHandlers = testGateway.getStreamingHandlers();
-    retiredHandlers?.onText("Complete");
+    retiredHandlers?.onText("Complete", "assistant-complete-answer");
     service.stop();
     await service.start();
-    retiredHandlers?.onText(" stale");
+    retiredHandlers?.onText(" stale", "assistant-complete-answer");
     retiredHandlers?.onStreamEnd();
     expect(service.getSnapshot().isLoading).toBe(true);
     persisted = true;
@@ -81,8 +86,12 @@ describe("ChatService", () => {
       isStreaming: false,
       error: null,
       visibleMessages: [
-        { role: "user", content: "Hi" },
-        { role: "assistant", content: "Complete answer" },
+        { id: "user-hi", role: "user", content: "Hi" },
+        {
+          id: "assistant-complete-answer",
+          role: "assistant",
+          content: "Complete answer",
+        },
       ],
     });
     service.stop();
@@ -108,7 +117,9 @@ describe("ChatService", () => {
       const first = service.sendMessage("First");
       testGateway.getStreamingHandlers()?.onStreamEnd();
       const second = service.sendMessage("Second");
-      testGateway.getStreamingHandlers()?.onText("New answer");
+      testGateway
+        .getStreamingHandlers()
+        ?.onText("New answer", "assistant-new-answer");
       old.resolve(oldResult);
       await first;
       expect(service.getSnapshot()).toMatchObject({
@@ -151,15 +162,27 @@ describe("ChatService", () => {
     await service.start();
     completion.resolve({ success: true });
     await recoveryStarted.promise;
-    testGateway
-      .getStreamingHandlers()
-      ?.onConversationChanged([
-        { role: "assistant", content: "Newer event reply" },
-      ]);
-    recovery.resolve([{ role: "assistant", content: "Older recovered reply" }]);
+    testGateway.getStreamingHandlers()?.onConversationChanged([
+      {
+        id: "assistant-newer-event-reply",
+        role: "assistant",
+        content: "Newer event reply",
+      },
+    ]);
+    recovery.resolve([
+      {
+        id: "assistant-older-recovered-reply",
+        role: "assistant",
+        content: "Older recovered reply",
+      },
+    ]);
     await send;
     expect(service.getSnapshot().visibleMessages).toEqual([
-      { role: "assistant", content: "Newer event reply" },
+      {
+        id: "assistant-newer-event-reply",
+        role: "assistant",
+        content: "Newer event reply",
+      },
     ]);
     service.stop();
   });
@@ -224,23 +247,26 @@ describe("ChatService", () => {
     await service.sendMessage("Hi");
     expect(testGateway.getSentMessage()).toBe("Hi");
     testGateway.getStreamingHandlers()?.onConversationChanged([
-      { role: "assistant", content: "Hello" },
-      { role: "user", content: "Hi" },
+      { id: "assistant-hello", role: "assistant", content: "Hello" },
+      { id: "user-hi", role: "user", content: "Hi" },
     ]);
 
-    testGateway.getStreamingHandlers()?.onText("Hello back");
+    testGateway
+      .getStreamingHandlers()
+      ?.onText("Hello back", "assistant-hello-back");
     expect(service.getSnapshot().visibleMessages.at(-1)?.content).toBe(
       "Hello back",
     );
     testGateway.getStreamingHandlers()?.onStreamEnd();
     testGateway.getStreamingHandlers()?.onConversationChanged([
-      { role: "assistant", content: "Hello" },
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Hello back" },
+      { id: "assistant-hello", role: "assistant", content: "Hello" },
+      { id: "user-hi", role: "user", content: "Hi" },
+      { id: "assistant-hello-back", role: "assistant", content: "Hello back" },
     ]);
 
     expect(service.getSnapshot().isLoading).toBe(false);
     expect(service.getSnapshot().visibleMessages.at(-1)).toEqual({
+      id: "assistant-hello-back",
       role: "assistant",
       content: "Hello back",
     });
@@ -260,27 +286,30 @@ describe("ChatService", () => {
     await service.sendMessage("Hi");
     testGateway
       .getStreamingHandlers()
-      ?.onConversationChanged([{ role: "user", content: "Hi" }]);
-    testGateway.getStreamingHandlers()?.onText("Hello back");
+      ?.onConversationChanged([{ id: "user-hi", role: "user", content: "Hi" }]);
+    testGateway
+      .getStreamingHandlers()
+      ?.onText("Hello back", "assistant-hello-back");
 
     // Stream end arrives before the persisted conversation: the streamed
     // text must stay visible instead of blanking for a frame.
     testGateway.getStreamingHandlers()?.onStreamEnd();
     expect(service.getSnapshot().visibleMessages.at(-1)).toEqual({
+      id: "assistant-hello-back",
       role: "assistant",
       content: "Hello back",
     });
 
     // Once persisted, the reply renders exactly once.
     testGateway.getStreamingHandlers()?.onConversationChanged([
-      { role: "user", content: "Hi" },
-      { role: "assistant", content: "Hello back" },
+      { id: "user-hi", role: "user", content: "Hi" },
+      { id: "assistant-hello-back", role: "assistant", content: "Hello back" },
     ]);
     const assistantMessages = service
       .getSnapshot()
       .visibleMessages.filter((message) => message.role === "assistant");
     expect(assistantMessages).toEqual([
-      { role: "assistant", content: "Hello back" },
+      { id: "assistant-hello-back", role: "assistant", content: "Hello back" },
     ]);
 
     service.stop();
@@ -294,20 +323,23 @@ describe("ChatService", () => {
     });
     await service.start();
     const handlers = testGateway.getStreamingHandlers();
-    handlers?.onConversationChanged([{ role: "user", content: "Search" }]);
-    handlers?.onText("News. [NASA](https://www.nasa.gov/)");
+    handlers?.onConversationChanged([
+      { id: "user-search", role: "user", content: "Search" },
+    ]);
+    handlers?.onText("News. [NASA](https://www.nasa.gov/)", "assistant-news");
     handlers?.onStreamEnd();
     const response = {
+      id: "assistant-news",
       role: "assistant",
       content: "News.",
       sources: [{ title: "NASA", url: "https://www.nasa.gov/" }],
     } satisfies ChatMessage;
     handlers?.onConversationChanged([
-      { role: "user", content: "Search" },
+      { id: "user-search", role: "user", content: "Search" },
       response,
     ]);
     expect(service.getSnapshot().visibleMessages).toEqual([
-      { role: "user", content: "Search" },
+      { id: "user-search", role: "user", content: "Search" },
       response,
     ]);
     service.stop();
@@ -385,23 +417,29 @@ it("keeps loading during work after a completed acknowledgment and renders the a
   await service.start();
   const sending = service.sendMessage("Check");
   const handlers = testGateway.getStreamingHandlers();
-  const user = { role: "user", content: "Check" } satisfies ChatMessage;
+  const user = {
+    id: "user-check",
+    role: "user",
+    content: "Check",
+  } satisfies ChatMessage;
   const ack = {
+    id: "assistant-i-ll-check",
     role: "assistant",
     content: "I'll check.",
     phase: "commentary",
   } satisfies ChatMessage;
   handlers?.onConversationChanged([user]);
-  handlers?.onText(ack.content);
+  handlers?.onText(ack.content, ack.id);
   handlers?.onConversationChanged([user, ack]);
   expect(service.getSnapshot()).toMatchObject({
     isLoading: true,
     isStreaming: false,
     visibleMessages: [user, ack],
   });
-  handlers?.onText("Done.");
+  handlers?.onText("Done.", "assistant-done");
   expect(service.getSnapshot().isStreaming).toBe(true);
   const final = {
+    id: "assistant-done",
     role: "assistant",
     content: "Done.",
     phase: "final_answer",
@@ -415,5 +453,34 @@ it("keeps loading during work after a completed acknowledgment and renders the a
     isStreaming: false,
     visibleMessages: [user, ack, final],
   });
+  service.stop();
+});
+
+it("uses message identity to preserve repeated replies and hand off normalized text", async () => {
+  const { gateway, getStreamingHandlers } = createGateway();
+  const service = new ChatService(gateway, {
+    theme: "default",
+    variant: "human",
+  });
+  await service.start();
+  const handlers = getStreamingHandlers();
+  const earlier: ChatMessage = {
+    id: "earlier",
+    role: "assistant",
+    content: "Same reply",
+  };
+  const final: ChatMessage = {
+    id: "new-reply",
+    role: "assistant",
+    content: "Same reply",
+  };
+  handlers?.onConversationChanged([earlier]);
+  handlers?.onText("  Same reply  ", final.id);
+  handlers?.onStreamEnd();
+  expect(
+    service.getSnapshot().visibleMessages.map((message) => message.id),
+  ).toEqual([earlier.id, final.id]);
+  handlers?.onConversationChanged([earlier, final]);
+  expect(service.getSnapshot().visibleMessages).toEqual([earlier, final]);
   service.stop();
 });

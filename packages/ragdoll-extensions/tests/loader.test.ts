@@ -425,3 +425,41 @@ describe("ExtensionLoader", () => {
     expect(result.error).toContain("createExtension(config?) factory");
   });
 });
+
+it("discovers independent roots concurrently while preserving root precedence", async () => {
+  const firstRead = Promise.withResolvers<string>();
+  const secondRead = Promise.withResolvers<string>();
+  const bothReading = Promise.withResolvers<void>();
+  const reading = new Set<string>();
+  const registry = createRegistry(registryDependencies);
+  const loader = createLoader(registry, {
+    packageRoots: [
+      { path: "/first", layout: "installed" },
+      { path: "/second", layout: "installed" },
+    ],
+    hostEnvironment: host,
+    fileSystem: {
+      pathExists: async () => true,
+      readDirectory: async () => ["package"],
+      readFile: (path) => {
+        reading.add(path);
+        if (reading.size === 2) bothReading.resolve();
+        return path.startsWith("/first/")
+          ? firstRead.promise
+          : secondRead.promise;
+      },
+    },
+  });
+  const discovery = loader.discoverPackages();
+  await bothReading.promise;
+  const json = (name: string) =>
+    JSON.stringify({
+      name,
+      version: "1.0.0",
+      ragdollExtension: packageManifest(name, ["tools"]),
+    });
+  secondRead.resolve(json("second"));
+  firstRead.resolve(json("first"));
+  expect(await discovery).toEqual(["first", "second"]);
+  await registry.destroy();
+});

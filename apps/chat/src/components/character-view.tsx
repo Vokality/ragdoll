@@ -9,20 +9,16 @@ import {
   type ExtensionUISlot,
 } from "@vokality/ragdoll-extensions/ui";
 import { ConversationBubbles } from "./conversation-bubbles";
+import type { ChatMessage } from "../domain/chat";
 import type {
   CharacterThemeId,
   CharacterVariantId,
 } from "../../electron/electron-api";
 
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
 interface CharacterViewProps {
   activeSlot: ExtensionUISlot | null;
   onClosePanel: () => void;
-  messages: Message[];
+  messages: ChatMessage[];
   isStreaming: boolean;
   themeId: CharacterThemeId;
   variantId: CharacterVariantId;

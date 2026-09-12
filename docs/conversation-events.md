@@ -95,6 +95,8 @@ conversation ownership, scheduling, persistence, and presentation.
   with `turnPolicy: "start-turn"`. Desktop notifications remain a separate
   presentation concern.
 - Flash cards publishes `review.completed` when a review finishes.
+- Working list publishes `list.item.selected` with `turnPolicy: "start-turn"`
+  when the user chooses a row. Filling or clearing the list does not publish.
 - Tic-tac-toe publishes `game.started`, `game.reset`, `game.move`, and
   `game.ended`. User-finished games use `start-turn`; a user move can set
   `requiredToolName: "tic_tac_toe_place"` so the agent must play before the
@@ -112,7 +114,7 @@ conversation ownership, scheduling, persistence, and presentation.
   belongs to the source extension.
 - Duplicate completion callbacks do not create duplicate events or turns.
 - Pending event turns survive process restart.
-- Pomodoro, flash-cards, and tic-tac-toe use the core capability.
+- Pomodoro, flash-cards, working-list, and tic-tac-toe use the core capability.
 - Type checks, package tests, chat tests, and production builds pass.
 
 ## Durable tool execution history

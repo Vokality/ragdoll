@@ -1,4 +1,5 @@
-import type { AgentModelConfig } from "./openai-service.js";
+import { configuredAgent } from "../test-support/configured-agent.js";
+import type { AgentModelConfig } from "./agent-service.js";
 import type { AgentToolResult } from "../domain/source-citation.js";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { ToolHistoryService } from "./tool-history-service.js";
@@ -10,21 +11,21 @@ import {
 import { describe, expect, it } from "bun:test";
 import type { ToolDefinition } from "@vokality/ragdoll-extensions";
 import type {
-  ResponseInputItem,
-  ResponseCreateParamsNonStreaming,
-  ResponseOutputMessage,
-} from "openai/resources/responses/responses";
+  ModelInput,
+  ModelToolChoice,
+  AgentResponseOutput,
+} from "./agent-service.js";
 import type { AgentResponse } from "../electron-api.js";
 import type { ExtensionConversationEvent } from "../domain/conversation.js";
 import {
-  OpenAIAgentRunner,
+  ToolCallingAgentRunner,
   type AgentResponseSession,
   type AgentResponseSessionFactory,
   type AgentToolService,
   type PendingToolCall,
   type AgentTurnEvents,
   type ResponseRound,
-} from "./openai-service.js";
+} from "./agent-service.js";
 
 const config: AgentModelConfig = {
   model: "test-model",
@@ -62,14 +63,12 @@ function round(...calls: PendingToolCall[]): ResponseRound {
 function responseMessage(
   content: string,
   phase: "commentary" | "final_answer" = "final_answer",
-): ResponseOutputMessage {
+): Extract<AgentResponseOutput, { type: "message" }> {
   return {
-    id: crypto.randomUUID(),
     type: "message",
     role: "assistant",
-    status: "completed",
     phase,
-    content: [{ type: "output_text", text: content, annotations: [] }],
+    content,
   };
 }
 function responseRound(content: string): ResponseRound {
@@ -79,11 +78,9 @@ function observe(onText: (text: string) => void = () => {}): AgentTurnEvents {
   return { onText, onMessage: async () => {} };
 }
 class ScriptedResponseSession implements AgentResponseSession {
-  readonly toolChoices: NonNullable<
-    ResponseCreateParamsNonStreaming["tool_choice"]
-  >[] = [];
+  readonly toolChoices: ModelToolChoice[] = [];
   readonly toolNames: string[][] = [];
-  readonly messages: ResponseInputItem[][] = [];
+  readonly messages: ModelInput[][] = [];
 
   constructor(private readonly rounds: (ResponseRound | Error)[]) {}
 
@@ -102,9 +99,7 @@ class ScriptedResponseSession implements AgentResponseSession {
     if (next instanceof Error) throw next;
     for (const item of next.output) {
       if (item.type !== "message") continue;
-      const content = item.content
-        .map((part) => (part.type === "output_text" ? part.text : part.refusal))
-        .join("");
+      const content = item.content;
       request.events?.onText(content);
       request.signal?.throwIfAborted();
       await request.events?.onMessage({ content, phase: item.phase });
@@ -119,7 +114,7 @@ function createRunner(
   storage = createInMemoryStorageRepository(),
 ): {
   storage: ReturnType<typeof createInMemoryStorageRepository>;
-  runner: OpenAIAgentRunner;
+  runner: ToolCallingAgentRunner;
   session: ScriptedResponseSession;
   executed: Array<{ name: string; args: Record<string, unknown> }>;
 } {
@@ -155,7 +150,7 @@ function createRunner(
   };
   return {
     storage,
-    runner: new OpenAIAgentRunner(
+    runner: new ToolCallingAgentRunner(
       tools,
       config,
       sessions,
@@ -166,7 +161,7 @@ function createRunner(
   };
 }
 
-describe("OpenAIAgentRunner event tool rounds", () => {
+describe("ToolCallingAgentRunner event tool rounds", () => {
   it("rejects a decision that bypasses the event's required tool", async () => {
     const { runner, session } = createRunner(
       [
@@ -309,7 +304,7 @@ describe("OpenAIAgentRunner event tool rounds", () => {
   });
 });
 
-describe("OpenAIAgentRunner user tool rounds", () => {
+describe("ToolCallingAgentRunner user tool rounds", () => {
   it("forces the same tool to retry a retryable failure", async () => {
     const { runner, session, executed } = createRunner(
       [
@@ -361,9 +356,9 @@ describe("user-turn text recovery", () => {
     expect(session.toolChoices).toEqual(["auto", "auto", "none"]);
     expect(session.toolNames[2]).toEqual([]);
     expect(
-      session.messages[2].some(
-        (message) => message.type === "function_call_output",
-      ),
+      session.messages
+        .flat()
+        .some((message) => message.type === "function_call_output"),
     ).toBe(true);
   });
   it("stops after one empty recovery response", async () => {
@@ -415,8 +410,9 @@ describe("user turn continuation", () => {
         .map((message) => message.call_id),
     ).toEqual(["a", "b"]);
     expect(
-      session.messages[3]
-        ?.filter((message) => message.type === "function_call_output")
+      session.messages
+        .flat()
+        .filter((message) => message.type === "function_call_output")
         .map((message) => message.call_id),
     ).toEqual(["a", "b", "c"]);
     expect(session.toolChoices).toEqual(["auto", "auto", "auto", "none"]);
@@ -519,7 +515,7 @@ it("stops the remaining tool batch when cancelled during an action", async () =>
       return { success: true };
     },
   };
-  const runner = new OpenAIAgentRunner(
+  const runner = new ToolCallingAgentRunner(
     tools,
     config,
     {
@@ -551,8 +547,7 @@ describe("durable tool history", () => {
     );
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "key" },
-      runner,
+      configuredAgent(runner),
       () => {},
       () => {},
     );
@@ -569,8 +564,13 @@ describe("durable tool history", () => {
       result: { success: true, data: { elementId: "sun", revision: 2 } },
     });
     expect(await chat.getConversation()).toEqual([
-      { role: "user", content: "Draw" },
-      { role: "assistant", content: "Working.", phase: "commentary" },
+      { id: expect.any(String), role: "user", content: "Draw" },
+      {
+        id: expect.any(String),
+        role: "assistant",
+        content: "Working.",
+        phase: "commentary",
+      },
     ]);
     const restored = createInMemoryStorageRepository(persisted);
     const next = createRunner(
@@ -759,18 +759,12 @@ it("streams and saves source citations even when the final model reply omits the
   ).toMatchObject({ status: "completed", result: { sources } });
 });
 
-it("persists commentary before tools and replays reasoning, phases, and all call outputs", async () => {
+it("persists commentary before tools and passes each tool result to the session", async () => {
   const progress = responseMessage("I'll check the board.", "commentary");
   const { runner, session, executed } = createRunner(
     [
       {
         output: [
-          {
-            type: "reasoning",
-            id: "rs_1",
-            summary: [],
-            encrypted_content: "encrypted",
-          },
           progress,
           ...round(toolCall("call_1", "tic_tac_toe_place", { row: 0 })).output,
         ],
@@ -791,13 +785,6 @@ it("persists commentary before tools and replays reasoning, phases, and all call
     { content: "I'll check the board.", phase: "commentary" },
     { content: "Done.", phase: "final_answer" },
   ]);
-  expect(session.messages[1]).toContainEqual(progress);
-  expect(session.messages[1]).toContainEqual({
-    type: "reasoning",
-    id: "rs_1",
-    summary: [],
-    encrypted_content: "encrypted",
-  });
   expect(session.messages[1]).toContainEqual({
     type: "function_call_output",
     call_id: "call_1",
@@ -817,8 +804,18 @@ it("continues a commentary-only response instead of mistaking it for the final a
   await runner.runUserTurn(
     "key",
     [
-      { role: "assistant", content: "Old update", phase: "commentary" },
-      { role: "assistant", content: "Old answer", phase: "final_answer" },
+      {
+        id: "message-802",
+        role: "assistant",
+        content: "Old update",
+        phase: "commentary",
+      },
+      {
+        id: "message-803",
+        role: "assistant",
+        content: "Old answer",
+        phase: "final_answer",
+      },
     ],
     {
       onText: () => {},
@@ -859,8 +856,13 @@ it("does not invent a phase for legacy history or drop an explicit null phase", 
   await runner.runUserTurn(
     "key",
     [
-      { role: "assistant", content: "Legacy" },
-      { role: "assistant", content: "Unclassified", phase: null },
+      { id: "message-844", role: "assistant", content: "Legacy" },
+      {
+        id: "message-845",
+        role: "assistant",
+        content: "Unclassified",
+        phase: null,
+      },
     ],
     observe(),
   );

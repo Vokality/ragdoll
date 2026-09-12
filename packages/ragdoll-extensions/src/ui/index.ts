@@ -69,6 +69,7 @@ export type {
   ListPanelConfig,
   GridPanelConfig,
   CardsPanelConfig,
+  DocumentPanelConfig,
   PanelConfig,
 
   // Slot state types
@@ -100,6 +101,7 @@ export {
   createListSlotState,
   createGridSlotState,
   createCardsSlotState,
+  createDocumentSlotState,
   type MutableSlotStateStore,
   type DerivedSlotStateOptions,
 } from "./create-slot-state.js";

@@ -46,8 +46,13 @@
         };
       };
       const messages = [
-        { role: "user", content: "Help me plan a focused morning." },
         {
+          id: "app-layout-1",
+          role: "user",
+          content: "Help me plan a focused morning.",
+        },
+        {
+          id: "app-layout-2",
           role: "assistant",
           content:
             "Start with the proposal, then take a short break.\n\n- Review the notes\n- Draft the outline\n- Send it when you’re ready",
@@ -69,7 +74,6 @@
         changeTheme: async () => {},
         changeVariant: async () => {},
         clearConversation: async () => true,
-        clearApiKey: async () => true,
       });
       const experience = store({
         profile: {
@@ -263,7 +267,7 @@
                     extensionSlots,
                     extensions,
                     connections,
-                    onLogout: noop,
+                    onConfigureProvider: noop,
                     reportError,
                   }),
           ),
@@ -397,6 +401,7 @@
               visibleMessages: [
                 ...messages,
                 {
+                  id: "app-layout-3",
                   role: "assistant",
                   content:
                     "## A summary\n\n" +

@@ -633,6 +633,7 @@ export class ExtensionRegistry {
     }
     for (const id of ids) {
       try {
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Finish each extension's teardown and removal events before tearing down the next one.
         await this.unregister(id);
       } catch (error) {
         errors.push(error);
@@ -805,6 +806,7 @@ export class ExtensionRegistry {
     ];
 
     for (const entry of entries) {
+      // eslint-disable-next-line react-doctor/async-await-in-loop -- Subscribers observe capability registration/removal in declared order.
       await this.eventBus.emit({ type, extensionId, timestamp, ...entry });
     }
   }

@@ -1,9 +1,9 @@
 import { expect, it } from "bun:test";
 import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
 import {
-  OpenAIWebSearchService,
+  ResponsesWebSearchService,
   type WebSearchResponse,
-} from "./web-search-service.js";
+} from "./responses-web-search.js";
 
 function response(): WebSearchResponse {
   return {
@@ -43,8 +43,8 @@ function response(): WebSearchResponse {
 }
 it("uses Responses live web search and extracts source annotations", async () => {
   const requests: ResponseCreateParamsNonStreaming[] = [];
-  const service = new OpenAIWebSearchService(
-    { getKey: async () => "test-key" },
+  const service = new ResponsesWebSearchService(
+    "test-key",
     { model: "gpt-5.6-sol", reasoningEffort: "low" },
     {
       create: async (key, request) => {
@@ -53,6 +53,7 @@ it("uses Responses live web search and extracts source annotations", async () =>
         return response();
       },
     },
+    { type: "web_search", external_web_access: true },
   );
   expect(await service.search("NASA news")).toEqual({
     text: "News from NASA.",
@@ -69,10 +70,11 @@ it("uses Responses live web search and extracts source annotations", async () =>
 });
 it("rejects incomplete and uncited searches and respects cancellation", async () => {
   let result = response();
-  const service = new OpenAIWebSearchService(
-    { getKey: async () => "key" },
+  const service = new ResponsesWebSearchService(
+    "key",
     { model: "gpt-5.6-sol", reasoningEffort: "low" },
     { create: async () => result },
+    { type: "web_search", external_web_access: true },
   );
   result = {
     ...response(),

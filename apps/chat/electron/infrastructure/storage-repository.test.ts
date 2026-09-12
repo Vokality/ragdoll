@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_CHARACTER_SETTINGS } from "../electron-api.js";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +18,8 @@ import {
 describe("storageSchema", () => {
   it("normalizes persisted data into the complete application state", () => {
     expect(storageSchema.parse({})).toEqual({
+      modelProvider: "openai",
+      providerKeysEncrypted: {},
       settings: {
         ...DEFAULT_CHARACTER_SETTINGS,
         disabledExtensions: [],
@@ -37,6 +46,41 @@ describe("storageSchema", () => {
   });
 });
 
+it("persists distinct IDs for legacy messages before publishing a migrated snapshot", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lumen-message-migration-"));
+  try {
+    const repository = createStorageRepository(root);
+    await writeFile(
+      repository.filePath,
+      JSON.stringify({
+        conversation: [
+          { role: "user", content: "Repeat" },
+          { role: "user", content: "Repeat" },
+          { id: "existing-message", role: "assistant", content: "Saved reply" },
+        ],
+      }),
+    );
+    const [first, concurrent] = await Promise.all([
+      repository.read(),
+      repository.read(),
+    ]);
+    const ids = first.conversation.map((message) => message.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(ids[2]).toBe("existing-message");
+    expect(concurrent.conversation).toEqual(first.conversation);
+    expect((await createStorageRepository(root).read()).conversation).toEqual(
+      first.conversation,
+    );
+    expect(
+      storageSchema.parse(
+        JSON.parse(await readFile(repository.filePath, "utf8")),
+      ).conversation,
+    ).toEqual(first.conversation);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("serializes direct writes and updates and reads their committed result", async () => {
   const root = await mkdtemp(join(tmpdir(), "lumen-storage-test-"));
   try {
@@ -46,7 +90,11 @@ it("serializes direct writes and updates and reads their committed result", asyn
     initial.settings.theme = "robot";
     const updates = Array.from({ length: 20 }, (_, index) =>
       repository.update((draft) => {
-        draft.conversation.push({ role: "user", content: String(index) });
+        draft.conversation.push({
+          id: `message-${index}`,
+          role: "user",
+          content: String(index),
+        });
       }),
     );
     const snapshot = await repository.read();

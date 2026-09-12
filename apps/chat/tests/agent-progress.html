@@ -51,13 +51,15 @@
         );
       }
       const root = createRoot(document.getElementById("root"));
-      const user = { role: "user", content: "Search" };
+      const user = { id: "user", role: "user", content: "Search" };
       const ack = {
+        id: "ack",
         role: "assistant",
         content: "I'll look that up.",
         phase: "commentary",
       };
       const answer = {
+        id: "answer",
         role: "assistant",
         content: "Here is the answer.",
         phase: "final_answer",
@@ -73,7 +75,7 @@
         await act(async () => {
           turn = service.sendMessage("Search");
           handlers.onConversationChanged([user]);
-          handlers.onText(ack.content);
+          handlers.onText(ack.content, ack.id);
           handlers.onConversationChanged([user, ack]);
         });
         check(
@@ -91,7 +93,11 @@
           "Acknowledgment missing while work is pending",
         );
         await act(async () => {
-          handlers.onText(answer.content);
+          handlers.onText(answer.content, answer.id);
+        });
+        const streamingBubble =
+          document.querySelectorAll(".bubble-assistant")[1];
+        await act(async () => {
           handlers.onConversationChanged([user, ack, answer]);
           handlers.onStreamEnd();
           done.resolve({ success: true });
@@ -102,6 +108,10 @@
           "Final turn never ended",
         );
         const bubbles = document.querySelectorAll(".bubble-assistant");
+        check(
+          bubbles[1] === streamingBubble,
+          "Persisting the stream remounted its bubble",
+        );
         check(bubbles.length === 2, "Final answer merged with acknowledgment");
         check(
           bubbles[0].textContent === ack.content,

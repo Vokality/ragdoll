@@ -318,6 +318,29 @@ it("agent selections arriving during hydration survive stale snapshots and stop"
   expect(gateway.getSelectionListener()).toBeNull();
 });
 
+it("restores document footer callbacks after IPC serialization", async () => {
+  const state: SerializedSlotState = {
+    visible: true,
+    badge: 1,
+    panel: {
+      type: "document",
+      title: "Weekend plan",
+      body: "Saturday: market",
+      actions: [{ id: "back", label: "All notes" }],
+    },
+  };
+  const { gateway, actions } = createGateway(state);
+  const service = new ExtensionSlotService(gateway, (error) => {
+    throw error;
+  });
+  await service.start();
+  const panel = service.getSnapshot()[0]?.state.getState().panel;
+  expect(panel?.type).toBe("document");
+  await panel?.actions?.[0]?.onClick();
+  expect(actions).toEqual([{ actionType: "panel-action", actionId: "back" }]);
+  service.stop();
+});
+
 it("restores canvas footer callbacks after IPC serialization", async () => {
   const state: SerializedSlotState = {
     visible: true,

@@ -1,3 +1,4 @@
+import { modelProviderIdSchema } from "../domain/model-provider.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writePrivateFile } from "./write-private-file.js";
@@ -19,19 +20,21 @@ const configValuesSchema = z.record(
   z.union([z.string(), z.number(), z.boolean()]),
 );
 
-const extensionHostDataSchema = z
-  .object({
-    configValues: configValuesSchema.optional(),
-    configSecretsEncrypted: z.string().optional(),
-    oauthTokensEncrypted: z.string().optional(),
-  })
-  .strict();
+const extensionHostDataSchema = z.strictObject({
+  configValues: configValuesSchema.optional(),
+  configSecretsEncrypted: z.string().optional(),
+  oauthTokensEncrypted: z.string().optional(),
+});
 
 export const storageSchema = z
-  .object({
+  .strictObject({
     apiKeyEncrypted: z.string().optional(),
+    modelProvider: modelProviderIdSchema.default("openai"),
+    providerKeysEncrypted: z
+      .partialRecord(modelProviderIdSchema, z.string())
+      .default({}),
     settings: z
-      .object({
+      .strictObject({
         theme: z
           .enum(CHARACTER_THEME_IDS)
           .default(DEFAULT_CHARACTER_SETTINGS.theme),
@@ -40,20 +43,17 @@ export const storageSchema = z
           .default(DEFAULT_CHARACTER_SETTINGS.variant),
         disabledExtensions: z.array(z.string()).default([]),
       })
-      .strict()
       .prefault({}),
     profile: userProfileSchema.prefault({}),
     experience: z
-      .object({
+      .strictObject({
         introduced: z.boolean().default(false),
         firstSuccess: z
-          .object({ toolName: z.string(), occurredAt: z.number() })
-          .strict()
+          .strictObject({ toolName: z.string(), occurredAt: z.number() })
           .nullable()
           .default(null),
         lastFocusCheckInAt: z.number().default(0),
       })
-      .strict()
       .prefault({}),
     conversation: z.array(conversationEntrySchema).default([]),
     pendingAgentTurns: z.array(pendingAgentTurnSchema).default([]),
@@ -61,7 +61,13 @@ export const storageSchema = z
     connectionCredentials: z.record(z.uuid(), z.string()).default({}),
     extensionHost: z.record(z.string(), extensionHostDataSchema).default({}),
   })
-  .strict();
+  .transform(({ apiKeyEncrypted, ...data }) => ({
+    ...data,
+    providerKeysEncrypted: {
+      ...(apiKeyEncrypted ? { openai: apiKeyEncrypted } : {}),
+      ...data.providerKeysEncrypted,
+    },
+  }));
 
 export type StorageData = z.infer<typeof storageSchema>;
 export type StorageInput = z.input<typeof storageSchema>;
@@ -85,9 +91,11 @@ export function createStorageRepository(
 
   const readSnapshot = async (): Promise<StorageData> => {
     try {
-      return storageSchema.parse(
-        JSON.parse(await readFile(storageFile, "utf8")),
-      );
+      const stored: unknown = JSON.parse(await readFile(storageFile, "utf8"));
+      const data = storageSchema.parse(stored);
+      // Persist schema migrations once, so legacy message IDs survive later reads and restarts.
+      if (JSON.stringify(stored) !== JSON.stringify(data)) await persist(data);
+      return data;
     } catch (error) {
       if (isMissingFile(error)) return storageSchema.parse({});
       throw error;
@@ -107,10 +115,7 @@ export function createStorageRepository(
     );
     return operation;
   };
-  const read = async (): Promise<StorageData> => {
-    await updateQueue;
-    return readSnapshot();
-  };
+  const read = (): Promise<StorageData> => enqueue(readSnapshot);
   const write = async (data: StorageData): Promise<void> => {
     // Snapshot at the boundary so later caller mutations cannot change a queued write.
     const snapshot = storageSchema.parse(data);

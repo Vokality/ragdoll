@@ -42,6 +42,8 @@ function CharacterInstance({
   }, [controller, theme.id]);
 
   useEffect(() => {
+    // The controller is stable for this mounted variant; this exposes its imperative API.
+    // eslint-disable-next-line react-doctor/no-pass-live-state-to-parent, react-doctor/no-prop-callback-in-effect
     onControllerReady(controller);
   }, [onControllerReady, controller]);
 

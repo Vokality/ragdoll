@@ -1,3 +1,4 @@
+import type { ModelProviderId, ProviderKey } from "./domain/model-provider.js";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   CharacterReaction,
@@ -50,11 +51,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     };
   },
   // Auth
+  getModelProviders: () => ipcRenderer.invoke(IPC_CHANNELS.auth.providers),
+  selectModelProvider: (provider: ModelProviderId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.auth.selectProvider, provider),
   hasApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.auth.hasKey),
-  setApiKey: (key: string) => ipcRenderer.invoke(IPC_CHANNELS.auth.setKey, key),
-  validateApiKey: (key: string) =>
+  setApiKey: (key: ProviderKey) =>
+    ipcRenderer.invoke(IPC_CHANNELS.auth.setKey, key),
+  validateApiKey: (key: ProviderKey) =>
     ipcRenderer.invoke(IPC_CHANNELS.auth.validateKey, key),
-  clearApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.auth.clearKey),
+  clearApiKey: (provider?: ModelProviderId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.auth.clearKey, provider),
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.shell.openExternal, url),
 
@@ -67,9 +73,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke(IPC_CHANNELS.chat.clearConversation),
 
   // Streaming events
-  onStreamingText: (callback: (text: string) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, text: string) =>
-      callback(text);
+  onStreamingText: (callback: (text: string, messageId: string) => void) => {
+    const handler = (
+      _: Electron.IpcRendererEvent,
+      text: string,
+      messageId: string,
+    ) => callback(text, messageId);
     ipcRenderer.on(IPC_CHANNELS.chat.streamingText, handler);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.chat.streamingText, handler);

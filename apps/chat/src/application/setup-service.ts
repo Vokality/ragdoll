@@ -1,24 +1,45 @@
 import type { ElectronAPI, OperationResult } from "../../electron/electron-api";
-
-const OPENAI_API_KEYS_URL = "https://platform.openai.com/api-keys";
+import type {
+  ModelProviderId,
+  ModelProviderInfo,
+} from "../../electron/electron-api";
 
 export type SetupGateway = Pick<
   ElectronAPI,
-  "openExternal" | "setApiKey" | "validateApiKey"
+  | "openExternal"
+  | "setApiKey"
+  | "validateApiKey"
+  | "getModelProviders"
+  | "selectModelProvider"
+  | "clearApiKey"
 >;
 
 export class SetupService {
   constructor(private readonly api: SetupGateway) {}
 
-  async configureApiKey(key: string): Promise<OperationResult> {
-    const validation = await this.api.validateApiKey(key);
-    if (!validation.valid) {
-      return { success: false, error: validation.error };
-    }
-    return this.api.setApiKey(key);
+  listProviders(): Promise<ModelProviderInfo[]> {
+    return this.api.getModelProviders();
   }
 
-  openApiKeyPage(): Promise<OperationResult> {
-    return this.api.openExternal(OPENAI_API_KEYS_URL);
+  async configureApiKey(
+    provider: ModelProviderId,
+    key: string,
+  ): Promise<OperationResult> {
+    const credential = { provider, key };
+    const validation = await this.api.validateApiKey(credential);
+    if (!validation.valid) return { success: false, error: validation.error };
+    return this.api.setApiKey(credential);
+  }
+
+  clearKey(provider: ModelProviderId): Promise<OperationResult> {
+    return this.api.clearApiKey(provider);
+  }
+
+  selectProvider(provider: ModelProviderId): Promise<OperationResult> {
+    return this.api.selectModelProvider(provider);
+  }
+
+  openApiKeyPage(provider: ModelProviderInfo): Promise<OperationResult> {
+    return this.api.openExternal(provider.apiKeyUrl);
   }
 }

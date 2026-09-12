@@ -85,33 +85,31 @@ const secureOAuthEndpointSchema = z
     message: "OAuth endpoints must use HTTPS",
   });
 
-export const OAuthConfigSchema = z
-  .object({
-    /** Provider identifier (used in redirect URL) */
-    provider: z.string(),
-    /** OAuth authorization endpoint URL */
-    authorizationUrl: secureOAuthEndpointSchema,
-    /** OAuth token exchange endpoint URL */
-    tokenUrl: secureOAuthEndpointSchema,
-    /** OAuth scopes to request */
-    scopes: z
-      .array(z.string().min(1))
-      .min(1)
-      .refine((values) => new Set(values).size === values.length, {
-        message: "OAuth scopes must not contain duplicates",
-      }),
-    /** Configuration field containing the public OAuth client ID */
-    clientIdConfigKey: z.string().min(1),
-    /** Fixed loopback callback port when required by the provider */
-    callbackPort: z.number().int().min(1024).max(65535).optional(),
-    /** Native extension OAuth always uses PKCE */
-    pkce: z.literal(true),
-    /** Additional authorization parameters */
-    additionalAuthParams: z.record(z.string(), z.string()).optional(),
-    /** Additional token request parameters */
-    additionalTokenParams: z.record(z.string(), z.string()).optional(),
-  })
-  .strict();
+export const OAuthConfigSchema = z.strictObject({
+  /** Provider identifier (used in redirect URL) */
+  provider: z.string(),
+  /** OAuth authorization endpoint URL */
+  authorizationUrl: secureOAuthEndpointSchema,
+  /** OAuth token exchange endpoint URL */
+  tokenUrl: secureOAuthEndpointSchema,
+  /** OAuth scopes to request */
+  scopes: z
+    .array(z.string().min(1))
+    .min(1)
+    .refine((values) => new Set(values).size === values.length, {
+      message: "OAuth scopes must not contain duplicates",
+    }),
+  /** Configuration field containing the public OAuth client ID */
+  clientIdConfigKey: z.string().min(1),
+  /** Fixed loopback callback port when required by the provider */
+  callbackPort: z.number().int().min(1024).max(65535).optional(),
+  /** Native extension OAuth always uses PKCE */
+  pkce: z.literal(true),
+  /** Additional authorization parameters */
+  additionalAuthParams: z.record(z.string(), z.string()).optional(),
+  /** Additional token request parameters */
+  additionalTokenParams: z.record(z.string(), z.string()).optional(),
+});
 
 export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 

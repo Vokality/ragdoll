@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@vokality/ragdoll-extensions";
 import type { AgentToolResult } from "../domain/source-citation.js";
-import type { AgentToolService } from "./openai-service.js";
+import type { AgentToolService } from "./agent-service.js";
 import type { WebSearchService } from "./web-search-service.js";
 
-const querySchema = z
-  .object({ query: z.string().trim().min(1).max(4000) })
-  .strict();
+const querySchema = z.strictObject({
+  query: z.string().trim().min(1).max(4000),
+});
 const searchTool: ToolDefinition = {
   type: "function",
   function: {

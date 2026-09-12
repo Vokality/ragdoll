@@ -1,0 +1,36 @@
+.ui-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ui-field > label {
+  min-width: 0;
+}
+
+.ui-field-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.ui-field :is(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.ui-field-description {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ui-field-error,
+.ui-field-required {
+  color: var(--error);
+}
+
+.ui-field-error {
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

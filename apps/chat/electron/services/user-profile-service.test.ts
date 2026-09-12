@@ -1,3 +1,4 @@
+import { configuredAgent } from "../test-support/configured-agent.js";
 import { describe, expect, it } from "bun:test";
 import { createInMemoryStorageRepository } from "../test-support/in-memory-storage-repository.js";
 import { UserProfileService } from "./user-profile-service.js";
@@ -17,11 +18,10 @@ describe("local personal memory", () => {
     });
     const chat = new ChatApplicationService(
       storage,
-      { getKey: async () => "test" },
-      {
+      configuredAgent({
         runUserTurn: async () => {},
         runEventTurn: async () => ({ disposition: "silent" }),
-      },
+      }),
       () => {},
       () => {},
     );

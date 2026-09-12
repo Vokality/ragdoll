@@ -83,7 +83,11 @@
             activeSlot: slot,
             onClosePanel: () => setId(null),
             messages: [
-              { role: "assistant", content: "Your conversation stays here." },
+              {
+                id: "character-card-1",
+                role: "assistant",
+                content: "Your conversation stays here.",
+              },
             ],
             isStreaming: false,
             themeId: "default",
@@ -289,6 +293,35 @@
           check(
             card.querySelector('[role="progressbar"]').closest("header"),
             "Study progress is outside header",
+          );
+          await act(async () =>
+            state.setState({
+              panel: {
+                type: "document",
+                title: "Weekend plan",
+                body: "A long note body. ".repeat(80),
+                actions: [
+                  { id: "back", label: "All notes", onClick: () => {} },
+                ],
+              },
+            }),
+          );
+          const noteBody = card.querySelector(
+            ".slot-panel-document-content",
+          );
+          const noteFooter = [...card.querySelectorAll("footer button")].find(
+            (button) => button.textContent === "All notes",
+          );
+          noteBody.scrollTop = noteBody.scrollHeight;
+          check(noteBody.scrollTop > 0, "Long note cannot scroll");
+          check(
+            noteBody.getBoundingClientRect().bottom <=
+              noteFooter.getBoundingClientRect().top,
+            "Note overlaps its actions",
+          );
+          check(
+            noteFooter.getBoundingClientRect().bottom <= bounds.bottom + 1,
+            "Note actions are clipped",
           );
           await act(async () =>
             card.querySelector('button[aria-label="Close"]').click(),

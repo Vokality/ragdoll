@@ -8,20 +8,20 @@ import {
   type AgentConversationEvent,
 } from "../domain/conversation.js";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
-import type { AgentRunner } from "./openai-service.js";
+import type { AgentRunner } from "./agent-service.js";
+
+export interface ConfiguredAgent {
+  create(): Promise<{ runner: AgentRunner; key: string }>;
+}
 
 export interface ChatEvents {
-  streamingText(text: string): void;
+  streamingText(text: string, messageId: string): void;
   streamEnded(): void;
 }
 
 export type ConversationChangedCallback = (
   conversation: ChatMessageDto[],
 ) => void;
-
-export interface ApiKeyProvider {
-  getKey(): Promise<string>;
-}
 
 export class ChatApplicationService {
   private turnQueue = Promise.resolve();
@@ -31,8 +31,7 @@ export class ChatApplicationService {
 
   constructor(
     private readonly storage: StorageRepository,
-    private readonly apiKeys: ApiKeyProvider,
-    private readonly agent: AgentRunner,
+    private readonly agent: ConfiguredAgent,
     private readonly conversationChanged: ConversationChangedCallback,
     private readonly reportError: (error: unknown) => void,
   ) {}
@@ -67,25 +66,35 @@ export class ChatApplicationService {
       const abort = new AbortController();
       this.activeUserTurn = abort;
       let streamed = "";
+      let messageId = globalThis.crypto.randomUUID();
       let assistantSaveStarted = false;
       try {
         const data = await this.storage.update((draft) => {
-          draft.conversation.push({ role: "user", content });
+          draft.conversation.push({
+            id: globalThis.crypto.randomUUID(),
+            role: "user",
+            content,
+          });
         });
         this.publishConversation(data.conversation);
 
-        await this.agent.runUserTurn(
-          await this.apiKeys.getKey(),
+        const { runner, key } = await this.agent.create();
+        await runner.runUserTurn(
+          key,
           data.conversation,
           {
             onText: (text) => {
               streamed += text;
-              events.streamingText(text);
+              events.streamingText(text, messageId);
             },
             onMessage: async (response) => {
               assistantSaveStarted = true;
-              const completed = await this.appendAssistantResponse(response);
+              const completed = await this.appendAssistantResponse(
+                response,
+                messageId,
+              );
               streamed = "";
+              messageId = globalThis.crypto.randomUUID();
               assistantSaveStarted = false;
               this.publishConversation(completed);
             },
@@ -101,7 +110,10 @@ export class ChatApplicationService {
           try {
             const partial = streamed.trim();
             const conversation = partial
-              ? await this.appendAssistantResponse({ content: partial })
+              ? await this.appendAssistantResponse(
+                  { content: partial },
+                  messageId,
+                )
               : (await this.storage.read()).conversation;
             events.streamEnded();
             this.publishConversation(conversation);
@@ -171,8 +183,9 @@ export class ChatApplicationService {
       this.activeUserTurn = abort;
       let outcome;
       try {
-        outcome = await this.agent.runEventTurn(
-          await this.apiKeys.getKey(),
+        const { runner, key } = await this.agent.create();
+        outcome = await runner.runEventTurn(
+          key,
           data.conversation,
           trigger,
           abort.signal,
@@ -183,6 +196,7 @@ export class ChatApplicationService {
       const completed = await this.storage.update((draft) => {
         if (outcome.disposition === "respond") {
           draft.conversation.push({
+            id: globalThis.crypto.randomUUID(),
             role: "assistant",
             content: outcome.content,
             ...(outcome.sources ? { sources: outcome.sources } : {}),
@@ -204,6 +218,7 @@ export class ChatApplicationService {
 
   private async appendAssistantResponse(
     response: AgentResponse,
+    id: string,
   ): Promise<ConversationEntry[]> {
     const trimmed = response.content.trim();
     if (!trimmed) throw new Error("The agent returned an empty response");
@@ -211,6 +226,7 @@ export class ChatApplicationService {
     const data = await this.storage.update((draft) => {
       draft.conversation.push({
         ...response,
+        id,
         role: "assistant",
         content: trimmed,
       });

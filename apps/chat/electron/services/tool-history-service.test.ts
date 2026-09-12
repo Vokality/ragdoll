@@ -17,7 +17,11 @@ it("persists execution lifecycle across repository instances without exposing it
   try {
     const storage = createStorageRepository(directory);
     await storage.update((draft) => {
-      draft.conversation.push({ role: "user", content: "Draw a sun" });
+      draft.conversation.push({
+        id: "user-message",
+        role: "user",
+        content: "Draw a sun",
+      });
     });
     const history = new ToolHistoryService(storage);
     const first = await history.start(
@@ -45,7 +49,7 @@ it("persists execution lifecycle across repository instances without exposing it
       result: { success: true, data: { revision: 3 } },
     });
     expect(projectVisibleConversation(restored.conversation)).toEqual([
-      { role: "user", content: "Draw a sun" },
+      { id: "user-message", role: "user", content: "Draw a sun" },
     ]);
     await expect(history.complete(first, { success: false })).rejects.toThrow(
       "already completed",

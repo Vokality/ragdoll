@@ -1,3 +1,4 @@
+import { Button, IconButton } from "../components/ui/button";
 import type { ExperienceService } from "../application/experience-service";
 import type { ConnectionManagementService } from "../application/connection-management-service";
 import {
@@ -31,7 +32,7 @@ import { isApplePlatform } from "../platform";
 
 interface ChatScreenProps {
   experience: ExperienceService;
-  onLogout: () => void;
+  onConfigureProvider: () => void;
   chatService: ChatService;
   characterCommands: CharacterCommandService;
   extensionSlots: ExtensionSlotService;
@@ -42,7 +43,7 @@ interface ChatScreenProps {
 
 export function ChatScreen({
   experience,
-  onLogout,
+  onConfigureProvider,
   chatService,
   characterCommands,
   extensionSlots: extensionSlotService,
@@ -68,7 +69,6 @@ export function ChatScreen({
       changeTheme,
       changeVariant,
       clearConversation,
-      clearApiKey,
     },
     subscribeToFunctionCalls,
   } = useChatApplication(chatService);
@@ -172,10 +172,6 @@ export function ChatScreen({
     }
   }, [clearConversation, controller]);
 
-  const handleChangeApiKey = useCallback(async () => {
-    if (await clearApiKey()) onLogout();
-  }, [clearApiKey, onLogout]);
-
   const visibleError = error && error !== dismissedError ? error : null;
 
   return (
@@ -185,15 +181,15 @@ export function ChatScreen({
       <div style={styles.dragRegion} className="drag-region" />
 
       <header className="chat-header" style={styles.header}>
-        <button
+        <IconButton
           type="button"
           onClick={() => setIsSettingsOpen(true)}
-          className="icon-btn spin-hover no-drag"
+          className="spin-hover no-drag"
           aria-label="Open settings"
           title="Settings"
         >
           <SettingsIcon />
-        </button>
+        </IconButton>
 
         {extensionSlots.length > 0 && (
           <div
@@ -214,14 +210,15 @@ export function ChatScreen({
         <div className="banner-error" role="alert">
           <AlertIcon />
           <span style={styles.errorText}>{visibleError}</span>
-          <button
+          <IconButton
+            variant="plain"
             type="button"
             className="dismiss"
             onClick={() => setDismissedError(visibleError)}
             aria-label="Dismiss error"
           >
             <CloseIcon />
-          </button>
+          </IconButton>
         </div>
       )}
 
@@ -239,12 +236,13 @@ export function ChatScreen({
       {personal?.error && !isLoading && (
         <div className="banner-error" role="alert">
           <span>{personal.error}</span>
-          <button
+          <Button
+            variant="plain"
             className="chip"
             onClick={() => void experience.retry().catch(reportError)}
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
       {(visibleMessages.length === 0 || personal?.needsFirstAction) &&
@@ -279,7 +277,7 @@ export function ChatScreen({
         onThemeChange={handleThemeChange}
         onVariantChange={handleVariantChange}
         onClearConversation={handleClearConversation}
-        onChangeApiKey={handleChangeApiKey}
+        onConfigureProvider={onConfigureProvider}
       />
     </div>
   );

@@ -10,7 +10,7 @@ import type {
   AgentModelConfig,
   AgentResponseSessionFactory,
   ResponseRound,
-} from "./openai-service.js";
+} from "./agent-service.js";
 
 const config: AgentModelConfig = {
   model: "test",
@@ -35,11 +35,9 @@ const final: ResponseRound = {
   output: [
     {
       type: "message",
-      id: "message",
       role: "assistant",
-      status: "completed",
       phase: "final_answer",
-      content: [{ type: "output_text", text: "Done", annotations: [] }],
+      content: "Done",
     },
   ],
 };
@@ -295,7 +293,7 @@ it("routes memory retrieval, explicit use, and model summaries without injecting
   );
   await agent.runUserTurn(
     "test",
-    [{ role: "user", content: "What is my birthday?" }],
+    [{ id: "message-296", role: "user", content: "What is my birthday?" }],
     { onText() {}, onMessage: async () => {} },
   );
   expect(summaryCalls).toBe(1);

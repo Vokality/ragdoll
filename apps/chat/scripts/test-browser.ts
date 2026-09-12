@@ -16,14 +16,17 @@ try {
     logLevel: "warn",
   });
   try {
-    const entry = join(temporary, "runner.cjs");
+    const entry = join(temporary, "browser-runner.cjs");
     const build = await Bun.build({
-      entrypoints: [join(appRoot, "tests/browser-runner.ts")],
+      entrypoints: [
+        join(appRoot, "tests/browser-runner.ts"),
+        join(appRoot, "electron/preload.ts"),
+      ],
       target: "node",
       format: "cjs",
       external: ["electron"],
       outdir: temporary,
-      naming: "runner.cjs",
+      naming: "[name].cjs",
     });
     if (!build.success)
       throw new AggregateError(build.logs, "Browser test runner build failed");
@@ -46,6 +49,7 @@ try {
       env: {
         ...process.env,
         RAGDOLL_TEST_ORIGIN: `http://127.0.0.1:${address.port}`,
+        RAGDOLL_TEST_PRELOAD: join(temporary, "preload.cjs"),
         RAGDOLL_TEST_PROFILE: join(temporary, "profile"),
       },
       stdout: "inherit",

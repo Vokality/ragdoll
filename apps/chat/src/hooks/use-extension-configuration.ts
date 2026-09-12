@@ -151,6 +151,7 @@ export function useExtensionConfiguration(
     } finally {
       if (version === loadVersion.current) {
         savingRef.current = false;
+        // eslint-disable-next-line react-doctor/no-loading-flag-reset-outside-finally -- Already in finally; stale requests must not reset the current editor's state.
         setSaving(false);
       }
     }

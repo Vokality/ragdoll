@@ -7,12 +7,10 @@ import {
   IPC_CHANNELS,
 } from "../electron-api.js";
 
-const settingsUpdateSchema = z
-  .object({
-    theme: z.enum(CHARACTER_THEME_IDS).optional(),
-    variant: z.enum(CHARACTER_VARIANT_IDS).optional(),
-  })
-  .strict();
+const settingsUpdateSchema = z.strictObject({
+  theme: z.enum(CHARACTER_THEME_IDS).optional(),
+  variant: z.enum(CHARACTER_VARIANT_IDS).optional(),
+});
 
 export function registerSettingsIpc(
   ipc: IpcRegistrar,

@@ -1,14 +1,12 @@
+import { Button, IconButton } from "./ui/button";
+import { Field } from "./ui/field";
+import { Switch } from "./ui/switch";
+import { TextInput } from "./ui/input";
 import { ProfileSection } from "./profile-section";
 import type { ExperienceService } from "../application/experience-service";
 import { ConnectionsSection } from "./connections-section";
 import type { ConnectionManagementService } from "../application/connection-management-service";
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { ExtensionConfigModal } from "./extension-config-modal";
 import { useTimedConfirm } from "../hooks/use-timed-confirm";
 import type {
@@ -33,7 +31,7 @@ interface SettingsModalProps {
   onThemeChange: (theme: CharacterThemeId) => void;
   onVariantChange: (variant: CharacterVariantId) => void;
   onClearConversation: () => void;
-  onChangeApiKey: () => void;
+  onConfigureProvider: () => void;
   service: ExtensionManagementService;
   connections: ConnectionManagementService;
 }
@@ -67,7 +65,7 @@ type SettingsPage =
   | "features"
   | "integrations"
   | "library"
-  | "key"
+  | "provider"
   | "data";
 const SETTINGS_PAGES: Record<
   SettingsPage,
@@ -109,9 +107,9 @@ const SETTINGS_PAGES: Record<
     description: "Install, update and remove extensions",
     parent: "extensions",
   },
-  key: {
-    title: "API key",
-    description: "Manage your OpenAI key",
+  provider: {
+    title: "AI provider",
+    description: "Choose a provider and manage API keys",
     parent: "home",
   },
   data: {
@@ -125,7 +123,7 @@ const ROOT_PAGES: SettingsPage[] = [
   "appearance",
   "connections",
   "extensions",
-  "key",
+  "provider",
   "data",
 ];
 const EXTENSION_PAGES: SettingsPage[] = ["features", "integrations", "library"];
@@ -142,7 +140,7 @@ function SettingsContent({
   onThemeChange,
   onVariantChange,
   onClearConversation,
-  onChangeApiKey,
+  onConfigureProvider,
   service,
   connections,
 }: SettingsModalProps) {
@@ -178,8 +176,8 @@ function SettingsContent({
   const menu = (pages: SettingsPage[]) => (
     <nav className="settings-menu" aria-label={SETTINGS_PAGES[page].title}>
       {pages.map((next) => (
-        <button
-          type="button"
+        <Button
+          variant="plain"
           className="settings-menu-row"
           data-settings-page={next}
           key={next}
@@ -190,7 +188,7 @@ function SettingsContent({
             <small>{SETTINGS_PAGES[next].description}</small>
           </span>
           <span aria-hidden="true">›</span>
-        </button>
+        </Button>
       ))}
     </nav>
   );
@@ -237,8 +235,8 @@ function SettingsContent({
             onConfigure={setConfigModalExtension}
           />
         );
-      case "key":
-        return <ApiKeySection onChangeApiKey={onChangeApiKey} />;
+      case "provider":
+        return <ProviderSection onConfigureProvider={onConfigureProvider} />;
       case "data":
         return <DataSection onClearConversation={onClearConversation} />;
     }
@@ -263,13 +261,12 @@ function SettingsContent({
             extensions.overviewLoad.status === "error" && (
               <div className="settings-feedback" role="alert">
                 <p>{extensions.overviewLoad.message}</p>
-                <button
-                  type="button"
-                  className="btn-secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => void extensions.refresh()}
                 >
                   Try again
-                </button>
+                </Button>
               </div>
             )}
           {page === "features" && extensions.notice && (
@@ -304,36 +301,20 @@ function SettingsContent({
   );
 }
 
-function ApiKeySection({ onChangeApiKey }: { onChangeApiKey: () => void }) {
-  const confirm = useTimedConfirm();
-
-  const handleClick = () => {
-    if (confirm.isArmed) {
-      confirm.disarm();
-      onChangeApiKey();
-    } else {
-      confirm.arm();
-    }
-  };
-
+function ProviderSection({
+  onConfigureProvider,
+}: {
+  onConfigureProvider: () => void;
+}) {
   return (
     <section className="settings-section">
-      <div style={styles.apiKeyDisplay}>
-        <span style={styles.maskedKey}>API key connected</span>
-        <button
-          type="button"
-          onClick={handleClick}
-          className={confirm.isArmed ? "btn-danger confirm" : "btn-secondary"}
-          style={styles.smallButton}
-        >
-          {confirm.isArmed ? "Sign out?" : "Change Key"}
-        </button>
-      </div>
-      {confirm.isArmed && (
-        <p className="animate-fadeIn" style={styles.confirmHint}>
-          Changing the key signs you out and returns to setup.
-        </p>
-      )}
+      <p>
+        Choose your model provider and manage its API key. Keys are encrypted on
+        this device.
+      </p>
+      <Button variant="secondary" onClick={onConfigureProvider}>
+        Change provider or key
+      </Button>
     </section>
   );
 }
@@ -356,16 +337,16 @@ function OptionPickerSection<Id extends string>({
       <h3 style={styles.sectionTitle}>{title}</h3>
       <div style={styles.optionGrid}>
         {options.map((option) => (
-          <button
+          <Button
+            variant="plain"
             key={option.id}
-            type="button"
             onClick={() => onSelect(option.id)}
             className={`option-card${selectedId === option.id ? " selected" : ""}`}
             aria-pressed={selectedId === option.id}
           >
             <span style={styles.optionName}>{option.name}</span>
             <span style={styles.optionDescription}>{option.description}</span>
-          </button>
+          </Button>
         ))}
       </div>
     </section>
@@ -401,15 +382,11 @@ function FeatureTogglesSection({
                 </span>
               </div>
               {canToggle ? (
-                <button
-                  type="button"
-                  onClick={() => void extensions.toggle(extension.id)}
-                  className={`switch${isDisabled ? "" : " on"}`}
-                  aria-pressed={!isDisabled}
-                  aria-label={`${isDisabled ? "Enable" : "Disable"} ${extension.name}`}
-                >
-                  <span className="switch-knob" />
-                </button>
+                <Switch
+                  checked={!isDisabled}
+                  onCheckedChange={() => void extensions.toggle(extension.id)}
+                  aria-label={extension.name}
+                />
               ) : (
                 <span style={styles.requiredBadge}>Always on</span>
               )}
@@ -446,15 +423,14 @@ function IntegrationsSection({
                 {extension.description}
               </span>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => onConfigure(extension)}
-              className="btn-secondary"
               style={styles.configButton}
             >
               <SettingsIcon />
               Configure
-            </button>
+            </Button>
           </div>
         ))}
       </div>
@@ -469,56 +445,59 @@ function ExtensionLibrarySection({
   extensions: ExtensionSettings;
   onConfigure: (extension: ExtensionInfo) => void;
 }) {
-  const installInputId = useId();
   return (
     <section className="settings-section">
       <div style={styles.sectionHeader}>
         <h3 style={styles.sectionTitle}>Manage extensions</h3>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => void extensions.checkUpdates()}
-          disabled={extensions.isCheckingUpdates}
-          className="btn-secondary"
+          loading={extensions.isCheckingUpdates}
+          loadingLabel="Checking…"
           style={styles.checkUpdatesButton}
         >
-          {extensions.isCheckingUpdates && <span className="spinner-sm" />}
-          {extensions.isCheckingUpdates ? "Checking…" : "Check Updates"}
-        </button>
+          Check Updates
+        </Button>
       </div>
 
-      <label htmlFor={installInputId} style={styles.installLabel}>
-        GitHub repository URL
-      </label>
-      <div style={styles.installSection}>
-        <input
-          id={installInputId}
-          type="url"
-          spellCheck={false}
-          autoCapitalize="none"
-          value={extensions.installUrl}
-          onChange={(e) => {
-            extensions.setInstallUrl(e.target.value);
-          }}
-          placeholder="https://github.com/owner/repo"
-          aria-label="Extension GitHub URL"
-          style={styles.installInput}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !extensions.isInstalling) {
-              void extensions.install();
-            }
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => void extensions.install()}
-          disabled={extensions.isInstalling || !extensions.installUrl.trim()}
-          className="btn-primary"
-          style={styles.installButton}
-        >
-          {extensions.isInstalling && <span className="spinner-sm" />}
-          {extensions.isInstalling ? "Installing…" : "Install"}
-        </button>
-      </div>
+      <Field
+        label="GitHub repository URL"
+        labelStyle={styles.installLabel}
+        style={{ gap: 0 }}
+      >
+        {(control) => (
+          <div style={styles.installSection}>
+            <TextInput
+              {...control}
+              type="url"
+              spellCheck={false}
+              autoCapitalize="none"
+              value={extensions.installUrl}
+              onChange={(e) => {
+                extensions.setInstallUrl(e.target.value);
+              }}
+              placeholder="https://github.com/owner/repo"
+              aria-label="Extension GitHub URL"
+              style={styles.installInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !extensions.isInstalling) {
+                  void extensions.install();
+                }
+              }}
+            />
+            <Button
+              variant="primary"
+              onClick={() => void extensions.install()}
+              disabled={!extensions.installUrl.trim()}
+              loading={extensions.isInstalling}
+              loadingLabel="Installing…"
+              style={styles.installButton}
+            >
+              Install
+            </Button>
+          </div>
+        )}
+      </Field>
       {extensions.notice && (
         <div
           role={extensions.notice.tone === "error" ? "alert" : "status"}
@@ -588,36 +567,40 @@ function InstalledExtensionRow({
       </div>
       <div style={styles.extensionActions}>
         {needsConfig && extInfo && (
-          <button
-            type="button"
+          <IconButton
+            variant="secondary"
             onClick={() => onConfigure(extInfo)}
-            className="btn-secondary"
             style={styles.actionButton}
             aria-label={`Configure ${ext.name}`}
             title={`Configure ${ext.name}`}
           >
             <SettingsIcon />
-          </button>
+          </IconButton>
         )}
         {update && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => void extensions.update(ext.id)}
             disabled={operation !== undefined}
-            className="btn-secondary"
             style={styles.updateButton}
+            loading={isUpdating}
+            loadingLabel=""
+            aria-label={`Update ${ext.name}`}
           >
-            {isUpdating ? <span className="spinner-sm" /> : "Update"}
-          </button>
+            Update
+          </Button>
         )}
-        <button
-          type="button"
+        <Button
+          variant="plain"
           onClick={() => void extensions.uninstall(ext.id)}
           disabled={operation !== undefined}
           style={styles.uninstallButton}
+          loading={isUninstalling}
+          loadingLabel=""
+          aria-label={`Uninstall ${ext.name}`}
         >
-          {isUninstalling ? <span className="spinner-sm" /> : "Uninstall"}
-        </button>
+          Uninstall
+        </Button>
       </div>
     </div>
   );
@@ -647,26 +630,21 @@ function DataSection({
       </p>
       {confirm.isArmed ? (
         <div className="animate-fadeIn" style={styles.confirmActions}>
-          <button
-            type="button"
-            onClick={handleClick}
-            className="btn-danger confirm"
-          >
+          <Button variant="danger" onClick={handleClick} className="confirm">
             Confirm Clear
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={confirm.disarm}
-            className="btn-secondary"
             style={styles.cancelButton}
           >
             Cancel
-          </button>
+          </Button>
         </div>
       ) : (
-        <button type="button" onClick={handleClick} className="btn-danger">
+        <Button variant="danger" onClick={handleClick}>
           Clear Conversation
-        </button>
+        </Button>
       )}
     </section>
   );
@@ -733,20 +711,6 @@ const styles: Record<string, CSSProperties> = {
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     margin: "0 0 8px 0",
-  },
-  apiKeyDisplay: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "12px",
-  },
-  maskedKey: {
-    fontSize: "13px",
-    color: "var(--text-muted)",
-    padding: "8px 10px",
-    background: "var(--bg-secondary)",
-    borderRadius: "var(--radius-sm)",
-    flex: 1,
   },
   smallButton: {
     padding: "6px 10px",

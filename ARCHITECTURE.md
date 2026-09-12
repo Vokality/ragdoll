@@ -94,7 +94,7 @@ The loader resolves package exports, constructs the extension by calling `create
 
 All panel kinds share `PanelFrame`: fixed identity/status/progress in the header, bounded content, and fixed footer controls. The host supplies card bounds and avatar space; the shared renderer owns sizing and scrolling. See [extension card layout](docs/extension-card-layout.md) for region and authoring rules.
 
-Extensions contribute React-free observable slot state. Panel configurations are `list`, `grid`, or `cards`. `serializeSlotState` removes callbacks while preserving action availability as `canClick`, `canToggle`, and `canSubmit`. The renderer hydrates callbacks that send a discriminated action request back to the Electron owner (`panel-action`, `section-action`, `item-click`, `item-toggle`, `cell-click`, or `answer-submit` with a required string payload). The main process invokes only the callback belonging to the identified slot, section, item, cell, or cards answer submit.
+Extensions contribute React-free observable slot state. Panel configurations are `list`, `grid`, `cards`, `canvas`, or `document`. `serializeSlotState` removes callbacks while preserving action availability as `canClick`, `canToggle`, and `canSubmit`. The renderer hydrates callbacks that send a discriminated action request back to the Electron owner (`panel-action`, `section-action`, `item-click`, `item-toggle`, `cell-click`, or `answer-submit` with a required string payload). The main process invokes only the callback belonging to the identified slot, section, item, cell, or cards answer submit.
 
 This keeps functions and React objects out of IPC payloads.
 
@@ -116,6 +116,10 @@ The Electron main process owns filesystem, persistence, OAuth, notification, and
 
 The React renderer consumes only browser-safe entrypoints. It does not import the loader or Electron main-process modules.
 
+### Model providers
+
+Lumen composes a small `ModelProvider` facade for OpenAI and Grok. Each provider owns response sessions, key validation, model metadata, and hosted search. The shared agent owns tool execution, durable history, memory, and event decisions; it has no SDK types. `ProviderAgentFactory` snapshots the selected provider and encrypted credential once per turn so search and memory summaries use the same provider. Protocol output and encrypted reasoning stay inside the response session. See [Model providers](docs/model-providers.md) for the contract, storage migration, and adding adapters.
+
 ## Monorepo build
 
 The root Bun workspace uses one lockfile and a dependency catalog. Build order is explicit:
@@ -131,4 +135,4 @@ Each workspace cleans only its own output before compilation, preventing deleted
 
 ## Lumen connections
 
-Lumen owns MCP connections independently of extensions. Configuration and agent access live in the host; credentials stay encrypted in the main process. The MCP SDK executes remote tools through Lumen’s existing Responses function-tool loop and durable history. See [Connections](docs/connections.md) for lifecycle, OAuth, settings, and supported transports.
+Lumen owns MCP connections independently of extensions. Configuration and agent access live in the host; credentials stay encrypted in the main process. The MCP SDK executes remote tools through Lumen’s provider-neutral function-tool loop and durable history. See [Connections](docs/connections.md) for lifecycle, OAuth, settings, and supported transports.

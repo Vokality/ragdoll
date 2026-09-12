@@ -63,7 +63,7 @@ export class CharacterStateBuilder {
   }
 
   build(): CharacterState {
-    return JSON.parse(JSON.stringify(this.state));
+    return structuredClone(this.state);
   }
 }
 

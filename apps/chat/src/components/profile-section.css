@@ -24,7 +24,8 @@
   display: grid;
   gap: 12px;
 }
-.profile-section label {
+.profile-section .ui-field,
+.profile-section .profile-check-ins {
   display: grid;
   gap: 5px;
   font-size: 12px;
@@ -46,6 +47,12 @@
   display: flex;
   align-items: end;
   gap: 8px;
+}
+.profile-note-fields {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 .profile-actions {
   display: flex;

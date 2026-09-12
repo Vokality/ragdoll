@@ -36,7 +36,7 @@ Choose no authentication only when the endpoint supports unauthenticated access.
 
 ## Data and consent
 
-Credentials stay in host-owned encrypted storage. Relevant remote tool results are passed to OpenAI as conversation context. Grant access only to accounts and capabilities you intend to use with Lumen.
+Credentials stay in host-owned encrypted storage. Relevant remote tool results are passed to the selected model provider (OpenAI or xAI) as conversation context. Grant access only to accounts and capabilities you intend to use with Lumen.
 
 Disconnecting removes local credentials; it does not revoke provider-side consent. Revoke that separately in the provider's account settings when needed. The agent cannot start login or grant itself connection access.
 

@@ -1,4 +1,8 @@
-import { useId, type CSSProperties } from "react";
+import { Field, type FieldControlProps } from "./ui/field";
+import { Switch } from "./ui/switch";
+import { Button } from "./ui/button";
+import { TextInput, Select } from "./ui/input";
+import type { CSSProperties } from "react";
 import type { ConfigField } from "@vokality/ragdoll-extensions";
 import type { OAuthState } from "../../electron/electron-api";
 import type { ExtensionManagementService } from "../application/extension-management-service";
@@ -42,10 +46,8 @@ export function ExtensionConfigModal({
     !configuration.error &&
     ((hasConfig && !configuration.schema) ||
       (hasOAuth && !configuration.oauth));
-  const missingFields = new Set(configuration.status?.missingFields ?? []);
   const isConfigComplete = !hasConfig || configuration.status?.isConfigured;
   const isOAuthComplete = !hasOAuth || configuration.oauth?.isAuthenticated;
-  const isFullyConfigured = isConfigComplete && isOAuthComplete;
 
   return (
     <ModalShell
@@ -67,33 +69,7 @@ export function ExtensionConfigModal({
         </p>
       )}
 
-      {/* Config Fields */}
-      {hasConfig && configuration.schema && (
-        <section style={styles.section}>
-          <h3 style={styles.sectionTitle}>Configuration</h3>
-          <div style={styles.fieldList}>
-            {Object.entries(configuration.schema).map(([key, field]) => (
-              <ConfigFieldInput
-                key={key}
-                field={field}
-                value={configuration.values[key]}
-                onChange={(value) => configuration.changeValue(key, value)}
-                isMissing={missingFields.has(key)}
-              />
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => void configuration.save()}
-            disabled={configuration.saving}
-            className="btn-primary"
-            style={styles.saveButton}
-          >
-            {configuration.saving && <span className="spinner-sm" />}
-            {configuration.saving ? "Saving…" : "Save Configuration"}
-          </button>
-        </section>
-      )}
+      {hasConfig && <ConfigurationFields configuration={configuration} />}
 
       {/* OAuth Section */}
       {hasOAuth && (
@@ -107,31 +83,82 @@ export function ExtensionConfigModal({
         </section>
       )}
 
-      {/* Status Summary */}
       {!isLoading && (
-        <section style={styles.section}>
-          <div style={styles.statusSummary}>
-            {isFullyConfigured ? (
-              <>
-                <CheckCircleIcon />
-                <span style={styles.statusText}>Ready to use</span>
-              </>
-            ) : (
-              <>
-                <WarningIcon />
-                <span style={styles.statusText}>
-                  {!isConfigComplete && !isOAuthComplete
-                    ? "Configuration and authentication required"
-                    : !isConfigComplete
-                      ? "Configuration required"
-                      : "Authentication required"}
-                </span>
-              </>
-            )}
-          </div>
-        </section>
+        <ConfigurationSummary
+          isConfigComplete={!!isConfigComplete}
+          isOAuthComplete={!!isOAuthComplete}
+        />
       )}
     </ModalShell>
+  );
+}
+
+type ExtensionConfiguration = ReturnType<typeof useExtensionConfiguration>;
+
+function ConfigurationFields({
+  configuration,
+}: {
+  configuration: ExtensionConfiguration;
+}) {
+  if (!configuration.schema) return null;
+  const missingFields = new Set(configuration.status?.missingFields ?? []);
+  return (
+    <section style={styles.section}>
+      <h3 style={styles.sectionTitle}>Configuration</h3>
+      <div style={styles.fieldList}>
+        {Object.entries(configuration.schema).map(([key, field]) => (
+          <ConfigFieldInput
+            key={key}
+            field={field}
+            value={configuration.values[key]}
+            onChange={(value) => configuration.changeValue(key, value)}
+            isMissing={missingFields.has(key)}
+          />
+        ))}
+      </div>
+      <Button
+        variant="primary"
+        onClick={() => void configuration.save()}
+        loading={configuration.saving}
+        loadingLabel="Saving…"
+        style={styles.saveButton}
+      >
+        Save Configuration
+      </Button>
+    </section>
+  );
+}
+
+function ConfigurationSummary({
+  isConfigComplete,
+  isOAuthComplete,
+}: {
+  isConfigComplete: boolean;
+  isOAuthComplete: boolean;
+}) {
+  const isFullyConfigured = isConfigComplete && isOAuthComplete;
+  return (
+    <section style={styles.section}>
+      <div style={styles.statusSummary}>
+        {isFullyConfigured ? (
+          <>
+            <CheckCircleIcon />
+            <span style={styles.statusText}>Ready to use</span>
+          </>
+        ) : (
+          <>
+            <WarningIcon />
+            <span style={styles.statusText}>
+              {!isConfigComplete && !isOAuthComplete
+                ? "Configuration and authentication required"
+                : !isConfigComplete
+                  ? "Configuration required"
+                  : "Authentication required"}
+            </span>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -149,28 +176,19 @@ function ConfigFieldInput({
   onChange,
   isMissing,
 }: ConfigFieldInputProps) {
-  const inputId = useId();
-
-  const renderInput = () => {
+  const renderInput = (control: FieldControlProps) => {
     switch (field.type) {
       case "string":
         return (
-          <input
-            id={inputId}
-            aria-describedby={
-              field.description ? `${inputId}-description` : undefined
-            }
-            aria-invalid={isMissing || undefined}
+          <TextInput
+            {...control}
             type={field.secret ? "password" : "text"}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
             placeholder={
               field.placeholder ?? `Enter ${field.label.toLowerCase()}`
             }
-            style={{
-              ...styles.input,
-              ...(isMissing ? styles.inputError : {}),
-            }}
+            style={styles.input}
             minLength={field.minLength}
             maxLength={field.maxLength}
           />
@@ -178,12 +196,8 @@ function ConfigFieldInput({
 
       case "number":
         return (
-          <input
-            id={inputId}
-            aria-describedby={
-              field.description ? `${inputId}-description` : undefined
-            }
-            aria-invalid={isMissing || undefined}
+          <TextInput
+            {...control}
             type="number"
             value={typeof value === "number" ? value : ""}
             onChange={(e) =>
@@ -196,10 +210,7 @@ function ConfigFieldInput({
             placeholder={
               field.placeholder ?? `Enter ${field.label.toLowerCase()}`
             }
-            style={{
-              ...styles.input,
-              ...(isMissing ? styles.inputError : {}),
-            }}
+            style={styles.input}
             min={field.min}
             max={field.max}
             step={field.step}
@@ -208,35 +219,21 @@ function ConfigFieldInput({
 
       case "boolean":
         return (
-          <button
-            id={inputId}
-            aria-describedby={
-              field.description ? `${inputId}-description` : undefined
-            }
-            type="button"
-            onClick={() => onChange(value !== true)}
-            className={`switch${value === true ? " on" : ""}`}
-            aria-pressed={value === true}
+          <Switch
+            {...control}
+            onCheckedChange={onChange}
+            checked={value === true}
             aria-label={field.label}
-          >
-            <span className="switch-knob" />
-          </button>
+          />
         );
 
       case "select":
         return (
-          <select
-            id={inputId}
-            aria-describedby={
-              field.description ? `${inputId}-description` : undefined
-            }
-            aria-invalid={isMissing || undefined}
+          <Select
+            {...control}
             value={typeof value === "string" ? value : ""}
             onChange={(e) => onChange(e.target.value)}
-            style={{
-              ...styles.select,
-              ...(isMissing ? styles.inputError : {}),
-            }}
+            style={styles.select}
           >
             <option value="">Select {field.label.toLowerCase()}</option>
             {field.options?.map((opt) => (
@@ -244,7 +241,7 @@ function ConfigFieldInput({
                 {opt.label}
               </option>
             ))}
-          </select>
+          </Select>
         );
 
       default:
@@ -253,20 +250,18 @@ function ConfigFieldInput({
   };
 
   return (
-    <div style={styles.fieldRow}>
-      <div style={styles.fieldHeader}>
-        <label htmlFor={inputId} style={styles.fieldLabel}>
-          {field.label}
-          {field.required && <span style={styles.required}>*</span>}
-        </label>
-        {field.description && (
-          <span id={`${inputId}-description`} style={styles.fieldDescription}>
-            {field.description}
-          </span>
-        )}
-      </div>
-      {renderInput()}
-    </div>
+    <Field
+      label={field.label}
+      required={field.required}
+      invalid={isMissing}
+      description={field.description}
+      descriptionPosition="before"
+      labelStyle={styles.fieldLabel}
+      descriptionStyle={styles.fieldDescription}
+      style={styles.fieldRow}
+    >
+      {renderInput}
+    </Field>
   );
 }
 
@@ -313,24 +308,24 @@ function OAuthStatusCard({
 
       <div style={styles.oauthActions}>
         {state?.isAuthenticated ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={onDisconnect}
-            className="btn-secondary"
             style={styles.oauthButton}
           >
             Disconnect
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={onConnect}
-            disabled={!state || isConnecting}
-            className="btn-primary"
+            disabled={!state}
+            loading={isConnecting}
+            loadingLabel="Opening browser…"
             style={styles.oauthButton}
           >
-            {isConnecting ? "Opening browser…" : "Connect account"}
-          </button>
+            Connect account
+          </Button>
         )}
       </div>
     </div>
@@ -423,19 +418,10 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: "column",
     gap: "6px",
   },
-  fieldHeader: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-  },
   fieldLabel: {
     fontSize: "14px",
     fontWeight: "500",
     color: "var(--text-primary)",
-  },
-  required: {
-    color: "var(--error)",
-    marginLeft: "4px",
   },
   fieldDescription: {
     fontSize: "12px",
@@ -449,14 +435,10 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--bg-secondary)",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: "var(--border)",
     borderRadius: "var(--radius-md)",
     outline: "none",
     transition: "border-color var(--transition-fast)",
     boxSizing: "border-box",
-  },
-  inputError: {
-    borderColor: "var(--error)",
   },
   select: {
     width: "100%",
@@ -466,7 +448,6 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--bg-secondary)",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: "var(--border)",
     borderRadius: "var(--radius-md)",
     outline: "none",
     cursor: "pointer",

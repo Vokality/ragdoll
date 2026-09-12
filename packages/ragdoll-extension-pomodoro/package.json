@@ -50,6 +50,6 @@
       "notifications"
     ],
     "entry": "./dist/index.js",
-    "canDisable": false
+    "canDisable": true
   }
 }

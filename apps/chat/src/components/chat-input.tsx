@@ -1,3 +1,5 @@
+import { IconButton } from "./ui/button";
+import { Textarea } from "./ui/input";
 import {
   useState,
   useRef,
@@ -82,7 +84,7 @@ export function ChatInput({
       style={styles.form}
     >
       <div className="chat-input-bar">
-        <textarea
+        <Textarea
           ref={textareaRef}
           className="chat-textarea"
           value={message}
@@ -93,7 +95,8 @@ export function ChatInput({
           aria-label="Message"
         />
         {isBusy ? (
-          <button
+          <IconButton
+            variant="plain"
             type="button"
             className="send-btn stop"
             onClick={() => {
@@ -104,16 +107,17 @@ export function ChatInput({
             title="Stop generating"
           >
             <StopIcon />
-          </button>
+          </IconButton>
         ) : (
-          <button
+          <IconButton
+            variant="plain"
             type="submit"
             className="send-btn"
             disabled={!message.trim()}
             aria-label="Send message"
           >
             <SendIcon />
-          </button>
+          </IconButton>
         )}
       </div>
       <p className="input-hint">

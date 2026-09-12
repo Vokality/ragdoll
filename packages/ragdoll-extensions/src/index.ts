@@ -144,6 +144,7 @@ export type {
   CardsPanelFront,
   CardsPanelRevealed,
   CardsPanelConfig,
+  DocumentPanelConfig,
   PanelConfig,
   SlotState,
   SlotStateCallback,
@@ -158,6 +159,7 @@ export type {
   SerializedGridPanelCell,
   SerializedGridPanelConfig,
   SerializedCardsPanelConfig,
+  SerializedDocumentPanelConfig,
   SerializedPanelConfig,
   SerializedSlotState,
 } from "./slots.js";
@@ -168,6 +170,7 @@ export {
   createListSlotState,
   createGridSlotState,
   createCardsSlotState,
+  createDocumentSlotState,
   serializeSlotState,
 } from "./slots.js";
 

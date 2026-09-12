@@ -48,7 +48,7 @@ import type {
  * Extended ragdollExtension field in package.json
  */
 const ExtensionPackageManifestSchema = z
-  .object({
+  .strictObject({
     id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/),
     name: z.string().min(1),
     description: z.string().optional(),
@@ -105,10 +105,10 @@ const ExtensionPackageManifestSchema = z
     configSchema: ConfigSchemaSchema.optional(),
     oauth: OAuthConfigSchema.optional(),
   })
-  .strict()
   .superRefine((manifest, context) => {
+    const optionalCapabilities = new Set(manifest.optionalCapabilities);
     const duplicateCapability = manifest.requiredCapabilities.find(
-      (capability) => manifest.optionalCapabilities.includes(capability),
+      (capability) => optionalCapabilities.has(capability),
     );
     if (duplicateCapability) {
       context.addIssue({
@@ -364,6 +364,7 @@ type NormalizedLoaderConfig = {
 };
 
 async function defaultImportModule(modulePath: string): Promise<unknown> {
+  // eslint-disable-next-line react-doctor/no-dynamic-import-path -- Host-discovered extension entries are runtime modules, not application bundle chunks.
   return import(modulePath);
 }
 
@@ -427,6 +428,7 @@ export class ExtensionLoader {
     const discovered = await this.discoverPackages();
 
     for (const packageName of discovered) {
+      // eslint-disable-next-line react-doctor/async-await-in-loop -- Registration order is observable; continueOnError=false must stop before loading the next extension.
       const result = await this.loadPackage(packageName);
       results.push(result);
 
@@ -444,60 +446,60 @@ export class ExtensionLoader {
    * @returns Array of package names that are ragdoll extensions
    */
   async discoverPackages(): Promise<string[]> {
-    const extensionPackages: string[] = [];
-
-    for (const packageRoot of this.config.packageRoots) {
-      const packages = await this.scanDirectory(packageRoot);
-      extensionPackages.push(...packages);
-    }
+    const packagesByRoot = await Promise.all(
+      this.config.packageRoots.map((root) => this.scanDirectory(root)),
+    );
 
     // Deduplicate
-    return [...new Set(extensionPackages)];
+    return [...new Set(packagesByRoot.flat())];
   }
 
   /**
    * Scan a package root according to its explicitly configured layout.
    */
   private async scanDirectory(root: ExtensionPackageRoot): Promise<string[]> {
-    const extensions: string[] = [];
-
     if (!(await this.config.pathExists(root.path))) {
-      return extensions;
+      return [];
     }
 
     const entries = await this.config.readDirectory(root.path);
     if (root.layout === "installed") {
-      for (const entry of entries) {
-        if (entry.startsWith(".")) continue;
-        const packagePath = this.joinPath(root.path, entry);
-        const packageJsonPath = this.joinPath(packagePath, "package.json");
-        if (!(await this.config.pathExists(packageJsonPath))) continue;
-        const packageJson = parseExtensionPackageJson(
-          await this.config.readFile(packageJsonPath),
-        );
-        if (packageJson.ragdollExtension) extensions.push(packageJson.name);
-      }
-      return extensions;
+      const packages = await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.startsWith(".")) return [];
+          const packagePath = this.joinPath(root.path, entry);
+          const packageJsonPath = this.joinPath(packagePath, "package.json");
+          if (!(await this.config.pathExists(packageJsonPath))) return [];
+          const packageJson = parseExtensionPackageJson(
+            await this.config.readFile(packageJsonPath),
+          );
+          return packageJson.ragdollExtension ? [packageJson.name] : [];
+        }),
+      );
+      return packages.flat();
     }
 
-    for (const entry of entries) {
-      if (entry.startsWith("@")) {
-        const scopePath = this.joinPath(root.path, entry);
-        for (const scopedPackage of await this.config.readDirectory(
-          scopePath,
-        )) {
-          const packagePath = this.joinPath(scopePath, scopedPackage);
-          if (await this.isExtensionPackage(packagePath)) {
-            extensions.push(`${entry}/${scopedPackage}`);
-          }
+    const packages = await Promise.all(
+      entries.map(async (entry) => {
+        if (entry.startsWith("@")) {
+          const scopePath = this.joinPath(root.path, entry);
+          const scopeEntries = await this.config.readDirectory(scopePath);
+          const scopedPackages = await Promise.all(
+            scopeEntries.map(async (scopedPackage) => {
+              const packagePath = this.joinPath(scopePath, scopedPackage);
+              return (await this.isExtensionPackage(packagePath))
+                ? [`${entry}/${scopedPackage}`]
+                : [];
+            }),
+          );
+          return scopedPackages.flat();
         }
-      } else {
         const packagePath = this.joinPath(root.path, entry);
-        if (await this.isExtensionPackage(packagePath)) extensions.push(entry);
-      }
-    }
+        return (await this.isExtensionPackage(packagePath)) ? [entry] : [];
+      }),
+    );
 
-    return extensions;
+    return packages.flat();
   }
 
   /**

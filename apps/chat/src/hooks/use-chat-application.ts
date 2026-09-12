@@ -20,7 +20,6 @@ export function useChatApplication(service: ChatService) {
       changeTheme: service.changeTheme,
       changeVariant: service.changeVariant,
       clearConversation: service.clearConversation,
-      clearApiKey: service.clearApiKey,
     }),
     [service],
   );

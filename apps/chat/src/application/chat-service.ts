@@ -1,4 +1,3 @@
-import { citedResponse } from "../../electron/electron-api";
 import type { ChatMessage } from "../domain/chat";
 import { getVisibleMessages } from "../domain/chat";
 import type { ChatSettings } from "../domain/settings";
@@ -21,7 +20,7 @@ export interface ChatSnapshot {
 
 export class ChatService {
   private messages: ChatMessage[] = [];
-  private streamingContent = "";
+  private streamingMessage: ChatMessage | null = null;
   private conversationVersion = 0;
   private readonly settingsVersions: Record<keyof ChatSettings, number> = {
     theme: 0,
@@ -59,9 +58,16 @@ export class ChatService {
 
     const lifecycleVersion = ++this.lifecycleVersion;
     this.unsubscribeStreaming = this.gateway.subscribeToStreaming({
-      onText: (text) => {
+      onText: (text, messageId) => {
         if (this.lifecycleVersion !== lifecycleVersion) return;
-        this.streamingContent += text;
+        this.streamingMessage = {
+          id: messageId,
+          role: "assistant",
+          content:
+            (this.streamingMessage?.id === messageId
+              ? this.streamingMessage.content
+              : "") + text,
+        };
         this.publish({ isStreaming: true });
       },
       onStreamEnd: () => {
@@ -71,10 +77,10 @@ export class ChatService {
         if (this.lifecycleVersion !== lifecycleVersion) return;
         this.conversationVersion += 1;
         this.messages = conversation;
-        const hadStreamingContent = this.streamingContent.length > 0;
+        const hadStreamingContent = this.streamingMessage !== null;
         this.dropStreamingContentIfPersisted();
         this.publish(
-          hadStreamingContent && !this.streamingContent
+          hadStreamingContent && !this.streamingMessage
             ? { isStreaming: false }
             : {},
         );
@@ -105,7 +111,7 @@ export class ChatService {
     const send = Symbol("chat turn");
     this.activeSend = send;
     const lifecycleVersion = this.lifecycleVersion;
-    this.streamingContent = "";
+    this.streamingMessage = null;
     this.publish({ isLoading: true, isStreaming: true, error: null });
 
     let result: Awaited<ReturnType<ChatGateway["sendMessage"]>>;
@@ -119,7 +125,7 @@ export class ChatService {
       if (this.lifecycleVersion !== lifecycleVersion) {
         // A React subscription gap can lose text and the completion event.
         // Recover the persisted response without replaying the user turn.
-        this.streamingContent = "";
+        this.streamingMessage = null;
         const recoveryLifecycle = this.lifecycleVersion;
         const conversationVersion = this.conversationVersion;
         try {
@@ -143,7 +149,7 @@ export class ChatService {
       }
       if (this.activeSend === send) this.finishStream();
     } else {
-      this.streamingContent = "";
+      this.streamingMessage = null;
       this.publish({
         isLoading: false,
         isStreaming: false,
@@ -199,18 +205,8 @@ export class ChatService {
     try {
       await this.gateway.clearConversation();
       this.messages = [];
-      this.streamingContent = "";
+      this.streamingMessage = null;
       this.publish({ error: null });
-      return true;
-    } catch (error) {
-      this.reportError(error);
-      return false;
-    }
-  };
-
-  readonly clearApiKey = async (): Promise<boolean> => {
-    try {
-      await this.gateway.clearApiKey();
       return true;
     } catch (error) {
       this.reportError(error);
@@ -261,13 +257,12 @@ export class ChatService {
    * render together and the handoff is invisible.
    */
   private dropStreamingContentIfPersisted(): void {
-    const last = this.messages.at(-1);
+    const streamingMessage = this.streamingMessage;
     if (
-      this.streamingContent &&
-      last?.role === "assistant" &&
-      last.content === citedResponse(this.streamingContent).content
+      streamingMessage &&
+      this.messages.some((message) => message.id === streamingMessage.id)
     ) {
-      this.streamingContent = "";
+      this.streamingMessage = null;
     }
   }
 
@@ -277,7 +272,7 @@ export class ChatService {
       ...update,
       visibleMessages: getVisibleMessages(
         this.messages,
-        this.streamingContent || null,
+        this.streamingMessage,
         VISIBLE_MESSAGE_LIMIT,
       ),
     };

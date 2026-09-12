@@ -12,60 +12,51 @@ const base = {
   opacity: z.number().finite().min(0).max(1),
 };
 export const canvasElementSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      ...base,
-      type: z.literal("rect"),
-      x: coordinate,
-      y: coordinate,
-      width: size,
-      height: size,
-      radius: z.number().min(0).max(500),
-    })
-    .strict(),
-  z
-    .object({
-      ...base,
-      type: z.literal("ellipse"),
-      cx: coordinate,
-      cy: coordinate,
-      rx: size,
-      ry: size,
-    })
-    .strict(),
-  z
-    .object({
-      ...base,
-      type: z.literal("path"),
-      d: z
-        .string()
-        .min(1)
-        .max(12000)
-        .regex(/^[MmLlHhVvCcSsQqTtAaZz0-9eE+.,\s-]+$/),
-    })
-    .strict(),
-  z
-    .object({
-      ...base,
-      type: z.literal("text"),
-      x: coordinate,
-      y: coordinate,
-      text: z.string().min(1).max(2000),
-      fontSize: z.number().positive().max(300),
-      anchor: z.enum(["start", "middle", "end"]),
-    })
-    .strict(),
+  z.strictObject({
+    ...base,
+    type: z.literal("rect"),
+    x: coordinate,
+    y: coordinate,
+    width: size,
+    height: size,
+    radius: z.number().min(0).max(500),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("ellipse"),
+    cx: coordinate,
+    cy: coordinate,
+    rx: size,
+    ry: size,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("path"),
+    d: z
+      .string()
+      .min(1)
+      .max(12000)
+      .regex(/^[MmLlHhVvCcSsQqTtAaZz0-9eE+.,\s-]+$/),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("text"),
+    x: coordinate,
+    y: coordinate,
+    text: z.string().min(1).max(2000),
+    fontSize: z.number().positive().max(300),
+    anchor: z.enum(["start", "middle", "end"]),
+  }),
 ]);
 export type CanvasElement = z.infer<typeof canvasElementSchema>;
 export const canvasDocumentSchema = z
-  .object({
+  .strictObject({
     title: z.string().trim().min(1).max(120),
     width: size,
     height: size,
     background: paint,
     elements: z.array(canvasElementSchema).max(500),
   })
-  .strict()
   .refine(
     (document) =>
       new Set(document.elements.map((element) => element.id)).size ===

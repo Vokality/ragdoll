@@ -211,17 +211,6 @@ export class ExtensionSlotService {
         this.executeAction(slotId, { actionType, actionId: action.id }),
     });
 
-    if (state.panel.type === "canvas") {
-      return {
-        ...state,
-        panel: {
-          ...state.panel,
-          actions: state.panel.actions?.map((action) =>
-            attachAction("panel-action", action),
-          ),
-        },
-      };
-    }
     if (state.panel.type === "grid") {
       const attachCell = (cell: SerializedGridPanelCell): GridPanelCell => {
         const { canClick, ...metadata } = cell;
@@ -257,35 +246,49 @@ export class ExtensionSlotService {
       };
     }
 
-    const attachItem = (item: SerializedListPanelItem): ListPanelItem => {
-      const { canClick, canToggle, ...metadata } = item;
-      return {
-        ...metadata,
-        onClick: canClick
-          ? () =>
-              this.executeAction(slotId, {
-                actionType: "item-click",
-                actionId: item.id,
-              })
-          : undefined,
-        onToggle: canToggle
-          ? () =>
-              this.executeAction(slotId, {
-                actionType: "item-toggle",
-                actionId: item.id,
-              })
-          : undefined,
+    if (state.panel.type === "list") {
+      const attachItem = (item: SerializedListPanelItem): ListPanelItem => {
+        const { canClick, canToggle, ...metadata } = item;
+        return {
+          ...metadata,
+          onClick: canClick
+            ? () =>
+                this.executeAction(slotId, {
+                  actionType: "item-click",
+                  actionId: item.id,
+                })
+            : undefined,
+          onToggle: canToggle
+            ? () =>
+                this.executeAction(slotId, {
+                  actionType: "item-toggle",
+                  actionId: item.id,
+                })
+            : undefined,
+        };
       };
-    };
-    const attachSection = (
-      section: SerializedListPanelSection,
-    ): ListPanelSection => ({
-      ...section,
-      actions: section.actions?.map((action) =>
-        attachAction("section-action", action),
-      ),
-      items: section.items.map(attachItem),
-    });
+      const attachSection = (
+        section: SerializedListPanelSection,
+      ): ListPanelSection => ({
+        ...section,
+        actions: section.actions?.map((action) =>
+          attachAction("section-action", action),
+        ),
+        items: section.items.map(attachItem),
+      });
+
+      return {
+        ...state,
+        panel: {
+          ...state.panel,
+          actions: state.panel.actions?.map((action) =>
+            attachAction("panel-action", action),
+          ),
+          sections: state.panel.sections?.map(attachSection),
+          items: state.panel.items?.map(attachItem),
+        },
+      };
+    }
 
     return {
       ...state,
@@ -294,8 +297,6 @@ export class ExtensionSlotService {
         actions: state.panel.actions?.map((action) =>
           attachAction("panel-action", action),
         ),
-        sections: state.panel.sections?.map(attachSection),
-        items: state.panel.items?.map(attachItem),
       },
     };
   }

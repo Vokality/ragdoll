@@ -1,3 +1,4 @@
+import { Button } from "./ui/button";
 import type { CSSProperties } from "react";
 
 interface SuggestionChipsProps {
@@ -36,7 +37,8 @@ export function SuggestionChips({ onPick, slots }: SuggestionChipsProps) {
       <p style={styles.caption}>What would help today?</p>
       <div className="suggestion-options" style={styles.chips}>
         {suggestions.map((suggestion, index) => (
-          <button
+          <Button
+            variant="plain"
             key={suggestion.label}
             type="button"
             className="chip"
@@ -44,7 +46,7 @@ export function SuggestionChips({ onPick, slots }: SuggestionChipsProps) {
             onClick={() => onPick(suggestion.prompt)}
           >
             {suggestion.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>

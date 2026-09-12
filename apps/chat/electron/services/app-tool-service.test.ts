@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import type { SlotInfo } from "../electron-api.js";
 import { AppToolService } from "./app-tool-service.js";
 import { ExtensionCardService } from "./extension-card-service.js";
-import type { AgentToolService } from "./openai-service.js";
+import type { AgentToolService } from "./agent-service.js";
 
 function setup() {
   let visible = true;

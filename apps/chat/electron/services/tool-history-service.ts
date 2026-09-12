@@ -34,6 +34,7 @@ export class ToolHistoryService implements AgentToolHistory {
 
   async complete(executionId: string, result: AgentToolResult): Promise<void> {
     // Use the same JSON boundary as the model transport, then validate it.
+    // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone -- Serialization intentionally applies toJSON and omits non-JSON fields before persistence.
     const serialized: unknown = JSON.parse(JSON.stringify(result));
     const persisted = persistedToolResultSchema.parse(serialized);
     await this.storage.update((draft) => {

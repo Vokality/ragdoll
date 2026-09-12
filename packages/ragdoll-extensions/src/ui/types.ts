@@ -1,6 +1,7 @@
 import type {
   ExtensionSlot,
   CanvasPanelConfig,
+  DocumentPanelConfig,
   CardsAnswerInput,
   CardsPanelCardBase,
   CardsPanelConfig,
@@ -27,6 +28,7 @@ import type {
 
 export type {
   CanvasPanelConfig,
+  DocumentPanelConfig,
   CardsAnswerInput,
   CardsPanelCardBase,
   CardsPanelConfig,

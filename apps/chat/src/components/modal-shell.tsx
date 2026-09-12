@@ -1,3 +1,4 @@
+import { IconButton } from "./ui/button";
 import {
   useLayoutEffect,
   useRef,
@@ -71,29 +72,25 @@ export function ModalShell({
           style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
         >
           {onBack && (
-            <button
-              type="button"
-              className="icon-btn"
+            <IconButton
               style={styles.closeButton}
               aria-label="Back"
               onClick={onBack}
             >
               <span aria-hidden="true">←</span>
-            </button>
+            </IconButton>
           )}
           <h2 ref={headingRef} tabIndex={-1} style={styles.title}>
             {title}
           </h2>
         </div>
-        <button
-          type="button"
+        <IconButton
           onClick={onClose}
-          className="icon-btn"
           style={styles.closeButton}
           aria-label={closeLabel ?? `Close ${title}`}
         >
           <CloseIcon />
-        </button>
+        </IconButton>
       </div>
       <div className="modal-body">{children}</div>
     </dialog>

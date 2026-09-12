@@ -1,6 +1,7 @@
 export {
   createCardsSlotState,
   createDerivedSlotState,
+  createDocumentSlotState,
   createGridSlotState,
   createHiddenSlotState,
   createListSlotState,

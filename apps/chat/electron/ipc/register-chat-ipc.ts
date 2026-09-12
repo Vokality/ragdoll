@@ -16,8 +16,13 @@ export function registerChatIpc(
   );
   ipc.handle(IPC_CHANNELS.chat.sendMessage, (event, message: unknown) =>
     chat.sendMessage(userMessageSchema.parse(message), {
-      streamingText: (text) =>
-        sendRendererEvent(event.sender, IPC_CHANNELS.chat.streamingText, text),
+      streamingText: (text, messageId) =>
+        sendRendererEvent(
+          event.sender,
+          IPC_CHANNELS.chat.streamingText,
+          text,
+          messageId,
+        ),
       streamEnded: () =>
         sendRendererEvent(event.sender, IPC_CHANNELS.chat.streamEnd),
     }),

@@ -1,15 +1,6 @@
-import type {
-  AssistantPhase,
-  SourceCitation,
-} from "../../electron/electron-api";
-export type ChatRole = "user" | "assistant";
-
-export interface ChatMessage {
-  role: ChatRole;
-  content: string;
-  phase?: AssistantPhase | null;
-  sources?: SourceCitation[];
-}
+import type { ChatMessageDto } from "../../electron/electron-api";
+export type ChatMessage = ChatMessageDto;
+export type ChatRole = ChatMessage["role"];
 
 /**
  * Compute the subset of messages that should be visible in the UI.
@@ -17,11 +8,9 @@ export interface ChatMessage {
  */
 export function getVisibleMessages(
   messages: ChatMessage[],
-  streamingContent?: string | null,
+  streamingMessage?: ChatMessage | null,
   limit = 2,
 ): ChatMessage[] {
-  const history = streamingContent
-    ? [...messages, { role: "assistant" as const, content: streamingContent }]
-    : messages;
+  const history = streamingMessage ? [...messages, streamingMessage] : messages;
   return history.slice(-limit);
 }

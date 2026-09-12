@@ -2,7 +2,7 @@ import type { ChatMessage } from "../../domain/chat";
 import type { ChatSettings } from "../../domain/settings";
 
 export interface StreamingHandlers {
-  onText: (text: string) => void;
+  onText: (text: string, messageId: string) => void;
   onStreamEnd: () => void;
   onConversationChanged: (conversation: ChatMessage[]) => void;
 }
@@ -21,5 +21,4 @@ export interface ChatGateway {
   onFunctionCall(
     callback: (name: string, args: Record<string, unknown>) => void,
   ): () => void;
-  clearApiKey(): Promise<void>;
 }

@@ -4,6 +4,8 @@ import { createExtension as createCharacterExtension } from "@vokality/ragdoll-e
 import characterPackageJson from "@vokality/ragdoll-extension-character/manifest" with { type: "json" };
 import { createExtension as createFlashCardsExtension } from "@vokality/ragdoll-extension-flash-cards";
 import flashCardsPackageJson from "@vokality/ragdoll-extension-flash-cards/manifest" with { type: "json" };
+import { createExtension as createNotesExtension } from "@vokality/ragdoll-extension-notes";
+import notesPackageJson from "@vokality/ragdoll-extension-notes/manifest" with { type: "json" };
 import { createExtension as createPomodoroExtension } from "@vokality/ragdoll-extension-pomodoro";
 import pomodoroPackageJson from "@vokality/ragdoll-extension-pomodoro/manifest" with { type: "json" };
 import { createExtension as createSpotifyExtension } from "@vokality/ragdoll-extension-spotify";
@@ -12,6 +14,8 @@ import { createExtension as createTasksExtension } from "@vokality/ragdoll-exten
 import tasksPackageJson from "@vokality/ragdoll-extension-tasks/manifest" with { type: "json" };
 import { createExtension as createTicTacToeExtension } from "@vokality/ragdoll-extension-tic-tac-toe";
 import ticTacToePackageJson from "@vokality/ragdoll-extension-tic-tac-toe/manifest" with { type: "json" };
+import { createExtension as createWorkingListExtension } from "@vokality/ragdoll-extension-working-list";
+import workingListPackageJson from "@vokality/ragdoll-extension-working-list/manifest" with { type: "json" };
 import {
   createExtensionPackageDescriptor,
   parseExtensionPackageJson,
@@ -33,6 +37,8 @@ function defineBuiltInExtension(
 export const BUILT_IN_EXTENSIONS = [
   defineBuiltInExtension(characterPackageJson, createCharacterExtension),
   defineBuiltInExtension(tasksPackageJson, createTasksExtension),
+  defineBuiltInExtension(workingListPackageJson, createWorkingListExtension),
+  defineBuiltInExtension(notesPackageJson, createNotesExtension),
   defineBuiltInExtension(pomodoroPackageJson, createPomodoroExtension),
   defineBuiltInExtension(spotifyPackageJson, createSpotifyExtension),
   defineBuiltInExtension(ticTacToePackageJson, createTicTacToeExtension),

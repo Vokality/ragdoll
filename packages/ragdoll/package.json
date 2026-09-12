@@ -53,10 +53,10 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "@types/three": "^0.185.4",
+    "@types/three": "^0.186.0",
     "typescript": "catalog:"
   },
   "dependencies": {
-    "three": "^0.185.1"
+    "three": "^0.186.0"
   }
 }

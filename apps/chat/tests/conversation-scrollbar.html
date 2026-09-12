@@ -22,6 +22,7 @@
       };
       const root = createRoot(document.getElementById("root"));
       const messages = Array.from({ length: 30 }, (_, i) => ({
+        id: `message-${i}`,
         role: "user",
         content: `Message ${i}: a conversation long enough to scroll.`,
       }));
@@ -44,10 +45,26 @@
           !scroller.classList.contains("is-scrolling"),
           "Restoring chat reveals the scrollbar",
         );
+        const retainedBubble = scroller.querySelectorAll(".bubble")[1];
         await act(async () =>
           root.render(
             React.createElement(ConversationBubbles, {
-              messages: [...messages, { role: "user", content: "New message" }],
+              messages: messages.slice(1),
+              isStreaming: false,
+            }),
+          ),
+        );
+        check(
+          scroller.querySelector(".bubble") === retainedBubble,
+          "Trimming history remounted or reused the wrong message bubble",
+        );
+        await act(async () =>
+          root.render(
+            React.createElement(ConversationBubbles, {
+              messages: [
+                ...messages,
+                { id: "new-message", role: "user", content: "New message" },
+              ],
               isStreaming: false,
             }),
           ),

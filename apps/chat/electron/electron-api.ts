@@ -1,3 +1,8 @@
+import type {
+  ModelProviderId,
+  ModelProviderInfo,
+  ProviderKey,
+} from "./domain/model-provider.js";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { z } from "zod";
 import type {
@@ -8,6 +13,8 @@ import type { PresetIconName } from "@vokality/ragdoll-extensions/slots";
 
 export type OperationResult =
   { success: true } | { success: false; error: string };
+
+export type { ModelProviderId, ModelProviderInfo, ProviderKey };
 
 export type ApiKeyValidationResult =
   { valid: true } | { valid: false; error: string };
@@ -116,24 +123,20 @@ export const connectionUrlSchema = z
   }, "Use HTTPS (or local HTTP), without credentials, query parameters, or a fragment");
 
 export const connectionAuthenticationSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("none") }).strict(),
-  z.object({ type: z.literal("bearer") }).strict(),
-  z
-    .object({
-      type: z.literal("oauth"),
-      clientId: z.string().trim().min(1).optional(),
-      clientMetadataUrl: z.url({ protocol: /^https$/ }).optional(),
-      callbackPort: z.number().int().min(1024).max(65535).optional(),
-    })
-    .strict(),
+  z.strictObject({ type: z.literal("none") }),
+  z.strictObject({ type: z.literal("bearer") }),
+  z.strictObject({
+    type: z.literal("oauth"),
+    clientId: z.string().trim().min(1).optional(),
+    clientMetadataUrl: z.url({ protocol: /^https$/ }).optional(),
+    callbackPort: z.number().int().min(1024).max(65535).optional(),
+  }),
 ]);
-export const connectionConfigSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    serverUrl: connectionUrlSchema,
-    authentication: connectionAuthenticationSchema,
-  })
-  .strict();
+export const connectionConfigSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80),
+  serverUrl: connectionUrlSchema,
+  authentication: connectionAuthenticationSchema,
+});
 export const connectionRecordSchema = connectionConfigSchema.extend({
   id: z.uuid(),
   enabled: z.boolean(),
@@ -163,16 +166,14 @@ export interface ConnectionInfo extends ConnectionRecord {
 
 export const WORKING_MEMORY_LIMIT = 50;
 export const memoryTierSchema = z.enum(["working", "long_term"]);
-export const memoryFactSchema = z
-  .object({
-    id: z.uuid(),
-    text: z.string().trim().min(1).max(240),
-    // Defaults migrate the original local notes without losing their IDs or text.
-    tier: memoryTierSchema.default("working"),
-    createdAt: z.number().int().nonnegative().default(0),
-    lastUsedAt: z.number().int().nonnegative().default(0),
-  })
-  .strict();
+export const memoryFactSchema = z.strictObject({
+  id: z.uuid(),
+  text: z.string().trim().min(1).max(240),
+  // Defaults migrate the original local notes without losing their IDs or text.
+  tier: memoryTierSchema.default("working"),
+  createdAt: z.number().int().nonnegative().default(0),
+  lastUsedAt: z.number().int().nonnegative().default(0),
+});
 export type MemoryFact = z.infer<typeof memoryFactSchema>;
 export type MemoryTier = z.infer<typeof memoryTierSchema>;
 const memoryFactsSchema = z
@@ -192,31 +193,21 @@ const memoryFactsSchema = z
         message: "Memory fact IDs must be unique",
       });
   });
-export const userProfileSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80).nullable().default(null),
-    nameDeclined: z.boolean().default(false),
-    notes: memoryFactsSchema.default([]),
-    longTermSummary: z
-      .string()
-      .trim()
-      .min(1)
-      .max(2000)
-      .nullable()
-      .default(null),
-    checkInsEnabled: z.boolean().default(true),
-    revision: z.number().int().nonnegative().default(0),
-  })
-  .strict();
+export const userProfileSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80).nullable().default(null),
+  nameDeclined: z.boolean().default(false),
+  notes: memoryFactsSchema.default([]),
+  longTermSummary: z.string().trim().min(1).max(2000).nullable().default(null),
+  checkInsEnabled: z.boolean().default(true),
+  revision: z.number().int().nonnegative().default(0),
+});
 export type UserProfile = z.infer<typeof userProfileSchema>;
-export const profileEditSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80).nullable(),
-    notes: z.array(memoryFactSchema.pick({ id: true, text: true, tier: true })),
-    checkInsEnabled: z.boolean(),
-    revision: z.number().int().nonnegative(),
-  })
-  .strict();
+export const profileEditSchema = z.strictObject({
+  name: z.string().trim().min(1).max(80).nullable(),
+  notes: z.array(memoryFactSchema.pick({ id: true, text: true, tier: true })),
+  checkInsEnabled: z.boolean(),
+  revision: z.number().int().nonnegative(),
+});
 export type ProfileEdit = z.infer<typeof profileEditSchema>;
 export interface ExperienceSnapshot {
   profile: UserProfile;
@@ -237,6 +228,8 @@ export const IPC_CHANNELS = {
   },
   auth: {
     hasKey: "auth:has-key",
+    providers: "auth:providers",
+    selectProvider: "auth:select-provider",
     setKey: "auth:set-key",
     validateKey: "auth:validate-key",
     clearKey: "auth:clear-key",
@@ -333,6 +326,7 @@ export interface UpdateCheckResult {
 }
 
 export interface ChatMessageDto {
+  id: string;
   phase?: AssistantPhase | null;
   sources?: SourceCitation[];
   role: "user" | "assistant";
@@ -357,16 +351,20 @@ export interface ElectronAPI {
   onConnectionsChanged(callback: () => void): () => void;
 
   hasApiKey(): Promise<boolean>;
-  setApiKey(key: string): Promise<OperationResult>;
-  validateApiKey(key: string): Promise<ApiKeyValidationResult>;
-  clearApiKey(): Promise<OperationResult>;
+  getModelProviders(): Promise<ModelProviderInfo[]>;
+  selectModelProvider(provider: ModelProviderId): Promise<OperationResult>;
+  setApiKey(key: ProviderKey): Promise<OperationResult>;
+  validateApiKey(key: ProviderKey): Promise<ApiKeyValidationResult>;
+  clearApiKey(provider?: ModelProviderId): Promise<OperationResult>;
   openExternal(url: string): Promise<OperationResult>;
 
   sendMessage(message: string): Promise<OperationResult>;
   cancelMessage(): Promise<OperationResult>;
   getConversation(): Promise<ChatMessageDto[]>;
   clearConversation(): Promise<OperationResult>;
-  onStreamingText(callback: (text: string) => void): () => void;
+  onStreamingText(
+    callback: (text: string, messageId: string) => void,
+  ): () => void;
   onConversationChanged(
     callback: (conversation: ChatMessageDto[]) => void,
   ): () => void;
@@ -415,19 +413,17 @@ export interface ElectronAPI {
   updateExtension(extensionId: string): Promise<InstallResult>;
 }
 
-export const sourceCitationSchema = z
-  .object({
-    url: z.url().refine((value) => {
-      const url = new URL(value);
-      return (
-        (url.protocol === "https:" || url.protocol === "http:") &&
-        !url.username &&
-        !url.password
-      );
-    }, "Source must be a public HTTP(S) link"),
-    title: z.string().trim().min(1),
-  })
-  .strict();
+export const sourceCitationSchema = z.strictObject({
+  url: z.url().refine((value) => {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      !url.username &&
+      !url.password
+    );
+  }, "Source must be a public HTTP(S) link"),
+  title: z.string().trim().min(1),
+});
 export type SourceCitation = z.infer<typeof sourceCitationSchema>;
 
 export type AssistantPhase = "commentary" | "final_answer";

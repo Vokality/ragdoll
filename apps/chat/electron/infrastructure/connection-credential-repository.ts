@@ -9,34 +9,28 @@ import {
 import type { EncryptionService } from "./encryption-service.js";
 import type { StorageRepository } from "./storage-repository.js";
 
-export const connectionCredentialsSchema = z
-  .object({
-    bearerToken: z.string().optional(),
-    oauth: z
-      .object({
-        redirectUri: z.string().url(),
-        client: OAuthClientInformationSchema.optional(),
-        tokens: OAuthTokensSchema.optional(),
-        expiresAt: z.number().optional(),
-        requireResponseIssuer: z.boolean().optional(),
-        discovery: z
-          .object({
-            authorizationServerUrl: z.string(),
-            resourceMetadataUrl: z.string().optional(),
-            resourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
-            authorizationServerMetadata: z
-              .union([
-                OAuthMetadataSchema,
-                OpenIdProviderDiscoveryMetadataSchema,
-              ])
-              .optional(),
-          })
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
+export const connectionCredentialsSchema = z.strictObject({
+  bearerToken: z.string().optional(),
+  oauth: z
+    .strictObject({
+      redirectUri: z.string().url(),
+      client: OAuthClientInformationSchema.optional(),
+      tokens: OAuthTokensSchema.optional(),
+      expiresAt: z.number().optional(),
+      requireResponseIssuer: z.boolean().optional(),
+      discovery: z
+        .object({
+          authorizationServerUrl: z.string(),
+          resourceMetadataUrl: z.string().optional(),
+          resourceMetadata: OAuthProtectedResourceMetadataSchema.optional(),
+          authorizationServerMetadata: z
+            .union([OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema])
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
 export type ConnectionCredentials = z.infer<typeof connectionCredentialsSchema>;
 
 export class ConnectionCredentialRepository {

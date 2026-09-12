@@ -9,38 +9,35 @@ import {
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
 
 export const memoryMutationSchema = z.discriminatedUnion("action", [
-  z
-    .object({
-      action: z.literal("set_name"),
-      text: z.string().trim().min(1).max(80),
-    })
-    .strict(),
-  z.object({ action: z.literal("skip_name") }).strict(),
-  z.object({ action: z.literal("forget_name") }).strict(),
-  z
-    .object({
-      action: z.literal("remember"),
-      text: z.string().trim().min(1).max(240),
-      tier: memoryTierSchema,
-    })
-    .strict(),
-  z.object({ action: z.literal("forget_note"), id: z.uuid() }).strict(),
-  z
-    .object({ action: z.literal("move"), id: z.uuid(), tier: memoryTierSchema })
-    .strict(),
-  z
-    .object({ action: z.literal("use"), ids: z.array(z.uuid()).min(1).max(50) })
-    .strict(),
+  z.strictObject({
+    action: z.literal("set_name"),
+    text: z.string().trim().min(1).max(80),
+  }),
+  z.strictObject({ action: z.literal("skip_name") }),
+  z.strictObject({ action: z.literal("forget_name") }),
+  z.strictObject({
+    action: z.literal("remember"),
+    text: z.string().trim().min(1).max(240),
+    tier: memoryTierSchema,
+  }),
+  z.strictObject({ action: z.literal("forget_note"), id: z.uuid() }),
+  z.strictObject({
+    action: z.literal("move"),
+    id: z.uuid(),
+    tier: memoryTierSchema,
+  }),
+  z.strictObject({
+    action: z.literal("use"),
+    ids: z.array(z.uuid()).min(1).max(50),
+  }),
 ]);
-export const memorySearchSchema = z
-  .object({
-    query: z.string().trim().max(240),
-    offset: z.number().int().nonnegative().default(0),
-  })
-  .strict();
+export const memorySearchSchema = z.strictObject({
+  query: z.string().trim().max(240),
+  offset: z.number().int().nonnegative().default(0),
+});
 
 /** Includes content and membership, but not access timestamps. */
-export function longTermSignature(profile: UserProfile): string {
+export function longTermSnapshot(profile: UserProfile): string {
   return JSON.stringify(
     profile.notes
       .filter((fact) => fact.tier === "long_term")
@@ -59,7 +56,7 @@ function archiveOverflow(profile: UserProfile): void {
 }
 function finishChange(profile: UserProfile, before: string): void {
   archiveOverflow(profile);
-  if (before !== longTermSignature(profile)) profile.longTermSummary = null;
+  if (before !== longTermSnapshot(profile)) profile.longTermSummary = null;
   profile.revision += 1;
 }
 
@@ -106,11 +103,11 @@ export class UserProfileService {
     };
   }
 
-  async saveSummary(signature: string, summary: string): Promise<boolean> {
+  async saveSummary(snapshot: string, summary: string): Promise<boolean> {
     const text = z.string().trim().min(1).max(2000).parse(summary);
     let saved = false;
     await this.storage.update((draft) => {
-      if (longTermSignature(draft.profile) !== signature) return;
+      if (longTermSnapshot(draft.profile) !== snapshot) return;
       draft.profile.longTermSummary = text;
       saved = true;
     });
@@ -128,7 +125,7 @@ export class UserProfileService {
         );
       if (new Set(edit.notes.map((note) => note.id)).size !== edit.notes.length)
         throw new Error("Memory fact IDs must be unique");
-      const before = longTermSignature(profile);
+      const before = longTermSnapshot(profile);
       const now = this.now();
       profile.notes = edit.notes.map((note): MemoryFact => {
         const previous = profile.notes.find((fact) => fact.id === note.id);
@@ -154,7 +151,7 @@ export class UserProfileService {
     const mutation = memoryMutationSchema.parse(input);
     await this.storage.update((draft) => {
       const profile = draft.profile;
-      const before = longTermSignature(profile);
+      const before = longTermSnapshot(profile);
       const now = this.now();
       switch (mutation.action) {
         case "set_name":
@@ -198,16 +195,15 @@ export class UserProfileService {
           fact.lastUsedAt = now;
           break;
         }
-        case "use":
-          if (
-            mutation.ids.some(
-              (id) => !profile.notes.some((note) => note.id === id),
-            )
-          )
+        case "use": {
+          const usedIds = new Set(mutation.ids);
+          const knownIds = new Set(profile.notes.map((note) => note.id));
+          if (mutation.ids.some((id) => !knownIds.has(id)))
             throw new Error("Unknown memory fact");
           for (const fact of profile.notes)
-            if (mutation.ids.includes(fact.id)) fact.lastUsedAt = now;
+            if (usedIds.has(fact.id)) fact.lastUsedAt = now;
           break;
+        }
       }
       finishChange(profile, before);
     });

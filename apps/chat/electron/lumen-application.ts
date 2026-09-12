@@ -1,3 +1,4 @@
+import { ProviderAgentFactory } from "./services/provider-agent-factory.js";
 import { UserProfileService } from "./services/user-profile-service.js";
 import { ExperienceService } from "./services/experience-service.js";
 import { PersonalAgent } from "./services/personal-agent.js";
@@ -5,12 +6,8 @@ import { ConnectionService } from "./services/connection-service.js";
 import { ConnectionToolService } from "./services/connection-tool-service.js";
 import { SdkMcpConnectionFactory } from "./services/mcp-connection-client.js";
 import { ConnectionCredentialRepository } from "./infrastructure/connection-credential-repository.js";
-import { createOpenAIResponseSessionFactory } from "./services/openai-response-session.js";
+import { createModelProviders } from "./services/model-provider.js";
 import { WebToolService } from "./services/web-tool-service.js";
-import {
-  OpenAIWebSearchService,
-  createWebSearchTransport,
-} from "./services/web-search-service.js";
 import { ToolHistoryService } from "./services/tool-history-service.js";
 import { ExtensionCardService } from "./services/extension-card-service.js";
 import { AppToolService } from "./services/app-tool-service.js";
@@ -158,28 +155,32 @@ export class LumenApplication {
         blurred: () => this.experience.blur(),
       },
     );
-    this.apiKeys = new ApiKeyService(this.storage, safeStorage);
+    this.apiKeys = new ApiKeyService(
+      this.storage,
+      safeStorage,
+      createModelProviders(),
+    );
     this.chat = new ChatApplicationService(
       this.storage,
-      this.apiKeys,
-      new PersonalAgent(
-        storage,
-        this.profile,
-        this.experience,
-        new ConnectionToolService(
-          new WebToolService(
-            new AppToolService(this.extensions, this.cards),
-            new OpenAIWebSearchService(
-              this.apiKeys,
-              this.config.chat,
-              createWebSearchTransport(),
-            ),
-          ),
-          this.connections,
-        ),
+      new ProviderAgentFactory(
+        this.apiKeys,
         this.config.chat,
-        createOpenAIResponseSessionFactory(),
-        new ToolHistoryService(this.storage),
+        ({ config, sessions, webSearch }) =>
+          new PersonalAgent(
+            storage,
+            this.profile,
+            this.experience,
+            new ConnectionToolService(
+              new WebToolService(
+                new AppToolService(this.extensions, this.cards),
+                webSearch,
+              ),
+              this.connections,
+            ),
+            config,
+            sessions,
+            new ToolHistoryService(this.storage),
+          ),
       ),
       (conversation) => this.rendererEvents.conversationChanged(conversation),
       (error) => {
