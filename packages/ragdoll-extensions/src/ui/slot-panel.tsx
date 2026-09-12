@@ -497,7 +497,7 @@ function GridPanel({ config, onClose }: GridPanelProps) {
           {result ? (
             <GridResult result={result} />
           ) : !hasVisibleGrid ? (
-            <div style={styles.emptyState}>
+            <div className="slot-panel-grid-empty" style={styles.emptyState}>
               <p style={styles.emptyText}>{emptyMessage ?? "No cells"}</p>
             </div>
           ) : (
