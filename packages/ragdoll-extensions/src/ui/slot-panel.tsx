@@ -1007,9 +1007,9 @@ const panelStyles = `
   .slot-panel-document-body { min-width: 0; }
   .slot-panel-grid-viewport { min-height: 0; }
   .slot-panel-grid {
-    width: 220px;
+    height: min(180px, 100%);
+    width: auto;
     max-width: 100%;
-    max-height: 100%;
     aspect-ratio: var(--slot-panel-grid-columns, 1) / var(--slot-panel-grid-rows, 1);
   }
   .slot-panel-grid-cell { min-width: 0; min-height: 0; }
@@ -1270,7 +1270,7 @@ const styles: Record<string, CSSProperties> = {
     wordBreak: "break-word",
   },
   gridContent: {
-    flex: 1,
+    flex: "1 1 0",
     minHeight: 0,
     display: "flex",
     flexDirection: "column",
@@ -1278,12 +1278,13 @@ const styles: Record<string, CSSProperties> = {
     padding: "var(--slot-panel-content-padding, 16px 20px 20px)",
   },
   gridViewport: {
-    flex: 1,
+    flex: "1 1 0",
     minHeight: 0,
     width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   gridResult: {
     width: "100%",
