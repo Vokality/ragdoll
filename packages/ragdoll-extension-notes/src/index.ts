@@ -313,7 +313,7 @@ async function createRuntime(
       {
         id: `${DEFAULT_EXTENSION_ID}.main`,
         label: "Notes",
-        icon: "bookmark",
+        icon: "notebook",
         priority: 85,
         state: slotState,
       },

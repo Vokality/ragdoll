@@ -131,6 +131,12 @@ The root Bun workspace uses one lockfile and a dependency catalog. Build order i
 
 Each workspace cleans only its own output before compilation, preventing deleted source files from surviving in publish artifacts.
 
+Lumen development uses `Bun.build` for executable workspace modules and Electron bundles, and `Bun.serve` with HTML imports for renderer hot reload. The launcher owns both the server and Electron process and stops the server when Electron exits. Development builds omit declarations; normal library builds and type checks generate and validate the public declarations before publishing.
+
+Production renderer builds use Bun's HTML bundler with relative asset URLs for Electron's `file://` loading. Browser regressions bundle their HTML and adjacent module files with Bun, serve only the generated fixtures on an ephemeral loopback port, and run Electron with an isolated profile. The production renderer is also exercised through the real preload and host.
+
+Documentation uses `Bun.markdown`, `HTMLRewriter`, `Bun.build`, and `Bun.serve`. The static build validates page, asset, and fragment links before writing `docs/site/dist`; GitHub Pages serves that output at `/ragdoll/`. Development output is isolated in `docs/site/.dev`.
+
 `scripts/verify-architecture.ts` (run by `bun run typecheck`) checks source imports and `package.json` dependency graphs for the rules above. It skips test files, does not prove `serializeSlotState` behavior, and does not inspect Electron IPC runtime wiring beyond channel-name literals in `apps/chat`.
 
 ## Lumen connections

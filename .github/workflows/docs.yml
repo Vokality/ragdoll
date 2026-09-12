@@ -4,18 +4,18 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/site/**'
-      - '.github/workflows/docs.yml'
-      - 'scripts/run-js-bin.ts'
-      - 'package.json'
-      - 'bun.lock'
+      - "docs/site/**"
+      - ".github/workflows/docs.yml"
+      - "docs/README.md"
+      - "package.json"
+      - "bun.lock"
   pull_request:
     paths:
-      - 'docs/site/**'
-      - '.github/workflows/docs.yml'
-      - 'scripts/run-js-bin.ts'
-      - 'package.json'
-      - 'bun.lock'
+      - "docs/site/**"
+      - ".github/workflows/docs.yml"
+      - "docs/README.md"
+      - "package.json"
+      - "bun.lock"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
-          path: docs/site/.vitepress/dist
+          path: docs/site/dist
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

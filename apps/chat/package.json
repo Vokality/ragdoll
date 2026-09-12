@@ -27,20 +27,21 @@
   "type": "module",
   "scripts": {
     "prebuild": "bun run clean",
-    "dev": "bun run ../../scripts/run-js-bin.ts vite",
-    "build": "bun run ../../scripts/run-typescript.ts && bun run ../../scripts/run-js-bin.ts vite build && bun run build:electron",
+    "dev": "bun run scripts/renderer-server.ts",
+    "build": "bun run ../../scripts/run-typescript.ts && bun run scripts/build-renderer.ts && bun run build:electron",
     "build:electron": "bun run scripts/build-electron.ts",
-    "preview": "bun run ../../scripts/run-js-bin.ts vite preview",
+    "preview": "bun run scripts/preview.ts",
     "electron": "bunx --bun --no-install electron .",
-    "electron:dev": "bun run --cwd ../.. build:libraries && bun run build:electron && bunx --bun --no-install concurrently -n VITE,ELECTRON -c cyan,yellow \"bun run ../../scripts/run-js-bin.ts vite\" \"bunx --bun --no-install wait-on http://localhost:5173 && bunx --bun --no-install electron .\"",
-    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.electron.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.preload.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.browser-tests.json --noEmit",
+    "electron:dev": "bun run scripts/dev.ts",
+    "typecheck": "bun run ../../scripts/run-typescript.ts --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.electron.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.preload.json --noEmit && bun run ../../scripts/run-typescript.ts -p tsconfig.browser-tests.json --noEmit && bun run ../../scripts/run-typescript.ts -p scripts/tsconfig.json --noEmit",
     "lint": "bun run ../../scripts/run-js-bin.ts oxlint .",
-    "test": "bun test src/**/*.test.ts electron/**/*.test.ts",
+    "test": "bun test src/**/*.test.ts electron/**/*.test.ts scripts/**/*.test.ts",
     "clean": "bun run ../../scripts/clean.ts dist",
-    "test:browser": "bun run scripts/test-browser.ts"
+    "test:browser": "bun run scripts/build-renderer.ts && bun run scripts/test-browser.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@vokality/ragdoll": "workspace:*",
     "@vokality/ragdoll-extension-canvas": "workspace:*",
     "@vokality/ragdoll-extension-character": "workspace:*",
@@ -67,12 +68,8 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@types/semver": "^7.8.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "concurrently": "^10.0.5",
     "electron": "^44.3.0",
     "electron-builder": "26.15.3",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "wait-on": "^9.1.0"
+    "typescript": "catalog:"
   }
 }

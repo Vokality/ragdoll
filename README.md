@@ -39,7 +39,7 @@ bun install --frozen-lockfile
 bun run dev:chat
 ```
 
-`dev:chat` builds the shared packages and Electron main process before starting the Vite renderer on `http://localhost:5173` and the Lumen desktop window. Use the desktop window: the renderer relies on Electron for credentials, storage, and tools.
+`dev:chat` uses Bun to build the shared runtime modules and Electron main process before starting the Bun renderer on `http://localhost:5173` and the Lumen desktop window. Use the desktop window: the renderer relies on Electron for credentials, storage, and tools.
 
 On first launch:
 

@@ -6,7 +6,7 @@ Run `bun install --frozen-lockfile`, then `bun run dev:chat` from the repository
 
 ## The window is blank
 
-Check that the renderer terminal is serving `http://localhost:5173`. Stop the previous development command and restart `bun run dev:chat` after main-process, preload, shared-package, or dependency changes. Renderer-only edits reload through Vite.
+Check that the renderer terminal is serving `http://localhost:5173`. Stop the previous development command and restart `bun run dev:chat` after main-process, preload, shared-package, or dependency changes. Renderer-only edits reload through Bun’s hot reload.
 
 A browser tab at the renderer URL is not a standalone Lumen client; use the Electron window.
 

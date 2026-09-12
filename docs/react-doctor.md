@@ -79,7 +79,6 @@ workspace dependencies.
 | React / React DOM | 19.2.8  | 19.3.0  |
 | React types       | 19.2.18 | 19.3.0  |
 | React DOM types   | 19.2.7  | 19.3.0  |
-| Vite              | 8.2.2   | 8.3.0   |
 | Zod               | 4.5.4   | 4.6.2   |
 | Three.js          | 0.185.1 | 0.186.0 |
 | Three.js types    | 0.185.4 | 0.186.0 |
@@ -93,40 +92,19 @@ Other direct dependencies were already at their latest stable releases.
 Node types retain the existing Node 26 line and use its newest release;
 the registry's `latest` tag points to the older Node 22 line.
 
-## Accepted upstream dependency advisories
-
-The user chose to retain **VitePress 1.6.4**, the latest stable release,
-instead of adopting VitePress 2.0 alpha. `bun audit --json` still reports
-four advisories in its development toolchain:
-
-| Dependency path                          | Advisory                                                                                                                                             | Audit severity |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| VitePress → Vite 5.4.21 → esbuild 0.21.5 | [GHSA-67mh-4wv8-2f99](https://github.com/evanw/esbuild/security/advisories/GHSA-67mh-4wv8-2f99): esbuild development-server cross-origin data access | Moderate       |
-| VitePress → Vite 5.4.21                  | [GHSA-v6wh-96g9-6wx3](https://github.com/advisories/GHSA-v6wh-96g9-6wx3): Windows UNC path handling in launch-editor                                 | Moderate       |
-| VitePress → Vite 5.4.21                  | [GHSA-4w7w-66w2-5vf9](https://github.com/vitejs/vite/security/advisories/GHSA-4w7w-66w2-5vf9): optimized dependency source-map path traversal        | Moderate       |
-| VitePress → Vite 5.4.21                  | [GHSA-fx2h-pf6j-xcff](https://github.com/vitejs/vite/security/advisories/GHSA-fx2h-pf6j-xcff): Windows alternate-path file-deny bypass               | High           |
-
-These paths were verified with `bun why vite` and `bun why esbuild`.
-Lumen uses Vite 8.3.0. The affected packages above belong to documentation
-development tooling; the advisories describe development-server behavior,
-not the generated static documentation. A successful docs build does not
-resolve these advisories. Revisit this exception when a stable VitePress
-release supports patched tooling.
-
 ## Validation
 
 - `bun run test`: 722 unit tests passed across the workspace.
 - `bun run typecheck`: passed, including architecture boundary verification.
 - `bun run lint`: passed.
 - `bun run build`: passed; `bun run build:apps` passed again after the final
-  renderer changes and the Vite configuration migration to `import.meta.dirname`.
-- `bun run docs:build`: passed on VitePress 1.6.4.
+  renderer changes.
+- `bun run docs:build`: passed at the time of this audit.
 - `bun run test:browser`: 21 browser fixtures passed, plus the window lifecycle
   and real provider/chat preload IPC regressions. No React key or `act` warnings.
 - `bun run verify:packages`: passed for 10 packages in an isolated Bun project.
 - `bun outdated --recursive`: no outdated workspace dependencies.
 - `bun install --frozen-lockfile`: passed with Bun 1.4.2.
-- `bun audit --json`: four accepted upstream advisories listed above.
 
 New regressions cover concurrent legacy migration and ID persistence across
 restart, repeated reply text, normalized streaming handoff, stable rendered
@@ -135,8 +113,6 @@ discovery/update checks, and real Electron preload/chat IPC across response
 phases. Provider fixtures use injected transports and do not spend API
 credits or establish live OpenAI/Grok availability.
 
-Vite still emits its informational 500 kB chunk-size notice for the renderer
-bundle (about 2.05 MB minified, 540 kB gzip). No warning threshold suppression
-was added. One intermediate browser rerun overlapped a library rebuild and
-failed on temporarily missing output; the final run above happened after
-the library and package builds completed.
+One intermediate browser rerun overlapped a library rebuild and failed on
+temporarily missing output; the final run above happened after the library
+and package builds completed.

@@ -1,3 +1,5 @@
+import { browserPages } from "./browser-pages.js";
+import { verifyProductionRenderer } from "./production-renderer.js";
 import { app, BrowserWindow } from "electron";
 import { verifyProviderIpc } from "./provider-ipc.js";
 import { verifyChatIpc } from "./chat-ipc.js";
@@ -6,11 +8,13 @@ import { verifyWindowLoadRecovery } from "./window-lifecycle.js";
 const origin = process.env.RAGDOLL_TEST_ORIGIN;
 const profile = process.env.RAGDOLL_TEST_PROFILE;
 const preload = process.env.RAGDOLL_TEST_PRELOAD;
+const renderer = process.env.RAGDOLL_TEST_RENDERER;
 if (
   !origin ||
   new URL(origin).hostname !== "127.0.0.1" ||
   !profile ||
-  !preload
+  !preload ||
+  !renderer
 ) {
   throw new Error("Run browser tests through the test:browser script");
 }
@@ -22,32 +26,6 @@ if (process.platform === "linux") {
 }
 app.on("window-all-closed", () => {});
 
-const pages = [
-  "apps/chat/tests/ui-controls.html",
-  "apps/chat/tests/smooth-text.html",
-  "apps/chat/tests/web-citations.html",
-  "apps/chat/tests/message-markdown.html",
-  "apps/chat/tests/agent-progress.html",
-  "apps/chat/tests/personal-memory.html",
-  "apps/chat/tests/settings-navigation.html",
-  "apps/chat/tests/app-layout.html",
-  "apps/chat/tests/dock-folder.html",
-  "apps/chat/tests/extension-configuration.html",
-  "apps/chat/tests/extension-settings.html",
-  "apps/chat/tests/connections-settings.html",
-  "apps/chat/tests/compact-forms.html",
-  "apps/chat/tests/provider-setup.html",
-  "apps/chat/tests/character-card.html",
-  "apps/chat/tests/canvas-panel.html",
-  "apps/chat/tests/agent-card-controls.html",
-  "apps/chat/tests/visible-slots.html",
-  "apps/chat/tests/panel-actions.html",
-  "apps/chat/tests/panel-dialog.html",
-  "apps/chat/tests/composer-input.html",
-  "apps/chat/tests/conversation-scrollbar.html",
-  "packages/ragdoll/tests/renderers/lifecycle.html",
-];
-
 async function run(): Promise<void> {
   const startupDeadline = setTimeout(() => {
     console.error("Electron did not become ready within 30 seconds");
@@ -57,9 +35,11 @@ async function run(): Promise<void> {
   clearTimeout(startupDeadline);
   await verifyWindowLoadRecovery();
   if (!preload) throw new Error("Missing test preload");
+  if (!renderer) throw new Error("Missing production renderer");
+  await verifyProductionRenderer(preload, renderer);
   await verifyProviderIpc(preload);
   await verifyChatIpc(preload);
-  for (const page of pages) {
+  for (const page of browserPages) {
     const window = new BrowserWindow({
       show: false,
       width: page.endsWith("app-layout.html") ? 400 : 800,
@@ -102,7 +82,9 @@ async function run(): Promise<void> {
       if (!window.isDestroyed()) window.destroy();
     }
   }
-  console.log(`Verified ${pages.length} browser regressions in Electron.`);
+  console.log(
+    `Verified ${browserPages.length} browser regressions in Electron.`,
+  );
 }
 void run().then(
   () => app.exit(0),

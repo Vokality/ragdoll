@@ -1,0 +1,123 @@
+import React, { act, StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { ChatInput } from "../src/components/chat-input.tsx";
+import { composerFocusShortcutLabel } from "../src/platform.ts";
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const root = createRoot(document.getElementById("root"));
+const sent = [];
+const check = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+try {
+  await act(async () =>
+    root.render(
+      React.createElement(
+        StrictMode,
+        null,
+        React.createElement(ChatInput, {
+          onSend: async (message) => {
+            sent.push(message);
+            return true;
+          },
+          onStop() {},
+          isBusy: false,
+          placeholder: "Message",
+        }),
+      ),
+    ),
+  );
+  const input = document.querySelector("textarea");
+  check(
+    document
+      .querySelector(".input-hint")
+      .textContent.includes(composerFocusShortcutLabel()),
+    "Composer hint must use the host modifier key",
+  );
+  const setValue = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    "value",
+  ).set;
+  await act(async () => {
+    setValue.call(input, "こんにちは");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const composing = new KeyboardEvent("keydown", {
+    key: "Enter",
+    isComposing: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => input.dispatchEvent(composing));
+  check(sent.length === 0, "Composition confirmation must not send a message");
+  check(
+    !composing.defaultPrevented,
+    "Composition confirmation must reach the input method",
+  );
+  check(
+    input.value === "こんにちは",
+    "Composed draft must remain in the input",
+  );
+  const multiline = new KeyboardEvent("keydown", {
+    key: "Enter",
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => input.dispatchEvent(multiline));
+  check(
+    sent.length === 0 && !multiline.defaultPrevented,
+    "Shift+Enter must remain available for a newline",
+  );
+  const submit = new KeyboardEvent("keydown", {
+    key: "Enter",
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => input.dispatchEvent(submit));
+  check(
+    sent.length === 1 && sent[0] === "こんにちは",
+    "Normal Enter must send the completed draft once",
+  );
+  check(
+    input.value === "" && submit.defaultPrevented,
+    "Submission must clear the draft and prevent a newline",
+  );
+  const renderBusy = async (isBusy) =>
+    act(async () =>
+      root.render(
+        React.createElement(
+          StrictMode,
+          null,
+          React.createElement(ChatInput, {
+            onSend: async () => true,
+            onStop: () => {},
+            isBusy,
+            placeholder: "Message",
+          }),
+        ),
+      ),
+    );
+  await renderBusy(true);
+  const cardAnswer = document.getElementById("card-answer");
+  cardAnswer.focus();
+  await renderBusy(false);
+  check(
+    document.activeElement === cardAnswer,
+    "Finishing a response steals focus from a card control",
+  );
+  await renderBusy(true);
+  const stop = document.querySelector('[aria-label="Stop generating"]');
+  stop.focus();
+  await act(async () => stop.click());
+  await renderBusy(false);
+  check(
+    document.activeElement === document.querySelector("textarea"),
+    "Stopping a response loses composer focus",
+  );
+  await act(async () => root.unmount());
+  document.getElementById("result").textContent =
+    "PASS: IME confirmation, Shift+Enter, normal Enter, draft preservation, and focus ownership";
+} catch (error) {
+  document.getElementById("result").textContent = `FAIL: ${error.message}`;
+  console.error(error);
+}

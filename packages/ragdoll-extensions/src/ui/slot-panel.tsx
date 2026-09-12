@@ -1,3 +1,5 @@
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
+import { CheckIcon as CheckGlyph } from "@phosphor-icons/react/dist/csr/Check";
 /**
  * SlotPanel - Renders an extension UI slot's panel as a bottom sheet.
  *
@@ -122,7 +124,11 @@ function PanelContent({
       return <GridPanel config={panel} onClose={onClose} />;
     case "cards":
       return (
-        <CardsPanel key={panel.card.attemptId} config={panel} onClose={onClose} />
+        <CardsPanel
+          key={panel.card.attemptId}
+          config={panel}
+          onClose={onClose}
+        />
       );
   }
 }
@@ -314,7 +320,9 @@ function DocumentPanel({ config, onClose }: DocumentPanelProps) {
           </article>
         ) : (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>{config.emptyMessage ?? "No note yet"}</p>
+            <p style={styles.emptyText}>
+              {config.emptyMessage ?? "No note yet"}
+            </p>
           </div>
         )}
       </div>
@@ -820,32 +828,13 @@ function ActionButton({
 
 function CloseIcon() {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
+    <XIcon size={20} weight="regular" aria-hidden="true" focusable={false} />
   );
 }
 
 function CheckIcon() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
+    <CheckGlyph size={14} weight="bold" aria-hidden="true" focusable={false} />
   );
 }
 

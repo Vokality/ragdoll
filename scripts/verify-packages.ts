@@ -68,6 +68,7 @@ try {
         dependencies: {
           ...packedDependencies,
           react: reactVersion,
+          "react-dom": reactVersion,
         },
         overrides: packedDependencies,
       },

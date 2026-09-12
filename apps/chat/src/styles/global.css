@@ -607,13 +607,6 @@ button:disabled {
   border: 0;
 }
 
-.stream-cursor {
-  display: inline-block;
-  margin-left: 1px;
-  opacity: 0.8;
-  animation: blink 1s steps(1) infinite;
-}
-
 /* Typing indicator */
 .typing-dots {
   display: inline-flex;
@@ -925,16 +918,6 @@ dialog.modal-card::backdrop {
   }
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
   }
 }
 

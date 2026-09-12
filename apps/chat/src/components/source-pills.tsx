@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "./ui/icons";
 import {
   sourceCitationSchema,
   type SourceCitation,
@@ -29,17 +30,7 @@ export function SourcePills({
             origin={new URL(source.url).origin}
           />
           <span>{source.title}</span>
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            aria-hidden="true"
-          >
-            <path d="M4 12 12 4M4 4h8v8" />
-          </svg>
+          <Icon name="external" size={10} />
         </a>
       ))}
     </div>
@@ -49,18 +40,7 @@ export function SourcePills({
 function SourceIcon({ origin }: { origin: string }) {
   const [failed, setFailed] = useState(false);
   return failed ? (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" />
-    </svg>
+    <Icon name="globe" size={12} />
   ) : (
     <img
       className="source-favicon"

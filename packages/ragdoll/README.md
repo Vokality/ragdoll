@@ -12,7 +12,11 @@ bun add @vokality/ragdoll
 
 ```tsx
 import { useState } from "react";
-import { RagdollCharacter, CharacterController, getDefaultTheme } from "@vokality/ragdoll";
+import {
+  RagdollCharacter,
+  CharacterController,
+  getDefaultTheme,
+} from "@vokality/ragdoll";
 
 function App() {
   const [controller, setController] = useState<CharacterController | null>(
@@ -195,7 +199,7 @@ MIT
 
 ### Renderer visual review
 
-From the repository root, run `bunx --bun --no-install vite --port 5174`, then open
+From the repository root, run `bun run dev:character`, then open
 `http://localhost:5174/packages/ragdoll/tests/renderers/preview.html`.
 The review page exercises both variants, themes, expressions, blinks, pitch, and
 front/profile/rear views without an Electron host. Geometry regression tests check

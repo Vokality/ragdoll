@@ -530,7 +530,7 @@ function createRuntime(
       {
         id: `${DEFAULT_EXTENSION_ID}.board`,
         label: "Tic-Tac-Toe",
-        icon: "grid",
+        icon: "game",
         priority: 70,
         state: slotState,
       },

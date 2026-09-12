@@ -192,11 +192,6 @@ export function ConversationBubbles({
               <MessageMarkdown
                 content={reveal ? smoothedContent : response.content}
               />
-              {reveal && (
-                <span className="stream-cursor" aria-hidden="true">
-                  ▌
-                </span>
-              )}
               {message.role === "assistant" && (
                 <SourcePills sources={response.sources ?? []} />
               )}

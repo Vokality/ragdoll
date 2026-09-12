@@ -54,6 +54,18 @@ styling. Screen styles may set layout, density, and specialized appearances.
 Use the shared components for interactive controls rather than rebuilding
 their loading, labeling, or toggle contracts in each screen.
 
+Icons use [Phosphor](https://phosphoricons.com/) with the duotone weight,
+inherited theme colors, and decorative SVGs inside named controls. Lumen
+controls use `ui/icons.tsx`; extension icons resolve from the React-free
+`PresetIconName` contract in `ragdoll-extensions/slots` through the `/ui`
+registry. Import individual Phosphor modules so development builds only load
+the glyphs in use.
+
+Each built-in card has a distinct icon: Tasks uses a checklist, Working List
+uses bullets, Notes uses a notebook, Flash Cards uses stacked cards, Pomodoro
+uses a stopwatch, Tic-Tac-Toe uses a game controller, and Canvas uses a palette.
+Character and Spotify provide tools without cards, so they have no dock icons.
+
 The browser suite includes `tests/ui-controls.html` for native ref and event
 forwarding, wrapped-control labels, hint/error associations, error recovery,
 switch state, loading and disabled behavior, and default versus explicit form

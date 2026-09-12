@@ -1,0 +1,4 @@
+{
+  "extends": "../apps/chat/tsconfig.json",
+  "include": ["build-runtime-libraries.ts", "serve-fixtures.ts"]
+}

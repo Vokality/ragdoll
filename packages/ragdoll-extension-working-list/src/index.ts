@@ -266,7 +266,7 @@ async function createRuntime(
       {
         id: `${DEFAULT_EXTENSION_ID}.main`,
         label: "Working list",
-        icon: "flag",
+        icon: "list",
         priority: 90,
         state: slotState,
       },

@@ -53,18 +53,24 @@
     "clean": "bun run ../../scripts/clean.ts dist"
   },
   "peerDependencies": {
-    "react": "catalog:"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "peerDependenciesMeta": {
     "react": {
+      "optional": true
+    },
+    "react-dom": {
       "optional": true
     }
   },
   "devDependencies": {
     "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "zod": "catalog:"
   }
 }

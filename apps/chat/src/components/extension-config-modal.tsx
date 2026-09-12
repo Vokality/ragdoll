@@ -1,3 +1,4 @@
+import { Icon } from "./ui/icons";
 import { Field, type FieldControlProps } from "./ui/field";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
@@ -58,7 +59,7 @@ export function ExtensionConfigModal({
     >
       {configuration.error && (
         <div role="alert" style={styles.errorBanner}>
-          <ErrorIcon />
+          <Icon name="error" size={16} />
           <span>{configuration.error}</span>
         </div>
       )}
@@ -142,12 +143,12 @@ function ConfigurationSummary({
       <div style={styles.statusSummary}>
         {isFullyConfigured ? (
           <>
-            <CheckCircleIcon />
+            <Icon name="success" color="var(--success)" />
             <span style={styles.statusText}>Ready to use</span>
           </>
         ) : (
           <>
-            <WarningIcon />
+            <Icon name="warning" color="var(--warning)" />
             <span style={styles.statusText}>
               {!isConfigComplete && !isOAuthComplete
                 ? "Configuration and authentication required"
@@ -329,57 +330,6 @@ function OAuthStatusCard({
         )}
       </div>
     </div>
-  );
-}
-
-// Icons
-function ErrorIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--success)"
-      strokeWidth="2"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="9 12 12 15 16 10" />
-    </svg>
-  );
-}
-
-function WarningIcon() {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--warning)"
-      strokeWidth="2"
-    >
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
   );
 }
 

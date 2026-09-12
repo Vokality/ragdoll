@@ -118,6 +118,35 @@ function createManager(
 }
 
 describe("ExtensionManager slot integration", () => {
+  it("gives every built-in card a distinct icon through the host", async () => {
+    const storageRoot = await mkdtemp(join(tmpdir(), "lumen-card-icons-"));
+    const manager = createManager(
+      undefined,
+      BUILT_IN_EXTENSIONS,
+      undefined,
+      undefined,
+      [],
+      storageRoot,
+    );
+    try {
+      await manager.initialize();
+      const slots = manager.getAllSlots();
+      expect(slots.map((slot) => slot.extensionId).sort()).toEqual([
+        "canvas",
+        "flash-cards",
+        "notes",
+        "pomodoro",
+        "tasks",
+        "tic-tac-toe",
+        "working-list",
+      ]);
+      expect(new Set(slots.map((slot) => slot.icon)).size).toBe(slots.length);
+    } finally {
+      await manager.destroy();
+      await rm(storageRoot, { recursive: true, force: true });
+    }
+  });
+
   it("subscribes and unsubscribes as slot capabilities change", async () => {
     let stateChangeCount = 0;
     const manager = createManager(() => {

@@ -1,3 +1,4 @@
+import { Icon } from "./ui/icons";
 import { Button, IconButton } from "./ui/button";
 import { Field } from "./ui/field";
 import { Switch } from "./ui/switch";
@@ -428,7 +429,7 @@ function IntegrationsSection({
               onClick={() => onConfigure(extension)}
               style={styles.configButton}
             >
-              <SettingsIcon />
+              <Icon name="settings" size={16} />
               Configure
             </Button>
           </div>
@@ -507,7 +508,11 @@ function ExtensionLibrarySection({
               : styles.installNotice
           }
         >
-          {extensions.notice.tone === "error" ? <ErrorIcon /> : <InfoIcon />}
+          {extensions.notice.tone === "error" ? (
+            <Icon name="error" size={14} />
+          ) : (
+            <Icon name="info" size={14} />
+          )}
           <span>{extensions.notice.text}</span>
         </div>
       )}
@@ -574,7 +579,7 @@ function InstalledExtensionRow({
             aria-label={`Configure ${ext.name}`}
             title={`Configure ${ext.name}`}
           >
-            <SettingsIcon />
+            <Icon name="settings" size={16} />
           </IconButton>
         )}
         {update && (
@@ -647,59 +652,6 @@ function DataSection({
         </Button>
       )}
     </section>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="16" x2="12" y2="12" />
-      <line x1="12" y1="8" x2="12.01" y2="8" />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
-function ErrorIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
   );
 }
 

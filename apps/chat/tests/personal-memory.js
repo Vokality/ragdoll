@@ -1,0 +1,197 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import { ProfileSection } from "../src/components/profile-section.tsx";
+import { SuggestionChips } from "../src/components/suggestion-chips.tsx";
+import { ExperienceService } from "../src/application/experience-service.ts";
+import "../src/styles/global.css";
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const check = (ok, message) => {
+  if (!ok) throw new Error(message);
+};
+let snapshot = {
+  profile: {
+    name: "Sam",
+    nameDeclined: false,
+    longTermSummary: null,
+    notes: [
+      {
+        id: "9a582761-bfe1-451f-b8ec-19f345e89a7f",
+        text: "Prefers quiet mornings",
+        tier: "working",
+        createdAt: 1,
+        lastUsedAt: 1,
+      },
+    ],
+    revision: 0,
+    checkInsEnabled: true,
+  },
+  needsFirstAction: true,
+  busy: false,
+  error: null,
+};
+let changed;
+let beginCount = 0;
+let selected = "";
+let failSave = false;
+const service = new ExperienceService({
+  getExperience: async () => structuredClone(snapshot),
+  beginExperience: async () => {
+    beginCount++;
+  },
+  saveProfile: async (edit) => {
+    if (failSave) throw new Error("Memory changed; reload");
+    snapshot.profile = {
+      ...snapshot.profile,
+      ...edit,
+      nameDeclined: edit.name === null,
+      revision: edit.revision + 1,
+    };
+    changed?.();
+  },
+  onExperienceChanged: (callback) => {
+    changed = callback;
+    return () => {
+      changed = undefined;
+    };
+  },
+  onCharacterReaction: () => () => {},
+  cancelMessage: async () => ({ success: true }),
+});
+const root = createRoot(document.getElementById("root"));
+let stop;
+try {
+  await act(async () => {
+    stop = service.start((error) => {
+      throw error;
+    });
+    await service.refresh();
+  });
+  await act(async () =>
+    root.render(
+      React.createElement(SuggestionChips, {
+        slots: ["tasks.main", "pomodoro.main"],
+        onPick: (prompt) => {
+          selected = prompt;
+        },
+      }),
+    ),
+  );
+  check(!document.querySelector("input"), "Onboarding introduced input fields");
+  check(
+    document.body.textContent.includes("Plan my day") &&
+      !document.body.textContent.includes("tic-tac-toe"),
+    "Chips are demos rather than everyday actions",
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent === "Help me focus")
+      .click(),
+  );
+  check(selected.includes("30 minute"), "Chip did not submit its user request");
+  await act(async () =>
+    root.render(React.createElement(ProfileSection, { service })),
+  );
+  check(document.body.textContent.includes("Sam"), "Saved name missing");
+  check(
+    !document.querySelector("input"),
+    "Memory review should start in read mode",
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent === "Edit memory")
+      .click(),
+  );
+  const detail = document.querySelector("textarea");
+  const memoryType = document.querySelector("select");
+  check(
+    detail.labels.length === 1 &&
+      memoryType.labels.length === 1 &&
+      detail.labels[0] !== memoryType.labels[0],
+    "Memory type and remembered detail must have separate labels",
+  );
+  check(
+    [...document.querySelectorAll("label")].every(
+      (label) =>
+        label.querySelectorAll("input, select, textarea, button").length <= 1,
+    ),
+    "A profile label wraps multiple controls",
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent === "Forget")
+      .click(),
+  );
+  failSave = true;
+  await act(async () => document.querySelector("form").requestSubmit());
+  check(
+    document.querySelector('[role="alert"]')?.textContent.includes("reload"),
+    "Save error missing",
+  );
+  check(
+    snapshot.profile.notes.length === 1,
+    "Failed save removed durable memory",
+  );
+  failSave = false;
+  await act(async () => document.querySelector("form").requestSubmit());
+  check(snapshot.profile.notes.length === 0, "Forgotten detail remained saved");
+  check(
+    document.getElementById("root").scrollWidth <= 340,
+    "Profile overflowed compact settings",
+  );
+  snapshot.profile.notes = Array.from({ length: 75 }, (_, i) => ({
+    id: crypto.randomUUID(),
+    text: `Birthday ${i} on May 3`,
+    tier: "long_term",
+    createdAt: 1,
+    lastUsedAt: 1,
+  }));
+  snapshot.profile.longTermSummary = "Birthdays for family and friends.";
+  await act(async () => service.refresh());
+  check(
+    document.body.textContent.includes("Birthdays for family and friends."),
+    "Long-term summary missing",
+  );
+  check(
+    document.querySelectorAll("li").length === 20,
+    "Long-term facts were not paginated",
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent === "Show more facts")
+      .click(),
+  );
+  check(
+    document.querySelectorAll("li").length === 40,
+    "More facts could not be reached",
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent === "Edit memory")
+      .click(),
+  );
+  const tierSelect = document.querySelector("select");
+  await act(async () => {
+    tierSelect.value = "working";
+    tierSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => document.querySelector("form").requestSubmit());
+  check(
+    snapshot.profile.notes[0].tier === "working",
+    "Memory tier edit was not saved",
+  );
+  check(
+    document.getElementById("root").scrollWidth <= 340,
+    "Two-tier memory overflowed compact settings",
+  );
+  check(beginCount === 1, "Opening settings restarted onboarding");
+  if (!new URLSearchParams(location.search).has("preview")) {
+    await act(async () => root.unmount());
+    stop();
+    check(!changed, "Subscription leaked");
+  }
+  document.getElementById("result").textContent =
+    "PASS: conversational suggestions, saved memory review, forgetting, save errors, compact layout and cleanup";
+} catch (error) {
+  document.getElementById("result").textContent =
+    `FAIL: ${error.stack ?? error}`;
+}

@@ -666,7 +666,7 @@ async function createRuntime(
       {
         id: `${DEFAULT_EXTENSION_ID}.main`,
         label: "Flash Cards",
-        icon: "bookmark",
+        icon: "cards",
         priority: 80,
         state: slotState,
       },

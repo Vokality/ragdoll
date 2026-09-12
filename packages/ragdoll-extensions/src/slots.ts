@@ -49,7 +49,11 @@ export type PresetIconName =
   | "star"
   | "music"
   | "grid"
-  | "canvas";
+  | "canvas"
+  | "notebook"
+  | "cards"
+  | "list"
+  | "game";
 
 /**
  * A single item in a list panel

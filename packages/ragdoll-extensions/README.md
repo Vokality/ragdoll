@@ -17,10 +17,10 @@ Built-in extensions are independent packages. Import them directly from `@vokali
 bun add @vokality/ragdoll-extensions
 ```
 
-Add React only if the host uses the `/ui` entrypoint:
+Add React and React DOM if the host uses the `/ui` entrypoint:
 
 ```bash
-bun add react
+bun add react react-dom
 ```
 
 ## Create and register an extension

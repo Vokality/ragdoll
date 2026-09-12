@@ -168,7 +168,7 @@ function SlotButtonView({
         aria-pressed={isActive}
         title={label}
       >
-        <SlotIcon name={icon} size={20} />
+        <SlotIcon name={icon} size={22} />
         {hasBadge && (
           <span style={styles.badge} className="extension-slot-badge">
             {formatBadge(badge)}

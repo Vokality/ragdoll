@@ -82,7 +82,7 @@ export function createMainProcessConfig(
       // Speech-bubble text stays short via the system prompt; tool rounds
       // (e.g. addDeck + several addCard calls) need headroom beyond 140.
       maxOutputTokens: 2048,
-      maxToolRounds: 8,
+      maxToolRounds: 25,
       systemPrompt: SYSTEM_PROMPT,
     },
     oauth: {

@@ -26,7 +26,6 @@
       "react": "^19.3.0",
       "react-dom": "^19.3.0",
       "typescript": "^7.0.2",
-      "vite": "^8.3.0",
       "zod": "^4.6.2"
     }
   },
@@ -38,10 +37,10 @@
     "dev": "bun run dev:chat",
     "dev:chat": "bun run --filter lumen electron:dev",
     "lint": "bun run scripts/run-js-bin.ts oxlint .",
-    "test": "bun run build:libraries && bun run --workspaces --if-present test",
+    "test": "bun run build:libraries && bun run --workspaces --if-present test && bun test docs/site/build.test.ts",
     "test:ragdoll": "bun run --filter @vokality/ragdoll test",
     "test:extensions": "bun run --filter @vokality/ragdoll-extensions test",
-    "typecheck": "bun run verify:architecture && bun run build:libraries && bun run typecheck:libraries && bun run --filter '@example/*' typecheck && bun run --filter lumen typecheck",
+    "typecheck": "bun run verify:architecture && bun run build:libraries && bun run typecheck:libraries && bun run --filter '@example/*' typecheck && bun run --filter lumen typecheck && bun run scripts/run-typescript.ts -p scripts/tsconfig.json --noEmit && bun run scripts/run-typescript.ts -p docs/site/tsconfig.json --noEmit",
     "typecheck:libraries": "bun run --filter @vokality/ragdoll typecheck && bun run --filter @vokality/ragdoll-extensions typecheck && bun run --filter '@vokality/ragdoll-extension-*' typecheck",
     "typecheck:ragdoll": "bun run --filter @vokality/ragdoll typecheck",
     "typecheck:extensions": "bun run --filter @vokality/ragdoll-extensions typecheck",
@@ -51,15 +50,16 @@
     "format": "bun run scripts/run-js-bin.ts prettier --write .",
     "clean": "bun run scripts/clean.ts packages/ragdoll/dist packages/ragdoll-extensions/dist packages/ragdoll-extension-character/dist packages/ragdoll-extension-canvas/dist packages/ragdoll-extension-flash-cards/dist packages/ragdoll-extension-notes/dist packages/ragdoll-extension-pomodoro/dist packages/ragdoll-extension-spotify/dist packages/ragdoll-extension-tasks/dist packages/ragdoll-extension-tic-tac-toe/dist packages/ragdoll-extension-working-list/dist apps/chat/dist apps/chat/release examples/extension-weather/dist",
     "test:browser": "bun run --filter lumen test:browser",
-    "docs:dev": "bun run scripts/run-js-bin.ts vitepress dev docs/site",
-    "docs:build": "bun run scripts/run-js-bin.ts vitepress build docs/site",
-    "docs:preview": "bun run scripts/run-js-bin.ts vitepress preview docs/site"
+    "docs:dev": "bun --watch docs/site/serve.ts",
+    "docs:build": "bun run docs/site/build.ts",
+    "docs:preview": "bun run docs/site/serve.ts --preview",
+    "build:runtime": "bun run scripts/build-runtime-libraries.ts",
+    "dev:character": "bun run scripts/serve-fixtures.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "oxlint": "^1.82.0",
     "prettier": "^3.9.6",
-    "typescript": "~7.0.2",
-    "vitepress": "^1.6.4"
+    "typescript": "~7.0.2"
   }
 }
