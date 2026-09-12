@@ -34,7 +34,7 @@ The extension library expects a GitHub release with a Ragdoll extension archive,
 
 ## A built-in extension is missing
 
-Built-ins such as Notes appear in **Settings → Extensions → Features**. The **Extension library** manages separately installed packages. Notes also has a toolbar button when the host has loaded its slot.
+Built-ins such as Notes appear in **Settings → Extensions → Features**. The **Extension library** manages separately installed packages. Notes also appears in the Cards folder in the toolbar when the host has loaded its slot.
 
 During development, creating or building an extension package does not register it in Lumen. Check its app dependency and built-in catalog entry, then stop the previous development command and run `bun run dev:chat`. This rebuilds both the package and the Electron bundle containing the catalog. See [testing a first-party package in Lumen](./extensions/first-extension.md#test-a-first-party-package-in-lumen).
 

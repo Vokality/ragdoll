@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dock folder regression</title>
+  </head>
+  <body>
+    <p id="result">Running…</p>
+    <div id="root" style="width: 400px; height: 600px; position: relative"></div>
+    <script type="module">
+      import React, { act } from "react";
+      import { createRoot } from "react-dom/client";
+      import {
+        SlotBar,
+        createSlotState,
+      } from "@vokality/ragdoll-extensions/ui";
+      import "../src/styles/global.css";
+      globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+      const root = createRoot(document.getElementById("root"));
+      const check = (ok, message) => {
+        if (!ok) throw new Error(message);
+      };
+      const reportError = (error) => {
+        throw error;
+      };
+      const makeSlot = (id, label, icon, badge, priority) => ({
+        id,
+        label,
+        icon,
+        priority,
+        state: createSlotState(
+          {
+            visible: true,
+            badge,
+            panel: { type: "list", title: label, items: [] },
+          },
+          reportError,
+        ),
+      });
+      const slots = [
+        makeSlot("tasks.main", "Tasks", "checklist", 3, 6),
+        makeSlot("list.main", "Working list", "flag", 2, 5),
+        makeSlot("timer.main", "Timer", "timer", null, 4),
+        makeSlot("notes.main", "Notes", "bookmark", 0, 3),
+        makeSlot("cards.main", "Flash Cards", "grid", null, 2),
+        makeSlot("game.main", "Game", "star", null, 1),
+      ];
+      const trayHidden = () =>
+        getComputedStyle(document.querySelector(".extension-slot-tray"))
+          .visibility === "hidden";
+      try {
+        await act(async () =>
+          root.render(React.createElement(SlotBar, { slots })),
+        );
+        const folder = document.querySelector(".extension-slot-folder");
+        const tray = document.querySelector(".extension-slot-tray");
+        const tasks = document.querySelector('[aria-label="Tasks"]');
+        check(folder, "Cards folder missing");
+        check(
+          folder.getAttribute("aria-expanded") === "false",
+          "Folder started open",
+        );
+        check(folder.textContent.includes("5"), "Folder missed combined badge");
+        check(tasks, "Slot buttons were not kept in the document");
+        check(trayHidden(), "Dock icons were visible while stacked");
+        check(
+          folder.getBoundingClientRect().width > 0 &&
+            folder.getBoundingClientRect().right <= 401,
+          "Folder overflowed compact width",
+        );
+        await act(async () => folder.click());
+        check(
+          folder.getAttribute("aria-expanded") === "true" && !trayHidden(),
+          "Clicking the folder did not expand the icons",
+        );
+        check(
+          document.documentElement.scrollWidth <=
+            document.documentElement.clientWidth + 1,
+          "Expanded folder overflowed the window",
+        );
+        await act(async () =>
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape",
+              bubbles: true,
+              cancelable: true,
+            }),
+          ),
+        );
+        check(
+          folder.getAttribute("aria-expanded") === "false" && trayHidden(),
+          "Escape did not collapse the folder",
+        );
+        await act(async () => folder.click());
+        await act(async () =>
+          document.querySelector(".extension-slot-folder-backdrop").click(),
+        );
+        check(
+          folder.getAttribute("aria-expanded") === "false",
+          "Backdrop did not collapse the folder",
+        );
+        await act(async () => folder.click());
+        await act(async () => tasks.click());
+        check(
+          folder.getAttribute("aria-expanded") === "false",
+          "Choosing a card left the folder open",
+        );
+        check(
+          tasks.getAttribute("aria-pressed") === "true",
+          "Choosing a card did not select it",
+        );
+        await act(async () =>
+          root.render(
+            React.createElement(SlotBar, { slots: slots.slice(0, 1) }),
+          ),
+        );
+        check(
+          !document.querySelector(".extension-slot-folder") &&
+            getComputedStyle(document.querySelector('[aria-label="Tasks"]'))
+              .visibility !== "hidden",
+          "A single card still used a folder",
+        );
+        await act(async () => root.unmount());
+        document.getElementById("result").textContent =
+          "PASS: stacked Cards folder expands, collapses, and keeps a compact header";
+      } catch (error) {
+        document.getElementById("result").textContent =
+          `FAIL: ${error.stack ?? error}`;
+        throw error;
+      }
+    </script>
+  </body>
+</html>

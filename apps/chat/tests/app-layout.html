@@ -330,6 +330,17 @@
         } else {
           await settle();
           inspect();
+          check(
+            document.querySelector(".extension-slot-folder")?.getAttribute(
+              "aria-expanded",
+            ) === "false",
+            "Cards folder started expanded",
+          );
+          check(
+            getComputedStyle(document.querySelector(".extension-slot-tray"))
+              .visibility === "hidden",
+            "Dock icons were visible while the folder was closed",
+          );
           await act(async () =>
             window.dispatchEvent(
               new KeyboardEvent("keydown", {
@@ -380,10 +391,23 @@
             chat.set({ ...chat.getSnapshot(), error: null }),
           );
           const dock = document.querySelector(".extension-dock");
+          const visibleDockButtons = [...dock.querySelectorAll("button")].filter(
+            (button) => {
+              const style = getComputedStyle(button);
+              const rect = button.getBoundingClientRect();
+              return (
+                style.visibility !== "hidden" &&
+                style.pointerEvents !== "none" &&
+                rect.width > 0 &&
+                rect.height > 0
+              );
+            },
+          );
+          check(visibleDockButtons.length >= 1, "Dock has no visible control");
           dock.scrollLeft = dock.scrollWidth;
           for (const control of [
-            dock.querySelector("button"),
-            [...dock.querySelectorAll("button")].at(-1),
+            visibleDockButtons[0],
+            visibleDockButtons.at(-1),
           ]) {
             control.focus();
             const rect = control.getBoundingClientRect();
