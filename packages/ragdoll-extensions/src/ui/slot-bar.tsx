@@ -176,6 +176,6 @@ const styles: Record<string, CSSProperties> = {
   container: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    gap: "var(--slot-button-gap, 12px)",
   },
 };

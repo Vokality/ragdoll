@@ -22,7 +22,7 @@ export function SuggestionChips({ onPick, slots }: SuggestionChipsProps) {
       ? [
           {
             label: "Help me focus",
-            prompt: "Start a 25 minute focus timer for me.",
+            prompt: "Start a 30 minute focus timer for me.",
           },
         ]
       : []),

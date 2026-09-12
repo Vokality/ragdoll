@@ -1092,6 +1092,7 @@ dialog.modal-card::backdrop {
 
 .extension-dock {
   --slot-button-size: 36px;
+  --slot-button-gap: 12px;
   padding-top: 8px;
 }
 
@@ -1158,6 +1159,12 @@ dialog.modal-card::backdrop {
 .extension-dock {
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
+}
+@media (max-width: 420px) {
+  .extension-dock {
+    --slot-button-size: 30px;
+    --slot-button-gap: 4px;
+  }
 }
 .extension-dock > div {
   flex-shrink: 0;

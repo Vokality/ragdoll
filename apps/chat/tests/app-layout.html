@@ -120,6 +120,19 @@
         },
         {
           type: "list",
+          title: "To handle",
+          emptyMessage: "Ask Lumen to fill this list.",
+          items: [],
+        },
+        {
+          type: "document",
+          title: "Notes",
+          body: "",
+          emptyMessage:
+            "Ask Lumen to save a longer note here instead of filling the chat.",
+        },
+        {
+          type: "list",
           title: "Focus Timer",
           status: { label: "Ready to focus", tone: "default" },
           items: [{ id: "time", label: "25 min", sublabel: "Focus session" }],
@@ -190,17 +203,30 @@
           ],
         },
       ];
-      const labels = ["Tasks", "Timer", "Game", "Cards", "Canvas", "Music"];
+      const labels = [
+        "Tasks",
+        "Working list",
+        "Notes",
+        "Timer",
+        "Game",
+        "Cards",
+        "Canvas",
+        "Music",
+      ];
       const icons = [
         "checklist",
+        "flag",
+        "bookmark",
         "timer",
         "grid",
-        "bookmark",
+        "bell",
         "canvas",
         "music",
       ];
       const ids = [
         "tasks.main",
+        "working-list.main",
+        "notes.main",
         "pomodoro.main",
         "game.main",
         "cards.main",
@@ -309,6 +335,12 @@
         check(
           document.documentElement.scrollWidth <= innerWidth,
           "App overflows horizontally",
+        );
+        const dock = document.querySelector(".extension-dock");
+        check(dock, "Missing extension dock");
+        check(
+          dock.scrollWidth <= dock.clientWidth + 1,
+          "Dock overflows compact width",
         );
         const panel = document.querySelector(".inline-slot-panel");
         if (panel) {
@@ -458,7 +490,7 @@
           );
           await act(async () => root.unmount());
           document.getElementById("result").textContent =
-            "PASS: full compact chat, six cards, busy toolbar, markdown, copy selection, scroll ownership and composer reachability";
+            "PASS: full compact chat, eight cards, busy toolbar, markdown, copy selection, scroll ownership and composer reachability";
         }
       } catch (error) {
         document.getElementById("result").textContent =
