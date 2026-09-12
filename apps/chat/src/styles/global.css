@@ -1156,13 +1156,22 @@ dialog.modal-card::backdrop {
 .chat-header > .icon-btn {
   flex-shrink: 0;
 }
+.chat-header {
+  container-type: inline-size;
+}
 .extension-dock {
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
 }
-@media (max-width: 420px) {
+@media (max-width: 410px) {
   .extension-dock {
-    --slot-button-size: 30px;
+    --slot-button-size: 28px;
+    --slot-button-gap: 4px;
+  }
+}
+@container (max-width: 380px) {
+  .extension-dock {
+    --slot-button-size: 28px;
     --slot-button-gap: 4px;
   }
 }

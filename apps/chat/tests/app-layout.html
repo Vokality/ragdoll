@@ -336,11 +336,20 @@
           document.documentElement.scrollWidth <= innerWidth,
           "App overflows horizontally",
         );
-        const dock = document.querySelector(".extension-dock");
-        check(dock, "Missing extension dock");
+        const dockButtons = [
+          ...document.querySelectorAll(".extension-dock button"),
+        ];
+        check(dockButtons.length === 8, "Missing dock buttons");
+        const headerBox = bounds(".chat-header");
         check(
-          dock.scrollWidth <= dock.clientWidth + 1,
-          "Dock overflows compact width",
+          dockButtons.every((button) => {
+            const box = button.getBoundingClientRect();
+            return (
+              box.left >= headerBox.left - 1 &&
+              box.right <= headerBox.right + 8
+            );
+          }),
+          "Dock button not visible in compact header",
         );
         const panel = document.querySelector(".inline-slot-panel");
         if (panel) {
