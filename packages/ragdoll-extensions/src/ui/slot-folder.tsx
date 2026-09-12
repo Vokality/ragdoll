@@ -7,11 +7,13 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 import { SlotButton } from "./slot-button.js";
 import { getSlotIcon } from "./slot-icons.js";
 import { combineSlotBadges } from "./combine-slot-badges.js";
@@ -44,10 +46,51 @@ export function SlotDock({
   style,
 }: SlotDockProps) {
   const trayId = useId();
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<CSSProperties>(styles.floatingDock);
   const useFolder = slots.length > 1;
   const badge = useCombinedBadge(slots);
   if (!useFolder && open) setOpen(false);
+
+  const updateAnchor = useCallback(() => {
+    const node = anchorRef.current;
+    if (!node) return;
+    const next = node.getBoundingClientRect();
+    setAnchor((prev) => {
+      if (
+        prev.top === next.top &&
+        prev.left === next.left &&
+        prev.width === next.width &&
+        prev.height === next.height
+      ) {
+        return prev;
+      }
+      return {
+        ...styles.floatingDock,
+        top: next.top,
+        left: next.left,
+        width: next.width,
+        height: next.height,
+      };
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!useFolder) return;
+    updateAnchor();
+    const node = anchorRef.current;
+    window.addEventListener("resize", updateAnchor);
+    if (!node || typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", updateAnchor);
+    }
+    const observer = new ResizeObserver(updateAnchor);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateAnchor);
+    };
+  }, [useFolder, updateAnchor]);
 
   useEffect(() => {
     if (!open) return;
@@ -73,22 +116,18 @@ export function SlotDock({
   const previewSlots = slots.slice(0, FOLDER_PREVIEW_COUNT);
   const hasBadge = badge !== null && badge !== 0;
   const folderOpen = useFolder && open;
+  const dockClassName = ["extension-slot-dock", className]
+    .filter(Boolean)
+    .join(" ");
 
-  return (
+  const dock = (
     <div
-      style={{ ...styles.dock, ...style }}
-      className={["extension-slot-dock", className].filter(Boolean).join(" ")}
+      style={{ ...(useFolder ? anchor : styles.dock), ...style }}
+      className={dockClassName}
       data-folder={useFolder ? "true" : "false"}
       data-open={folderOpen ? "true" : "false"}
     >
       <style>{folderStyles}</style>
-      {useFolder && (
-        <div
-          className="extension-slot-folder-backdrop"
-          hidden={!folderOpen}
-          onClick={() => setOpen(false)}
-        />
-      )}
       {useFolder && (
         <button
           type="button"
@@ -145,6 +184,32 @@ export function SlotDock({
       </div>
     </div>
   );
+
+  if (!useFolder) {
+    return dock;
+  }
+
+  return (
+    <>
+      <div
+        ref={anchorRef}
+        className="extension-slot-folder-anchor"
+        style={styles.anchor}
+        aria-hidden="true"
+      />
+      {createPortal(
+        <>
+          <div
+            className="extension-slot-folder-backdrop"
+            hidden={!folderOpen}
+            onClick={() => setOpen(false)}
+          />
+          {dock}
+        </>,
+        document.body,
+      )}
+    </>
+  );
 }
 
 function useCombinedBadge(
@@ -175,9 +240,43 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "flex-end",
   },
+  anchor: {
+    width: "var(--slot-button-size, 40px)",
+    height: "var(--slot-button-size, 40px)",
+    flexShrink: 0,
+    pointerEvents: "none",
+  },
+  floatingDock: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "var(--slot-button-size, 40px)",
+    height: "var(--slot-button-size, 40px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: 0,
+    zIndex: 50,
+  },
 };
 
 const folderStyles = `
+  .extension-slot-folder-anchor {
+    width: var(--slot-button-size, 40px);
+    height: var(--slot-button-size, 40px);
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+
+  .extension-slot-dock[data-folder="true"] {
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    -webkit-app-region: no-drag;
+  }
+
   .extension-slot-folder-backdrop {
     position: fixed;
     inset: 0;
@@ -185,9 +284,10 @@ const folderStyles = `
     margin: 0;
     padding: 0;
     border: 0;
-    background: rgba(2, 6, 16, 0.42);
+    background: rgba(2, 6, 16, 0.58);
     cursor: default;
     animation: extensionSlotFolderFade 180ms ease;
+    -webkit-app-region: no-drag;
   }
 
   .extension-slot-folder-backdrop[hidden] {
@@ -209,6 +309,7 @@ const folderStyles = `
     border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
     color: var(--text-muted, #94a3b8);
     cursor: pointer;
+    -webkit-app-region: no-drag;
     transition:
       color 150ms ease,
       background 150ms ease,
@@ -292,6 +393,7 @@ const folderStyles = `
     border: 1px solid var(--border-strong, rgba(148, 173, 202, 0.3));
     box-shadow: var(--shadow-lg, 0 24px 48px -12px rgba(2, 6, 16, 0.55));
     transform-origin: top right;
+    -webkit-app-region: no-drag;
     transition:
       transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
       opacity 180ms ease;

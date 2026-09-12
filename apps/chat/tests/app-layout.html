@@ -391,18 +391,21 @@
             chat.set({ ...chat.getSnapshot(), error: null }),
           );
           const dock = document.querySelector(".extension-dock");
-          const visibleDockButtons = [...dock.querySelectorAll("button")].filter(
-            (button) => {
-              const style = getComputedStyle(button);
-              const rect = button.getBoundingClientRect();
-              return (
-                style.visibility !== "hidden" &&
-                style.pointerEvents !== "none" &&
-                rect.width > 0 &&
-                rect.height > 0
-              );
-            },
-          );
+          const folderControl = document.querySelector(".extension-slot-folder");
+          const visibleDockButtons = [
+            folderControl,
+            ...dock.querySelectorAll("button"),
+          ].filter((button, index, buttons) => {
+            if (!button || buttons.indexOf(button) !== index) return false;
+            const style = getComputedStyle(button);
+            const rect = button.getBoundingClientRect();
+            return (
+              style.visibility !== "hidden" &&
+              style.pointerEvents !== "none" &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
+          });
           check(visibleDockButtons.length >= 1, "Dock has no visible control");
           dock.scrollLeft = dock.scrollWidth;
           for (const control of [

@@ -103,11 +103,13 @@ export function ChatScreen({
   const setActiveSlotId = extensionSlotService.selectCard;
   const dockRef = useRef<HTMLDivElement>(null);
   const closePanel = useCallback(() => {
-    const dock = dockRef.current;
+    const dock =
+      document.querySelector<HTMLElement>(".extension-slot-dock") ??
+      dockRef.current;
     const pressed = dock?.querySelector<HTMLButtonElement>(
       'button[aria-pressed="true"]',
     );
-    const folder = dock?.querySelector<HTMLButtonElement>(
+    const folder = document.querySelector<HTMLButtonElement>(
       ".extension-slot-folder",
     );
     const target =

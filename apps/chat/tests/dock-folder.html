@@ -80,6 +80,25 @@
             .getAttribute("aria-expanded") === "true" && dockOpen(),
           "Clicking the folder did not expand the icons",
         );
+        const backdrop = document.querySelector(
+          ".extension-slot-folder-backdrop",
+        );
+        check(
+          backdrop.parentElement === document.body,
+          "Folder dim overlay was not attached to the window",
+        );
+        check(
+          getComputedStyle(backdrop).display !== "none",
+          "Folder dim overlay stayed hidden after expand",
+        );
+        const covered = document.elementFromPoint(
+          Math.min(200, window.innerWidth / 2),
+          Math.min(360, window.innerHeight / 2),
+        );
+        check(
+          covered === backdrop || backdrop.contains(covered),
+          "Folder dim overlay did not cover the window",
+        );
         check(
           document.documentElement.scrollWidth <=
             document.documentElement.clientWidth + 1,
