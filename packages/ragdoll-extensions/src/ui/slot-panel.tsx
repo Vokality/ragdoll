@@ -483,7 +483,9 @@ interface GridPanelProps {
 
 function GridPanel({ config, onClose }: GridPanelProps) {
   const { emptyMessage, columns, cells, result } = config;
-  const hasCells = cells.length > 0;
+  const hasVisibleGrid = cells.some(
+    (cell) => cell.label.trim().length > 0 || typeof cell.onClick === "function",
+  );
 
   return (
     <PanelLayout panel={config} onClose={onClose}>
@@ -494,7 +496,7 @@ function GridPanel({ config, onClose }: GridPanelProps) {
         <div className="slot-panel-grid-viewport" style={styles.gridViewport}>
           {result ? (
             <GridResult result={result} />
-          ) : !hasCells ? (
+          ) : !hasVisibleGrid ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>{emptyMessage ?? "No cells"}</p>
             </div>
@@ -1007,12 +1009,13 @@ const panelStyles = `
   .slot-panel-document-body { min-width: 0; }
   .slot-panel-grid-viewport { min-height: 0; }
   .slot-panel-grid {
-    height: min(180px, 100%);
-    width: auto;
+    width: 168px;
+    height: 168px;
     max-width: 100%;
+    max-height: 100%;
     aspect-ratio: var(--slot-panel-grid-columns, 1) / var(--slot-panel-grid-rows, 1);
   }
-  .slot-panel-grid-cell { min-width: 0; min-height: 0; }
+  .slot-panel-grid-cell { min-width: 32px; min-height: 32px; }
   .slot-panel-footer { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border, #334155); overflow-x: auto; }
   .slot-panel-footer > .slot-panel-action { flex: 0 0 auto; white-space: nowrap; }
   .slot-panel-footer .slot-panel-action { padding: 7px 10px; min-height: 32px; font-size: 13px; }
@@ -1391,7 +1394,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px",
     backgroundColor: "var(--bg-glass, rgba(30, 41, 59, 0.8))",
     borderRadius: "var(--radius-md, 10px)",
-    border: "1px solid var(--border, rgba(148, 163, 184, 0.2))",
+    border: "1px solid var(--border-strong, rgba(148, 173, 202, 0.3))",
     color: "var(--text-primary, #f1f5f9)",
     transition:
       "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease",
