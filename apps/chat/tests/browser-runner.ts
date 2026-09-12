@@ -41,7 +41,9 @@ async function run(): Promise<void> {
   await verifyChatIpc(preload);
   for (const page of browserPages) {
     const window = new BrowserWindow({
-      show: false,
+      // Linux still delivers hidden-window animation frames at 1 Hz despite
+      // backgroundThrottling: false. Map the window onto Xvfb for real timing.
+      show: process.platform === "linux",
       width: page.endsWith("app-layout.html") ? 400 : 800,
       height: page.endsWith("app-layout.html") ? 600 : 900,
       useContentSize: true,
