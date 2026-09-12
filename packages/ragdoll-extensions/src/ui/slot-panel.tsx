@@ -500,10 +500,14 @@ function GridPanel({ config, onClose }: GridPanelProps) {
             </div>
           ) : (
             <div
+              className="slot-panel-grid"
               style={{
                 ...styles.grid,
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                width: `min(100cqw, calc(100cqh * ${columns} / ${Math.ceil(cells.length / columns)}), 300px)`,
+                ["--slot-panel-grid-columns" as string]: String(columns),
+                ["--slot-panel-grid-rows" as string]: String(
+                  Math.max(1, Math.ceil(cells.length / columns)),
+                ),
               }}
             >
               {cells.map((cell, index) => (
@@ -1001,7 +1005,13 @@ const panelStyles = `
   .slot-panel-body { min-width: 0; overscroll-behavior: contain; }
   .slot-panel-document-content { min-height: 0; }
   .slot-panel-document-body { min-width: 0; }
-  .slot-panel-grid-viewport { container-type: size; }
+  .slot-panel-grid-viewport { min-height: 0; }
+  .slot-panel-grid {
+    width: 220px;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: var(--slot-panel-grid-columns, 1) / var(--slot-panel-grid-rows, 1);
+  }
   .slot-panel-grid-cell { min-width: 0; min-height: 0; }
   .slot-panel-footer { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-top: 1px solid var(--border, #334155); overflow-x: auto; }
   .slot-panel-footer > .slot-panel-action { flex: 0 0 auto; white-space: nowrap; }
@@ -1270,6 +1280,7 @@ const styles: Record<string, CSSProperties> = {
   gridViewport: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",

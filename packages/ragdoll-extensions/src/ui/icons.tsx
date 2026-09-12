@@ -17,12 +17,17 @@ import { GameControllerIcon as GameControllerGlyph } from "@phosphor-icons/react
 
 export interface IconProps {
   size?: number;
+  weight?: "duotone" | "fill" | "regular" | "bold";
 }
 
-/** A consistent decorative duotone treatment for every semantic slot preset. */
-function SlotGlyph({ glyph: Glyph, size = 20 }: IconProps & { glyph: Icon }) {
+/** A consistent decorative treatment for every semantic slot preset. */
+function SlotGlyph({
+  glyph: Glyph,
+  size = 20,
+  weight = "duotone",
+}: IconProps & { glyph: Icon }) {
   return (
-    <Glyph size={size} weight="duotone" aria-hidden="true" focusable={false} />
+    <Glyph size={size} weight={weight} aria-hidden="true" focusable={false} />
   );
 }
 

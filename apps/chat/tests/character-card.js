@@ -193,6 +193,11 @@ try {
     );
     const gridBody = document.querySelector(".slot-panel-grid-content");
     const cells = [...gridBody.querySelectorAll(".slot-panel-grid-cell")];
+    check(
+      cells.length === 9 &&
+        cells.every((cell) => cell.getBoundingClientRect().width >= 28),
+      "Grid cells collapsed inside the card",
+    );
     const gridBottom = Math.max(
       ...cells.map((cell) => cell.getBoundingClientRect().bottom),
     );
