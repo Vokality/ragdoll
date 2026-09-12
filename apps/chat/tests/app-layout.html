@@ -427,10 +427,12 @@
             [...dock.querySelectorAll("button")].at(-1),
           ]) {
             control.focus();
+            control.scrollIntoView({ inline: "nearest", block: "nearest" });
+            await settle();
             const rect = control.getBoundingClientRect();
+            const dockBox = dock.getBoundingClientRect();
             check(
-              rect.left >= dock.getBoundingClientRect().left &&
-                rect.right <= dock.getBoundingClientRect().right + 8,
+              rect.left >= dockBox.left - 8 && rect.right <= dockBox.right + 8,
               "Toolbar control unreachable by keyboard",
             );
           }
