@@ -1,4 +1,4 @@
-import { app, nativeTheme } from "electron";
+import { app } from "electron";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LumenApplication } from "./lumen-application.js";
@@ -32,7 +32,6 @@ if (!app.requestSingleInstanceLock()) {
   initialization = app
     .whenReady()
     .then(async () => {
-      nativeTheme.themeSource = "dark";
       const config = createMainProcessConfig(app, moduleDirectory);
       app.dock?.setIcon(config.appIconPath);
       application = await LumenApplication.create(config);
