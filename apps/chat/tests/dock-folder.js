@@ -53,6 +53,14 @@ try {
     new Set(icons.map((icon) => icon.innerHTML)).size === slots.length,
     "Two cards share the same icon artwork",
   );
+  const previewIcons = [
+    ...document.querySelectorAll(".extension-slot-folder-tile svg"),
+  ];
+  check(previewIcons.length === 3, "Folder preview is missing stacked icons");
+  check(
+    previewIcons.every((icon) => icon.getBoundingClientRect().width >= 12),
+    "Folder preview icons are too small to read",
+  );
   check(
     icons.every((icon) => icon.getAttribute("aria-hidden") === "true"),
     "Decorative icons duplicate the accessible button names",

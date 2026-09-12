@@ -153,7 +153,10 @@ export function SlotDock({
                     transform: `translate(${offset * 5}px, ${Math.abs(offset) * 1.5}px) rotate(${offset * 11}deg)`,
                   }}
                 >
-                  {createElement(getSlotIcon(slot.icon), { size: 10 })}
+                  {createElement(getSlotIcon(slot.icon), {
+                    size: 12,
+                    weight: "fill",
+                  })}
                 </span>
               );
             })}
@@ -331,23 +334,24 @@ const folderStyles = `
 
   .extension-slot-folder-stack {
     position: relative;
-    width: 22px;
-    height: 18px;
+    width: 26px;
+    height: 20px;
   }
 
   .extension-slot-folder-tile {
     position: absolute;
     top: 1px;
-    left: 3px;
+    left: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border-radius: 5px;
     background: var(--bg-secondary, #101828);
-    border: 1px solid var(--border-strong, rgba(148, 163, 184, 0.35));
+    border: 1px solid var(--border-strong, rgba(148, 173, 202, 0.4));
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    color: var(--text-primary, #f1f5f9);
   }
 
   .extension-slot-folder-badge {
@@ -385,6 +389,9 @@ const folderStyles = `
     top: calc(100% + 8px);
     right: 0;
     z-index: 42;
+    display: grid;
+    grid-template-columns: repeat(4, var(--slot-button-size, 40px));
+    justify-content: end;
     width: max-content;
     max-width: min(248px, calc(100vw - 24px));
     padding: 10px;

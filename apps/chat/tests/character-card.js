@@ -182,6 +182,31 @@ try {
           type: "grid",
           title: "Game",
           columns: 3,
+          emptyMessage: "Start a game to play",
+          cells: Array.from({ length: 9 }, (_, i) => ({
+            id: String(i),
+            label: "",
+            disabled: true,
+          })),
+          actions: [{ id: "new", label: "New game", onClick: () => {} }],
+        },
+      }),
+    );
+    check(
+      !card.querySelector(".slot-panel-grid-cell"),
+      "Idle grid rendered empty cells",
+    );
+    check(
+      !!card.querySelector(".slot-panel-grid-empty") &&
+        card.textContent.includes("Start a game to play"),
+      "Idle grid hid the empty-state copy",
+    );
+    await act(async () =>
+      state.setState({
+        panel: {
+          type: "grid",
+          title: "Game",
+          columns: 3,
           cells: Array.from({ length: 9 }, (_, i) => ({
             id: String(i),
             label: "X",
@@ -193,6 +218,11 @@ try {
     );
     const gridBody = document.querySelector(".slot-panel-grid-content");
     const cells = [...gridBody.querySelectorAll(".slot-panel-grid-cell")];
+    check(
+      cells.length === 9 &&
+        cells.every((cell) => cell.getBoundingClientRect().width >= 28),
+      "Grid cells collapsed inside the card",
+    );
     const gridBottom = Math.max(
       ...cells.map((cell) => cell.getBoundingClientRect().bottom),
     );

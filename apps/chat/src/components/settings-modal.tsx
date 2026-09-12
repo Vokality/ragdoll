@@ -728,6 +728,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "var(--radius-sm)",
     color: "var(--text-dim)",
     whiteSpace: "nowrap",
+    flexShrink: 0,
   },
   confirmActions: {
     display: "flex",
