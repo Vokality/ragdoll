@@ -330,10 +330,10 @@
         } else {
           await settle();
           inspect();
+          const folder = document.querySelector(".extension-slot-folder");
+          check(folder, "Cards folder missing from the compact dock");
           check(
-            document.querySelector(".extension-slot-folder")?.getAttribute(
-              "aria-expanded",
-            ) === "false",
+            folder.getAttribute("aria-expanded") === "false",
             "Cards folder started expanded",
           );
           check(

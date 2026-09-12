@@ -68,9 +68,17 @@
             folder.getBoundingClientRect().right <= 401,
           "Folder overflowed compact width",
         );
-        await act(async () => folder.click());
+        await act(async () =>
+          document.querySelector(".extension-slot-folder").click(),
+        );
         check(
-          folder.getAttribute("aria-expanded") === "true" && !trayHidden(),
+          document
+            .querySelector(".extension-slot-folder")
+            .getAttribute("aria-expanded") === "true",
+          "Clicking the folder did not set aria-expanded",
+        );
+        check(
+          !trayHidden(),
           "Clicking the folder did not expand the icons",
         );
         check(
@@ -91,15 +99,21 @@
           folder.getAttribute("aria-expanded") === "false" && trayHidden(),
           "Escape did not collapse the folder",
         );
-        await act(async () => folder.click());
+        await act(async () =>
+          document.querySelector(".extension-slot-folder").click(),
+        );
         await act(async () =>
           document.querySelector(".extension-slot-folder-backdrop").click(),
         );
         check(
-          folder.getAttribute("aria-expanded") === "false",
+          document
+            .querySelector(".extension-slot-folder")
+            .getAttribute("aria-expanded") === "false",
           "Backdrop did not collapse the folder",
         );
-        await act(async () => folder.click());
+        await act(async () =>
+          document.querySelector(".extension-slot-folder").click(),
+        );
         await act(async () => tasks.click());
         check(
           folder.getAttribute("aria-expanded") === "false",

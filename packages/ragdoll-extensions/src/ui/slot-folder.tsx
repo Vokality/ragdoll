@@ -82,12 +82,10 @@ export function SlotDock({
       data-open={folderOpen ? "true" : "false"}
     >
       <style>{folderStyles}</style>
-      {folderOpen && (
-        <button
-          type="button"
+      {useFolder && (
+        <div
           className="extension-slot-folder-backdrop"
-          tabIndex={-1}
-          aria-label="Close cards"
+          hidden={!folderOpen}
           onClick={() => setOpen(false)}
         />
       )}
@@ -190,6 +188,10 @@ const folderStyles = `
     background: rgba(2, 6, 16, 0.42);
     cursor: default;
     animation: extensionSlotFolderFade 180ms ease;
+  }
+
+  .extension-slot-folder-backdrop[hidden] {
+    display: none;
   }
 
   .extension-slot-folder {
