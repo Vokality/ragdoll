@@ -45,24 +45,27 @@
         makeSlot("cards.main", "Flash Cards", "grid", null, 2),
         makeSlot("game.main", "Game", "star", null, 1),
       ];
-      const trayHidden = () =>
-        getComputedStyle(document.querySelector(".extension-slot-tray"))
-          .visibility === "hidden";
+      const dockOpen = () =>
+        document.querySelector(".extension-slot-dock").getAttribute("data-open") ===
+        "true";
       try {
         await act(async () =>
           root.render(React.createElement(SlotBar, { slots })),
         );
         const folder = document.querySelector(".extension-slot-folder");
-        const tray = document.querySelector(".extension-slot-tray");
         const tasks = document.querySelector('[aria-label="Tasks"]');
         check(folder, "Cards folder missing");
         check(
-          folder.getAttribute("aria-expanded") === "false",
+          folder.getAttribute("aria-expanded") === "false" && !dockOpen(),
           "Folder started open",
         );
         check(folder.textContent.includes("5"), "Folder missed combined badge");
         check(tasks, "Slot buttons were not kept in the document");
-        check(trayHidden(), "Dock icons were visible while stacked");
+        check(
+          getComputedStyle(document.querySelector(".extension-slot-tray"))
+            .visibility === "hidden",
+          "Dock icons were visible while stacked",
+        );
         check(
           folder.getBoundingClientRect().width > 0 &&
             folder.getBoundingClientRect().right <= 401,
@@ -74,11 +77,7 @@
         check(
           document
             .querySelector(".extension-slot-folder")
-            .getAttribute("aria-expanded") === "true",
-          "Clicking the folder did not set aria-expanded",
-        );
-        check(
-          !trayHidden(),
+            .getAttribute("aria-expanded") === "true" && dockOpen(),
           "Clicking the folder did not expand the icons",
         );
         check(
@@ -96,7 +95,9 @@
           ),
         );
         check(
-          folder.getAttribute("aria-expanded") === "false" && trayHidden(),
+          document
+            .querySelector(".extension-slot-folder")
+            .getAttribute("aria-expanded") === "false" && !dockOpen(),
           "Escape did not collapse the folder",
         );
         await act(async () =>

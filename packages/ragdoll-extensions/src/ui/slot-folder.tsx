@@ -294,8 +294,7 @@ const folderStyles = `
     transform-origin: top right;
     transition:
       transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
-      opacity 180ms ease,
-      visibility 180ms ease;
+      opacity 180ms ease;
   }
 
   .extension-slot-dock[data-folder="true"][data-open="false"] .extension-slot-tray {
@@ -303,6 +302,10 @@ const folderStyles = `
     visibility: hidden;
     pointer-events: none;
     transform: scale(0.42);
+    transition:
+      transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 180ms ease,
+      visibility 0s linear 180ms;
   }
 
   .extension-slot-dock[data-folder="true"][data-open="true"] .extension-slot-tray {
