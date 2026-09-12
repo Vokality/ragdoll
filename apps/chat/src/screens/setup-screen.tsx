@@ -151,7 +151,7 @@ export function SetupScreen({
   return (
     <div style={styles.container}>
       {/* Drag region for window */}
-      <div style={styles.dragRegion} className="drag-region" />
+      <div className="drag-region" />
 
       {/* Ambient background effects */}
       <div className="app-atmosphere" />
@@ -279,13 +279,6 @@ const styles: Record<string, CSSProperties> = {
     position: "relative",
     overflowY: "auto",
     overflowX: "hidden",
-  },
-  dragRegion: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "32px",
   },
   characterContainer: {
     width: "240px",

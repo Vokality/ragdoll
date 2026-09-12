@@ -190,7 +190,7 @@ export function ChatScreen({
     <div className="chat-screen" style={styles.container}>
       <div className="app-atmosphere" />
       <div className="ambient-glow chat-character-glow" aria-hidden="true" />
-      <div style={styles.dragRegion} className="drag-region" />
+      <div className="drag-region" />
 
       <header className="chat-header" style={styles.header}>
         <IconButton
@@ -304,14 +304,6 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--bg-primary)",
     position: "relative",
     overflow: "hidden",
-  },
-  dragRegion: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "32px",
-    zIndex: 10,
   },
   header: {
     width: "100%",

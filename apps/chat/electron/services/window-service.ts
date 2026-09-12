@@ -4,6 +4,7 @@ import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import type { MainProcessConfig } from "../main-process-config.js";
 import type { ExternalNavigationService } from "./external-navigation-service.js";
 import type { RendererEventService } from "./renderer-event-service.js";
+import { windowChromeOptions } from "../window-chrome.js";
 
 export class WindowService {
   private window: BrowserWindow | null = null;
@@ -36,8 +37,10 @@ export class WindowService {
     const window = new BrowserWindow({
       ...this.config.window,
       icon: this.config.appIconPath,
-      titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 16, y: 16 },
+      ...windowChromeOptions(
+        process.platform,
+        this.config.window.backgroundColor,
+      ),
       autoHideMenuBar: process.platform !== "darwin",
       webPreferences: {
         preload: this.config.preloadPath,

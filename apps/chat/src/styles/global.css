@@ -971,8 +971,15 @@ dialog.modal-card::backdrop {
   animation-delay: 180ms;
 }
 
-/* Window drag regions */
+/* Window drag regions. On Windows/Linux the Window Controls Overlay
+   exposes titlebar-area-* env vars; fall back to a full-width 32px strip. */
 .drag-region {
+  position: absolute;
+  top: env(titlebar-area-y, 0px);
+  left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+  height: env(titlebar-area-height, 32px);
+  z-index: 0;
   -webkit-app-region: drag;
 }
 
@@ -1149,6 +1156,15 @@ dialog.modal-card::backdrop {
 }
 .chat-header {
   overflow: visible;
+  -webkit-app-region: drag;
+  /* Keep the Cards folder out from under min/max/close on overlay chrome. */
+  padding-right: max(
+    20px,
+    calc(
+      100vw - env(titlebar-area-x, 100vw) - env(titlebar-area-width, 0px) +
+        8px
+    )
+  );
 }
 .extension-dock > div {
   flex-shrink: 0;
