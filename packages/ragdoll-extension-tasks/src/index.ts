@@ -559,7 +559,7 @@ async function createRuntime(
       panel: {
         type: "list" as const,
         title: "Tasks",
-        emptyMessage: "No tasks yet",
+        emptyMessage: "No tasks yet. Ask Lumen to add one.",
         sections,
       },
     };

@@ -59,6 +59,17 @@ export function SlotPanel({ slot, onClose }: SlotPanelProps) {
 /** Panel content for hosts that place extension controls inside their own layout. */
 export function InlineSlotPanel({ slot, onClose }: SlotPanelProps) {
   const state = useSlotState(slot);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing)
+        return;
+      if (document.querySelector("dialog[open]")) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
   return (
     <section
       className="inline-slot-panel"

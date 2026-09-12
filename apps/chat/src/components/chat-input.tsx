@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { composerFocusShortcutLabel } from "../platform";
 
 interface ChatInputProps {
   /** Sends the message; resolves false when the send failed. */
@@ -116,7 +117,8 @@ export function ChatInput({
         )}
       </div>
       <p className="input-hint">
-        Enter to send · Shift+Enter for new line · ⌘K to focus
+        Enter to send · Shift+Enter for new line ·{" "}
+        {composerFocusShortcutLabel()} to focus
       </p>
     </form>
   );

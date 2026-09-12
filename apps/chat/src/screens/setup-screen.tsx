@@ -6,6 +6,7 @@ import {
 } from "@vokality/ragdoll";
 import { ApiKeyInput } from "../components/api-key-input";
 import type { SetupService } from "../application/setup-service";
+import { isApplePlatform } from "../platform";
 
 interface SetupScreenProps {
   onComplete: () => void;
@@ -156,7 +157,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "safe center",
     height: "100%",
     width: "100%",
-    padding: "36px 20px 20px",
+    padding: isApplePlatform() ? "36px 20px 20px" : "20px",
     background: "var(--bg-primary)",
     position: "relative",
     overflowY: "auto",

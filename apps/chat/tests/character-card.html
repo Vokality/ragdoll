@@ -140,7 +140,7 @@
             document.querySelector('button[aria-label="Tasks"]').click(),
           );
           await settle();
-          const card = document.querySelector(".inline-slot-panel");
+          let card = document.querySelector(".inline-slot-panel");
           check(
             !!card && !document.querySelector("dialog[open]"),
             "Card opened a modal sheet",
@@ -150,7 +150,7 @@
             "Opening reloaded the character",
           );
           const miniature = canvas.getBoundingClientRect();
-          const bounds = card.getBoundingClientRect();
+          let bounds = card.getBoundingClientRect();
           check(
             miniature.width < large / 2 &&
               miniature.left < bounds.left + 85 &&
@@ -160,6 +160,26 @@
           const composer = document.getElementById("composer");
           composer.focus();
           check(document.activeElement === composer, "Card made chat inert");
+          await act(async () =>
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "Escape",
+                bubbles: true,
+                cancelable: true,
+              }),
+            ),
+          );
+          check(
+            !document.querySelector(".inline-slot-panel"),
+            "Escape did not close the card from the composer",
+          );
+          await act(async () =>
+            document.querySelector('button[aria-label="Tasks"]').click(),
+          );
+          await settle();
+          card = document.querySelector(".inline-slot-panel");
+          check(!!card, "Card did not reopen after Escape");
+          bounds = card.getBoundingClientRect();
           const conversation = document.querySelector('[aria-live="polite"]');
           check(
             conversation.clientHeight > 60 &&

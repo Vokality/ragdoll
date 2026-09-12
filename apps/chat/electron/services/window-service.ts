@@ -38,6 +38,7 @@ export class WindowService {
       icon: this.config.appIconPath,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
+      autoHideMenuBar: process.platform !== "darwin",
       webPreferences: {
         preload: this.config.preloadPath,
         contextIsolation: true,
