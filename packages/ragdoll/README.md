@@ -8,7 +8,7 @@ An animated character framework with facial expressions, head poses, and themes.
 bun add @vokality/ragdoll
 ```
 
-## Quick Start
+## Quick start
 
 ```tsx
 import { useState } from "react";
@@ -36,12 +36,12 @@ function App() {
 
 ## Features
 
-- **Facial Expressions**: smile, frown, laugh, angry, sad, surprise, confusion, thinking
-- **Actions**: wink, talk, and shake animations
-- **Head Pose**: yaw and pitch control with smooth transitions
-- **Three.js renderer**: perspective WebGL canvas; an anatomical mesh with integrated ears, nose, eyelids, and facial morph targets (no SVG fallback)
-- **Themes**: default, robot, alien, monochrome (or create your own)
-- **Idle Animations**: subtle breathing, blinking, micro-movements
+- Facial expressions: smile, frown, laugh, angry, sad, surprise, confusion, thinking
+- Actions: wink, talk, and shake animations
+- Head pose: yaw and pitch control with smooth transitions
+- Three.js renderer: perspective WebGL canvas; an anatomical mesh with integrated ears, nose, eyelids, and facial morph targets (no SVG fallback)
+- Themes: default, robot, alien, monochrome (or create your own)
+- Idle animations: subtle breathing, blinking, micro-movements
 
 ## Architecture & DDD
 
@@ -103,7 +103,7 @@ unsubscribe();
 
 Use the bus for UI updates, logging, or analytics layers that sit outside the domain model.
 
-## Extension Points
+## Extension points
 
 ### Themes
 
@@ -139,7 +139,7 @@ Variants only describe geometry/dimension deltas. They never reach into controll
 
 ### Plugins
 
-Use `FeaturePlugin` to bolt on integration-specific behavior without modifying the core controller:
+Use `FeaturePlugin` to add integration-specific behavior without modifying the core controller:
 
 ```ts
 import type { FeaturePlugin } from "@vokality/ragdoll";
@@ -159,7 +159,7 @@ const telemetryPlugin: FeaturePlugin = {
 controller.registerPlugin(telemetryPlugin);
 ```
 
-Plugins run inside the controller's update loop, so they remain close to the domain while still being optional.
+Plugins are optional and run inside the controller's update loop.
 
 ### Testing utilities
 

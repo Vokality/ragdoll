@@ -127,7 +127,7 @@ A started entry without a completed result has an unknown outcome: the process m
 
 Event records identify their trigger event. Retrying an event after a required action succeeded continues to its response/silent decision without repeating that action. An unknown required action outcome blocks automatic event retry until its state is reconciled. Clearing the conversation removes these records along with messages and queued event turns.
 
-Existing text and extension-event conversations remain valid. Execution history begins with this implementation; it cannot recover tool calls that were never recorded. Canvas undo history remains separately owned by the extension and session-local.
+Existing text and extension-event conversations remain valid. Execution history cannot recover tool calls that were never recorded. Canvas undo history remains separately owned by the extension and session-local.
 
 ## Responses message lifecycle
 

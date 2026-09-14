@@ -2,8 +2,8 @@
 
 ## Status
 
-Implemented in the Lumen Electron host. Spotify is the first proving
-extension, but no Spotify-specific behavior belongs in the host.
+Lumen's Electron host implements extension configuration and OAuth. Spotify is
+the first extension to use them; Spotify-specific behavior stays in the extension.
 
 ## Goals
 

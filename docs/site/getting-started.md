@@ -38,7 +38,7 @@ Lumen validates the key and stores it encrypted through Electron's OS-backed cre
 
 Lumen introduces itself and asks what to call you. Reply naturally; it remembers your preferred name in a local profile. You can skip that question and start using the app immediately.
 
-Lumen then helps you do something useful in your day. The suggestion chips offer planning, a focus session, or thinking something through. Nothing runs until you ask for it. For example, send:
+Lumen's suggestion chips offer planning, a focus session, or thinking something through. Nothing runs until you ask for it. For example, send:
 
 > Show my to-do list and add “Plan the weekend.”
 

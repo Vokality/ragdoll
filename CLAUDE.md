@@ -43,7 +43,7 @@ Decision:
 - First-party extension packages depend on the extension framework, never an app or another extension.
 - Apps provide storage, IPC, notifications, config, OAuth, filesystem, and import adapters.
 
-Do not add compatibility reexports or restore deleted entrypoints. Add a new public entrypoint only for a genuine runtime boundary.
+Do not add compatibility reexports or restore deleted entrypoints. Add a new public entrypoint only when a runtime boundary requires it.
 
 Evidence: [ARCHITECTURE.md](./ARCHITECTURE.md), `scripts/verify-architecture.ts` (run by `bun run typecheck`; source imports plus `package.json` graphs; skips tests and does not prove slot serialization), and the `exports` map on `@vokality/ragdoll-extensions`.
 

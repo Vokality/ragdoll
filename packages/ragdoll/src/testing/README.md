@@ -1,6 +1,6 @@
 # Ragdoll Testing Utilities
 
-Domain-minded helpers for exercising controllers, state managers, and integration code without pulling in any UI.
+Helpers for testing controllers, state managers, and integration code without UI dependencies.
 
 ## Installation
 
@@ -10,7 +10,7 @@ bun add --dev @vokality/ragdoll
 
 ## Usage
 
-### MockClock - Control Time in Tests
+### MockClock - control time in tests
 
 ```ts
 import { MockClock } from "@vokality/ragdoll/testing";
@@ -40,7 +40,7 @@ describe("character update loop", () => {
 });
 ```
 
-### Builders - Create Test Data
+### Builders - create test data
 
 ```ts
 import { StateManager } from "@vokality/ragdoll";
@@ -77,7 +77,7 @@ describe("StateManager", () => {
 });
 ```
 
-### Mocks - Test in Isolation
+### Mocks - test in isolation
 
 ```typescript
 import { ActionController } from "@vokality/ragdoll";
@@ -97,7 +97,7 @@ describe("ActionController", () => {
 });
 ```
 
-### SpyEventBus - Track Events
+### SpyEventBus - track events
 
 ```ts
 import { StateManager } from "@vokality/ragdoll";
@@ -120,13 +120,13 @@ describe("state events", () => {
 });
 ```
 
-## Available Utilities
+## Available utilities
 
 ### Clock
 
-- **`IClock`**: Interface for clock implementations
-- **`SystemClock`**: Real clock using system time
-- **`MockClock`**: Controllable clock for testing
+- `IClock`: Interface for clock implementations
+- `SystemClock`: Real clock using system time
+- `MockClock`: Controllable clock for testing
   - `now()`: Get current time
   - `advance(ms)`: Move time forward
   - `setTime(time)`: Set absolute time
@@ -134,25 +134,25 @@ describe("state events", () => {
 
 ### Builders
 
-- **`CharacterStateBuilder`**: Build CharacterState objects
+- `CharacterStateBuilder`: Build CharacterState objects
   - `withMood(mood)`
   - `withAction(action, progress)`
   - `withHeadPose(pose)`
   - `withTalking(isTalking)`
 
-- **`HeadPoseBuilder`**: Build HeadPose objects
+- `HeadPoseBuilder`: Build HeadPose objects
   - `withYaw(radians)` / `withPitch(radians)`
   - `lookingLeft(degrees)` / `lookingRight(degrees)`
   - `lookingUp(degrees)` / `lookingDown(degrees)`
 
 ### Mocks
 
-- **`MockHeadPoseController`**: Mock head pose controller
+- `MockHeadPoseController`: Mock head pose controller
   - Tracks all method calls
   - Provides simplified implementation
   - `reset()`: Clear call history
 
-- **`SpyEventBus`**: EventBus that records events
+- `SpyEventBus`: EventBus that records events
   - `emittedEvents`: Array of all emitted events
   - `clearHistory()`: Clear event history
   - `reset()`: Clear events and subscribers

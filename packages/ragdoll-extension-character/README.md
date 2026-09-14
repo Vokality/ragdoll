@@ -1,6 +1,6 @@
 # @vokality/ragdoll-extension-character
 
-First-party character extension for the Ragdoll ecosystem. It contributes
+First-party character extension for Ragdoll. It contributes
 `setMood`, `triggerAction`, and `setHeadPose` tools and forwards them over the
 host `ipc` capability on `extension-tool:character`.
 

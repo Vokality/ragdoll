@@ -19,7 +19,7 @@ Ask for a task that the service supports, for example:
 
 > What is on my personal to-do list?
 
-The agent discovers available connections, inspects their tools, and calls the appropriate tool. Follow-up requests can make additional calls. Tool invocations and results participate in the conversation's history, so the agent can reason about what it actually did.
+The agent discovers available connections, inspects their tools, and calls the appropriate tool. Follow-up requests can make additional calls. Lumen records tool invocations and results in conversation history, so the agent can check which actions ran.
 
 An MCP service contributes tools; it does **not** automatically create a visual card. Build a [Ragdoll extension](../extensions/index.md) when you need an interactive panel inside Lumen.
 

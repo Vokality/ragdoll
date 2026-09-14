@@ -11,7 +11,7 @@ Lumen is a desktop AI assistant with an animated character and tools that act on
   <img src="docs/site/public/screenshots/lumen-tasks.png" alt="Lumen's task card open above the same conversation" width="340" />
 </p>
 
-This is the **Ragdoll** monorepo: home to Lumen, the React character and extension frameworks that power it, and first-party extensions.
+The Ragdoll monorepo contains Lumen, its React character and extension frameworks, and first-party extensions.
 
 ## Documentation
 
@@ -19,18 +19,18 @@ Lumen’s documentation covers [getting started](docs/site/getting-started.md), 
 
 ## What you can do
 
-- **Chat and act.** The agent can make multiple tool calls, open and close cards, and follow up with a result. Quick requests default to a direct response; longer work can include a brief model-generated acknowledgment.
-- **Use interactive tools.** Tasks, notes, a focus timer, flash cards, tic-tac-toe, and a drawing canvas are included. Spotify playback is available after configuring its integration.
-- **Connect your services.** Add MCP connections in Settings, sign in with OAuth or supply an access token, then choose which connections the agent may use.
-- **Search the web.** Ask for current information or research. Search citations appear as clickable source pills below the answer.
-- **Read formatted messages.** User and assistant messages support Markdown, including lists, code blocks, tables, and task lists, while assistant replies stream.
-- **Make it personal.** Lumen learns your name through conversation and can remember small preferences in a local profile, separate from chat. Review memory and control occasional check-ins under Settings → About you.
-- **Keep context between sessions.** Lumen saves conversations and tool execution history, so the agent can distinguish completed actions from interrupted work. It checks fresh state when needed.
-- **Control the character.** Ask it to smile, wink, or change its pose. Choose a character variant and visual theme in Settings.
+- The agent can make multiple tool calls, open and close cards, and follow up with a result. Quick requests default to a direct response; longer work can include a brief model-generated acknowledgment.
+- Tasks, notes, a focus timer, flash cards, tic-tac-toe, and a drawing canvas are included. Spotify playback is available after configuring its integration.
+- Add MCP connections in Settings, sign in with OAuth or supply an access token, then choose which connections the agent may use.
+- Ask for current information or web research. Search citations appear as clickable source pills below the answer.
+- User and assistant messages support Markdown, including lists, code blocks, tables, and task lists, while assistant replies stream.
+- Lumen learns your name through conversation and can remember small preferences in a local profile, separate from chat. Review memory and control occasional check-ins under Settings → About you.
+- Lumen saves conversations and tool execution history between sessions, so the agent can distinguish completed actions from interrupted work. It checks fresh state when needed.
+- Ask the character to smile, wink, or change its pose. Choose a character variant and visual theme in Settings.
 
 ## Get started from source
 
-You need **Git**, **Bun 1.4.2**, a desktop environment that can run Electron with secure credential storage, and an **OpenAI or xAI API key** with access to the configured model. An internet connection is required for model requests and remote services.
+You need Git, Bun 1.4.2, a desktop environment that can run Electron with secure credential storage, and an OpenAI or xAI API key with access to the configured model. An internet connection is required for model requests and remote services.
 
 ```bash
 git clone https://github.com/Vokality/ragdoll.git
@@ -47,7 +47,7 @@ On first launch:
 2. Lumen introduces itself in chat and asks what to call you. Tell it what you need, or choose a suggestion to try your first action.
 3. Open **Settings** to change the character, manage features and connections, configure integrations, or install extensions.
 
-OpenAI uses **GPT-5.6 Sol** and Grok uses **Grok 4.6**, both with low reasoning. Switch providers through Settings → AI provider. The [provider facade](docs/model-providers.md) keeps chat, extensions, and memory shared across providers. API keys are entered in the app, not a repository `.env` file.
+OpenAI uses GPT-5.6 Sol and Grok uses Grok 4.6, both with low reasoning. Switch providers through Settings → AI provider. The [provider facade](docs/model-providers.md) keeps chat, extensions, and memory shared across providers. API keys are entered in the app, not a repository `.env` file.
 
 ### Try a few requests
 
@@ -134,4 +134,4 @@ Connection tokens stay in Electron's main process and are used by the MCP client
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

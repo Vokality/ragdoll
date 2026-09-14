@@ -69,5 +69,5 @@ Character and Spotify provide tools without cards, so they have no dock icons.
 The browser suite includes `tests/ui-controls.html` for native ref and event
 forwarding, wrapped-control labels, hint/error associations, error recovery,
 switch state, loading and disabled behavior, and default versus explicit form
-submission. Existing browser fixtures exercise the migrated setup, settings,
+submission. Existing browser fixtures exercise setup, settings,
 profile, connections, extension configuration, and composer flows.

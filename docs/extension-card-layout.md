@@ -17,13 +17,13 @@ header or action bar.
 `PanelFrame` is the shared React-free contract inherited by each panel kind.
 `PanelProgress` is shared across kinds. `status` and `progress` are optional because
 some panels have no meaningful state or progress. Study panels require progress.
-The front/revealed study union continues to determine whether submission or rating
-is available; the layout does not introduce a second interaction state machine.
+The front/revealed study union determines whether submission or rating is
+available; the layout uses that same interaction state machine.
 
 Actions keep their stable IDs and callbacks. `serializeSlotState` removes callbacks
 before IPC, and the host restores action routing to the owning extension. Region
-metadata passes through that same contract. Layout changes do not create new IPC
-channels or alternate action paths.
+metadata passes through that same contract, using the existing IPC channels and
+action paths.
 
 Action IDs must also identify their target. Notes uses `delete:<noteId>` so a
 delayed Delete request cannot apply to a different note after the selection
