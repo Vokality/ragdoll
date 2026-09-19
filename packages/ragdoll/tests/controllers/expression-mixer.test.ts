@@ -202,9 +202,9 @@ describe("expression mixer", () => {
     settle(controller);
 
     expect(controller.getAxisOverlay()).toEqual({ gazeX: 0.8, gazeY: 0.4 });
-    expect(
-      controller.getMixedExpression().leftEye.pupilOffset.x,
-    ).toBeGreaterThan(0);
+    expect(controller.getMixedExpression().leftEye.pupilOffset.x).toBeCloseTo(
+      0.8 * GAZE_OFFSET_X,
+    );
     expect(controller.getMixedExpression().leftEye.pupilOffset.x).not.toBe(
       geometry.getExpressionForMood("sad").leftEye.pupilOffset.x,
     );
