@@ -84,7 +84,12 @@ const SEARCH_MEMORY_TOOL: ToolDefinition = {
     },
   },
 };
-const PRESENTATION_TOOLS = new Set(["setMood", "triggerAction", "setHeadPose"]);
+const PRESENTATION_TOOLS = new Set([
+  "setMood",
+  "triggerAction",
+  "setHeadPose",
+  "setExpression",
+]);
 
 class PersonalTools implements AgentToolService {
   constructor(

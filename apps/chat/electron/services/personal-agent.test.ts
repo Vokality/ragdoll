@@ -49,6 +49,14 @@ const tool: ToolDefinition = {
     parameters: { type: "object", properties: {} },
   },
 };
+const expressionTool: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "setExpression",
+    description: "Patch facial axes",
+    parameters: { type: "object", properties: {} },
+  },
+};
 
 describe("personal agent", () => {
   it("saves user-disclosed memory, injects it on the next turn, and records only successful useful actions", async () => {
@@ -106,6 +114,56 @@ describe("personal agent", () => {
       onMessage: async () => {},
     });
     expect(prompts[1]).toContain('"name":"Sam"');
+    expect(storage.snapshot().experience.firstSuccess?.toolName).toBe(
+      "addTask",
+    );
+  });
+  it("does not record a successful setExpression as first useful action", async () => {
+    const storage = createInMemoryStorageRepository();
+    const profile = new UserProfileService(storage, () => {});
+    const experience = new ExperienceService(
+      storage,
+      async () => {},
+      () => {},
+      () => {},
+    );
+    const rounds = [
+      call("setExpression", { smile: 0.5, gazeY: -1 }),
+      final,
+      call("addTask", {}),
+      final,
+    ];
+    const sessions: AgentResponseSessionFactory = {
+      create: () => ({
+        respond: async () => {
+          const round = rounds.shift();
+          if (!round) throw new Error("No round");
+          return round;
+        },
+      }),
+    };
+    const agent = new PersonalAgent(
+      storage,
+      profile,
+      experience,
+      {
+        getTools: () => [tool, expressionTool],
+        getToolsForExtension: () => [tool, expressionTool],
+        executeTool: async () => ({ success: true }),
+      },
+      config,
+      sessions,
+      new ToolHistoryService(storage),
+    );
+    await agent.runUserTurn("test", [], {
+      onText() {},
+      onMessage: async () => {},
+    });
+    expect(storage.snapshot().experience.firstSuccess).toBeNull();
+    await agent.runUserTurn("test", [], {
+      onText() {},
+      onMessage: async () => {},
+    });
     expect(storage.snapshot().experience.firstSuccess?.toolName).toBe(
       "addTask",
     );

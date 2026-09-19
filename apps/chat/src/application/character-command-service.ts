@@ -28,9 +28,20 @@ const headPoseCommandSchema = z.object({
   duration: z.number().min(0.1).max(2).optional(),
 });
 
+const expressionCommandSchema = z.object({
+  smile: z.number().min(0).max(1).optional(),
+  frown: z.number().min(0).max(1).optional(),
+  brows: z.number().min(-1).max(1).optional(),
+  eyesOpen: z.number().min(0).max(1.3).optional(),
+  jaw: z.number().min(0).max(1).optional(),
+  gazeX: z.number().min(-1).max(1).optional(),
+  gazeY: z.number().min(-1).max(1).optional(),
+  duration: z.number().min(0).max(5).optional(),
+});
+
 type CharacterCommands = Pick<
   CharacterController,
-  "setMood" | "triggerAction" | "setHeadPose"
+  "setMood" | "triggerAction" | "setHeadPose" | "setExpression"
 >;
 
 export class CharacterCommandService {
@@ -79,6 +90,12 @@ export class CharacterCommandService {
           },
           command.duration,
         );
+        return;
+      }
+      case "setExpression": {
+        const command = expressionCommandSchema.parse(args);
+        const { duration, ...patch } = command;
+        controller.setExpression(patch, duration);
         return;
       }
       default:
