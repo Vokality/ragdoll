@@ -37,11 +37,10 @@ describe("ExpressionController", () => {
       expect(controller.getCurrentMood()).toBe("angry");
     });
 
-    it("should not transition when setting same mood", () => {
+    it("should not retrigger when setting the same mood without a face overlay", () => {
       controller.setMood("smile");
       const initialExpression = controller.getExpression();
       controller.setMood("smile");
-      // Expression should remain the same (no transition triggered)
       const finalExpression = controller.getExpression();
       expect(finalExpression).toEqual(initialExpression);
     });

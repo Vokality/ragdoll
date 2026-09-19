@@ -21,6 +21,8 @@ import type {
   JointCommand,
   JointName,
   HeadPose,
+  ExpressionAxes,
+  ExpressionPatch,
 } from "../types";
 
 export class CharacterController {
@@ -87,6 +89,11 @@ export class CharacterController {
       case "setHeadPose":
         this.setHeadPose(command.params, command.params.duration);
         break;
+      case "setExpression": {
+        const { duration, ...patch } = command.params;
+        this.setExpression(patch, duration);
+        break;
+      }
     }
   }
 
@@ -94,6 +101,10 @@ export class CharacterController {
     const previousMood = this.expressionController.getCurrentMood();
     this.expressionController.setMood(mood, duration);
     this.stateManager.setMood(mood, previousMood);
+  }
+
+  public setExpression(patch: ExpressionPatch, duration?: number): void {
+    this.expressionController.setExpression(patch, duration);
   }
 
   public triggerAction(
@@ -185,6 +196,14 @@ export class CharacterController {
 
   public getExpression(): ExpressionConfig {
     return this.expressionController.getExpression();
+  }
+
+  public getAxisOverlay(): Readonly<Partial<ExpressionAxes>> {
+    return this.expressionController.getAxisOverlay();
+  }
+
+  public getMixedExpression(): ExpressionConfig {
+    return this.expressionController.getMixedExpression();
   }
 
   public getExpressionWithAction(): ExpressionConfig {

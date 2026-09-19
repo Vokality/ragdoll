@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Raycaster, Vector3 } from "three";
+import { Mesh, Raycaster, Vector3 } from "three";
 import { AnatomicalHead } from "../../src/renderers/three/anatomical-head";
 import { CharacterController } from "../../src/controllers/character-controller";
 import { computeRenderData } from "../../src/components/render-data";
@@ -71,6 +71,46 @@ describe("anatomical head", () => {
       ).toBeGreaterThan(1000);
     } finally {
       second.dispose();
+      controller.destroy();
+    }
+  });
+
+  test("settled smile, gaze, and jaw lock adapter morphs and eyeball rotation", () => {
+    const controller = new CharacterController({
+      variantId: "human",
+      themeId: "default",
+      onEventSubscriberError: console.error,
+    });
+    const head = new AnatomicalHead();
+    try {
+      controller.setIdleEnabled(false);
+      controller.setExpression({ smile: 0.5, gazeX: 1, jaw: 1 }, 0);
+      controller.update(0);
+      const data = computeRenderData(controller);
+      expect(data.expression.leftEye.pupilOffset.x).toBeCloseTo(4);
+      expect(data.expression.rightEye.pupilOffset.x).toBeCloseTo(4);
+      head.update(data);
+      const dictionary = head.skin.morphTargetDictionary;
+      const influences = head.skin.morphTargetInfluences;
+      if (!dictionary || !influences) {
+        throw new Error("Missing morph dictionary");
+      }
+      expect(influences[dictionary.mouthSmile_L]).toBeCloseTo(0.5);
+      expect(influences[dictionary.jawOpen]).toBeCloseTo(1);
+      const pupilOffset = data.expression.leftEye.pupilOffset;
+      const gazing = head.root.children.filter(
+        (child): child is Mesh =>
+          child instanceof Mesh &&
+          child !== head.skin &&
+          child.rotation.y === pupilOffset.x * 0.035,
+      );
+      expect(gazing.length).toBeGreaterThan(0);
+      for (const mesh of gazing) {
+        expect(mesh.rotation.y).toBe(pupilOffset.x * 0.035);
+        expect(mesh.rotation.x).toBe(pupilOffset.y * 0.035);
+      }
+    } finally {
+      head.dispose();
       controller.destroy();
     }
   });

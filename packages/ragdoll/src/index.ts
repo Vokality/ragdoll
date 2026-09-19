@@ -69,6 +69,11 @@ export type {
   JointName,
   HeadPose,
   Vector3Like,
+  ExpressionAxes,
+  ExpressionPatch,
+  FaceAxis,
+  GazeAxis,
+  ExpressionAxis,
 } from "./types";
 
 export * from "./animation/easing";

@@ -257,6 +257,26 @@ describe("CharacterController", () => {
       const state = controller.getState();
       expect(state.headPose).toBeDefined();
     });
+
+    it("should execute setExpression and strip duration from the axis mask", () => {
+      controller.executeCommand({
+        action: "setExpression",
+        params: { smile: 0.5, duration: 0.2 },
+      });
+      expect(controller.getAxisOverlay()).toEqual({ smile: 0.5 });
+      expect(controller.getAxisOverlay()).not.toHaveProperty("duration");
+    });
+  });
+
+  describe("setExpression", () => {
+    it("forwards an axis patch without emitting a new state shape", () => {
+      controller.setExpression({ smile: 0.4, gazeX: 1 }, 0);
+      const state = controller.getState();
+      expect(state.mood).toBe("neutral");
+      expect(controller.getAxisOverlay()).toEqual({ smile: 0.4, gazeX: 1 });
+      expect(controller.getMixedExpression().mouth.cornerPull).toBeCloseTo(0.4);
+      expect(controller.getExpression().mouth.cornerPull).toBe(0);
+    });
   });
 
   describe("joint management", () => {

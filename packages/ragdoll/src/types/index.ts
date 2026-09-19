@@ -13,6 +13,22 @@ export type FacialMood =
 
 export type FacialAction = "none" | "wink" | "talk" | "shake";
 
+export type FaceAxis = "smile" | "frown" | "brows" | "eyesOpen" | "jaw";
+export type GazeAxis = "gazeX" | "gazeY";
+export type ExpressionAxis = FaceAxis | GazeAxis;
+
+export interface ExpressionAxes {
+  smile: number;
+  frown: number;
+  brows: number;
+  eyesOpen: number;
+  jaw: number;
+  gazeX: number;
+  gazeY: number;
+}
+
+export type ExpressionPatch = { [K in ExpressionAxis]?: number };
+
 export interface HeadPose {
   yaw: number;
   pitch: number;
@@ -82,6 +98,10 @@ export type FacialCommand =
         pitch?: number;
         duration?: number;
       };
+    }
+  | {
+      action: "setExpression";
+      params: ExpressionPatch & { duration?: number };
     };
 
 export interface FacialStatePayload {
@@ -106,4 +126,3 @@ export interface JointCommand {
   angle?: Vector3Like;
   rotation?: { x: number; y: number; z: number };
 }
-
