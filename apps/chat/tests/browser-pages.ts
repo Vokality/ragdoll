@@ -22,4 +22,5 @@ export const browserPages = [
   "apps/chat/tests/composer-input.html",
   "apps/chat/tests/conversation-scrollbar.html",
   "packages/ragdoll/tests/renderers/lifecycle.html",
+  "packages/ragdoll/tests/renderers/expression-mix.html",
 ];
