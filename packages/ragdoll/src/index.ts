@@ -19,6 +19,12 @@ export type { StateEvent, EventSubscriber, StateSnapshot } from "./state/types";
 // Models
 export { RagdollGeometry } from "./models/ragdoll-geometry";
 export { RagdollSkeleton } from "./models/ragdoll-skeleton";
+export {
+  applyAxes,
+  clampAxis,
+  cloneExpression,
+  FACE_AXES_CLEARED_ON_SET_MOOD,
+} from "./models/expression-axes";
 
 // Themes
 export {
@@ -69,6 +75,11 @@ export type {
   JointName,
   HeadPose,
   Vector3Like,
+  ExpressionAxes,
+  ExpressionPatch,
+  FaceAxis,
+  GazeAxis,
+  ExpressionAxis,
 } from "./types";
 
 export * from "./animation/easing";
