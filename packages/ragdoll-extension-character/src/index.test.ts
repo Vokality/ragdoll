@@ -67,6 +67,180 @@ describe("Character package boundaries", () => {
     await registry.destroy();
   });
 
+  it("forwards setExpression through the owned extension-tool IPC topic", async () => {
+    const published: Array<{ topic: string; payload: unknown }> = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc((topic, payload) => {
+        published.push({ topic, payload });
+      }),
+    });
+
+    const result = await registry.executeTool("setExpression", {
+      smile: 0.5,
+      gazeX: -0.2,
+      duration: 0.4,
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: { forwarded: true },
+    });
+    expect(published).toEqual([
+      {
+        topic: "extension-tool:character",
+        payload: {
+          extensionId: "character",
+          tool: "setExpression",
+          args: { smile: 0.5, gazeX: -0.2, duration: 0.4 },
+        },
+      },
+    ]);
+    await registry.destroy();
+  });
+
+  it("rejects non-finite setExpression fields before IPC", async () => {
+    const published: unknown[] = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc((_topic, payload) => published.push(payload)),
+    });
+    try {
+      const fields = [
+        "smile",
+        "frown",
+        "brows",
+        "eyesOpen",
+        "jaw",
+        "gazeX",
+        "gazeY",
+        "duration",
+      ] as const;
+      for (const value of [NaN, Infinity, "-1", null]) {
+        for (const field of fields) {
+          expect(
+            (await registry.executeTool("setExpression", { [field]: value }))
+              .success,
+          ).toBe(false);
+        }
+      }
+      expect(published).toEqual([]);
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("rejects out-of-range setExpression fields before IPC", async () => {
+    const published: unknown[] = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc((_topic, payload) => published.push(payload)),
+    });
+    try {
+      expect(
+        (await registry.executeTool("setExpression", { smile: 1.1 })).success,
+      ).toBe(false);
+      expect(
+        (await registry.executeTool("setExpression", { eyesOpen: 1.31 }))
+          .success,
+      ).toBe(false);
+      expect(
+        (await registry.executeTool("setExpression", { brows: -1.01 })).success,
+      ).toBe(false);
+      expect(
+        (await registry.executeTool("setExpression", { duration: 5.01 }))
+          .success,
+      ).toBe(false);
+      expect(published).toEqual([]);
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("accepts empty and in-range setExpression patches", async () => {
+    const published: Array<{ topic: string; payload: unknown }> = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc((topic, payload) => {
+        published.push({ topic, payload });
+      }),
+    });
+    try {
+      const patches: Array<Record<string, number>> = [
+        {},
+        { smile: 0 },
+        { eyesOpen: 1.3 },
+        { duration: 0 },
+      ];
+      for (const args of patches) {
+        expect(
+          (await registry.executeTool("setExpression", args)).success,
+        ).toBe(true);
+      }
+      expect(published).toEqual(
+        patches.map((args) => ({
+          topic: "extension-tool:character",
+          payload: {
+            extensionId: "character",
+            tool: "setExpression",
+            args,
+          },
+        })),
+      );
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("exposes a Grok-safe setExpression schema of optional numbers", async () => {
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc(() => undefined),
+    });
+    try {
+      const tool = registry
+        .getAllTools()
+        .find((entry) => entry.function.name === "setExpression");
+      if (!tool) throw new Error("setExpression tool was not registered");
+      const parameters = tool.function.parameters;
+      expect(parameters.required).toBeUndefined();
+      expect("anyOf" in parameters).toBe(false);
+      expect(Object.keys(parameters.properties).sort()).toEqual(
+        [
+          "brows",
+          "duration",
+          "eyesOpen",
+          "frown",
+          "gazeX",
+          "gazeY",
+          "jaw",
+          "smile",
+        ].sort(),
+      );
+      for (const property of Object.values(parameters.properties)) {
+        expect(property.type).toBe("number");
+        expect("anyOf" in property).toBe(false);
+      }
+    } finally {
+      await registry.destroy();
+    }
+  });
+
   it("rejects registration when the host advertises ipc without an implementation", async () => {
     const registry = createRegistry({
       now: Date.now,
