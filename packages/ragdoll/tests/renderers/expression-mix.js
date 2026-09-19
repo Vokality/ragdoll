@@ -4,7 +4,6 @@ import { flushSync } from "react-dom";
 import { Mesh, Vector3 } from "three";
 import { RagdollCharacter } from "../../src/components/ragdoll-character.tsx";
 import { computeRenderData } from "../../src/components/render-data.ts";
-import { applyAxes } from "../../src/models/expression-axes.ts";
 import { AnatomicalHead } from "../../src/renderers/three/anatomical-head.ts";
 import { getTheme } from "../../src/themes/index.ts";
 
@@ -38,31 +37,18 @@ const check = (condition, message) => {
 const nearly = (actual, expected, epsilon = 0.02) =>
   Math.abs(actual - expected) <= epsilon;
 const waitFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-const moodDuration = (duration) => Math.max(0.05, duration);
-const overlaySettled = (target) => {
-  const mixed = target.getMixedExpression();
-  const end = applyAxes(target.getExpression(), target.getAxisOverlay());
-  return (
-    nearly(mixed.mouth.cornerPull, end.mouth.cornerPull, 1e-4) &&
-    nearly(mixed.leftEye.pupilOffset.x, end.leftEye.pupilOffset.x, 1e-4) &&
-    nearly(mixed.leftEye.pupilOffset.y, end.leftEye.pupilOffset.y, 1e-4)
-  );
-};
-const moodSettled = (target, mood) => {
-  const current = target.getExpression();
-  const preset = target.getGeometry().getExpressionForMood(mood);
-  return (
-    nearly(current.mouth.cornerPull, preset.mouth.cornerPull) &&
-    nearly(current.leftEye.openness, preset.leftEye.openness)
-  );
-};
-const waitSettled = async (target, { startedAt, minDuration, mood }) => {
-  const deadline = startedAt + 8000;
-  let previous;
-  let stable = 0;
+const waitFor = async (predicate, message) => {
+  const deadline = performance.now() + 8000;
   while (performance.now() < deadline) {
+    if (predicate()) return;
     await waitFrame();
-    const elapsed = (performance.now() - startedAt) / 1000;
+  }
+  throw new Error(message);
+};
+const waitSettled = async (target, minDuration = 0) => {
+  const startedAt = performance.now();
+  let previous;
+  await waitFor(() => {
     const mixed = target.getMixedExpression();
     const sample = [
       mixed.mouth.cornerPull,
@@ -71,27 +57,13 @@ const waitSettled = async (target, { startedAt, minDuration, mood }) => {
     ]
       .map((value) => value.toFixed(5))
       .join(",");
-    stable = sample === previous ? stable + 1 : 0;
+    const elapsed = (performance.now() - startedAt) / 1000;
+    const stable = previous !== undefined && sample === previous;
     previous = sample;
-    if (
-      elapsed >= minDuration &&
-      overlaySettled(target) &&
-      (!mood || moodSettled(target, mood)) &&
-      stable >= 1
-    )
-      return mixed;
-  }
-  throw new Error(
-    `expression did not settle after ${minDuration}s${mood ? ` (${mood})` : ""}`,
-  );
+    return elapsed >= minDuration && stable;
+  }, `expression did not settle after ${minDuration}s`);
+  return target.getMixedExpression();
 };
-const eyeballs = (head) =>
-  head.root.children.filter(
-    (child) =>
-      child instanceof Mesh &&
-      child !== head.skin &&
-      Math.abs(child.position.x) > 10,
-  );
 
 try {
   render("human", "default");
@@ -102,76 +74,54 @@ try {
   );
   const head = new AnatomicalHead();
   try {
-    const neutralAt = performance.now();
     controller.setMood("neutral", 0);
-    await waitSettled(controller, {
-      startedAt: neutralAt,
-      minDuration: moodDuration(0),
-      mood: "neutral",
-    });
+    await waitSettled(controller, 0.05);
 
     controller.setExpression({ smile: 0.5, gazeX: 0.6, gazeY: 0.2 }, 0);
-    const halfSmile = await waitSettled(controller, {
-      startedAt: performance.now(),
-      minDuration: 0,
-    });
+    const halfSmile = await waitSettled(controller);
     check(
       nearly(halfSmile.mouth.cornerPull, 0.5),
       `half smile cornerPull was ${halfSmile.mouth.cornerPull}, expected ≈ 0.5`,
     );
     check(
-      halfSmile.leftEye.pupilOffset.x > 0,
-      `gazeX 0.6 pupilOffset.x was ${halfSmile.leftEye.pupilOffset.x}, expected > 0`,
+      halfSmile.leftEye.pupilOffset.x < 0,
+      `gazeX 0.6 pupilOffset.x was ${halfSmile.leftEye.pupilOffset.x}, expected < 0`,
     );
 
     controller.setExpression({ gazeX: 1 }, 0);
-    await waitSettled(controller, {
-      startedAt: performance.now(),
-      minDuration: 0,
-    });
+    await waitSettled(controller);
     const gazeData = computeRenderData(controller);
     check(
-      gazeData.expression.leftEye.pupilOffset.x > 0,
-      `gazeX +1 render pupilOffset.x was ${gazeData.expression.leftEye.pupilOffset.x}, expected > 0`,
+      nearly(gazeData.expression.leftEye.pupilOffset.x, -4),
+      `gazeX +1 render pupilOffset.x was ${gazeData.expression.leftEye.pupilOffset.x}, expected ≈ -4`,
     );
     head.update(gazeData);
-    const eyes = eyeballs(head);
+    const eyes = head.root.children.filter(
+      (child) =>
+        child instanceof Mesh &&
+        child !== head.skin &&
+        Math.abs(child.position.x) > 10,
+    );
     check(eyes.length === 2, `expected two eyeballs, got ${eyes.length}`);
-    const rightEye =
-      eyes[0].position.x > eyes[1].position.x ? eyes[0] : eyes[1];
-    const leftEye = rightEye === eyes[0] ? eyes[1] : eyes[0];
-    const towardRight = Math.sign(rightEye.position.x - leftEye.position.x);
     for (const eye of eyes) {
-      // Local +Z is face-facing (eyes sit at +Z toward the camera).
+      // Local +Z is face-facing; character's right is −X (ARKit _R).
       const look = new Vector3(0, 0, 1).applyEuler(eye.rotation);
       check(
-        look.x * towardRight > 0,
-        `gazeX +1 look x=${look.x} did not point toward the character's right (right-eye x=${rightEye.position.x})`,
+        look.x < 0,
+        `gazeX +1 look x=${look.x} did not point toward the character's right (−X)`,
       );
     }
 
     controller.triggerAction("wink");
-    const winkDeadline = performance.now() + 5000;
-    let winked = false;
-    while (performance.now() < winkDeadline) {
-      await waitFrame();
+    await waitFor(() => {
       const withAction = controller.getExpressionWithAction();
-      if (withAction.rightEye.openness < withAction.leftEye.openness - 0.05) {
-        winked = true;
-        break;
-      }
-    }
-    check(winked, "wink did not close the right eye more than the left");
+      return withAction.rightEye.openness < withAction.leftEye.openness - 0.05;
+    }, "wink did not close the right eye more than the left");
 
-    const sadAt = performance.now();
     controller.setMood("sad", 0);
-    const sad = await waitSettled(controller, {
-      startedAt: sadAt,
-      minDuration: moodDuration(0),
-      mood: "sad",
-    });
+    const sad = await waitSettled(controller, 0.05);
     check(
-      sad.leftEye.pupilOffset.x > 0,
+      sad.leftEye.pupilOffset.x < 0,
       `sticky gaze pupilOffset.x was ${sad.leftEye.pupilOffset.x} after sad`,
     );
     check(

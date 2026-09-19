@@ -87,8 +87,8 @@ describe("anatomical head", () => {
       controller.setExpression({ smile: 0.5, gazeX: 1, jaw: 1 }, 0);
       controller.update(0);
       const data = computeRenderData(controller);
-      expect(data.expression.leftEye.pupilOffset.x).toBeCloseTo(4);
-      expect(data.expression.rightEye.pupilOffset.x).toBeCloseTo(4);
+      expect(data.expression.leftEye.pupilOffset.x).toBeCloseTo(-4);
+      expect(data.expression.rightEye.pupilOffset.x).toBeCloseTo(-4);
       head.update(data);
       const dictionary = head.skin.morphTargetDictionary;
       const influences = head.skin.morphTargetInfluences;

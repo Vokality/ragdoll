@@ -21,7 +21,8 @@ export const AXIS_KEYS: readonly ExpressionAxis[] = [
   ...GAZE_AXES,
 ];
 
-export const GAZE_OFFSET_X = 4;
+// +gazeX is the character's right (−X / ARKit _R). Thinking's baked glance stays +4.
+export const GAZE_OFFSET_X = -4;
 export const GAZE_OFFSET_Y = 5;
 
 const AXIS_RANGE: Record<ExpressionAxis, readonly [number, number]> = {
