@@ -5,6 +5,7 @@
  * - setMood: Set the character's facial mood/expression
  * - triggerAction: Trigger actions like wink, talk, shake
  * - setHeadPose: Rotate the character's head
+ * - setExpression: Patch facial axes on top of the current mood
  */
 
 import {
@@ -60,6 +61,17 @@ export interface SetHeadPoseArgs {
   duration?: number;
 }
 
+export interface SetExpressionArgs {
+  smile?: number;
+  frown?: number;
+  brows?: number;
+  eyesOpen?: number;
+  jaw?: number;
+  gazeX?: number;
+  gazeY?: number;
+  duration?: number;
+}
+
 // =============================================================================
 // Handler Type
 // =============================================================================
@@ -72,6 +84,7 @@ export interface CharacterToolHandler {
   setMood(args: SetMoodArgs): Promise<ToolResult> | ToolResult;
   triggerAction(args: TriggerActionArgs): Promise<ToolResult> | ToolResult;
   setHeadPose(args: SetHeadPoseArgs): Promise<ToolResult> | ToolResult;
+  setExpression(args: SetExpressionArgs): Promise<ToolResult> | ToolResult;
 }
 
 // =============================================================================
@@ -120,6 +133,28 @@ function parseSetHeadPose(args: Record<string, unknown>): SetHeadPoseArgs {
     pitchDegrees: optionalNumber(args.pitchDegrees, "pitchDegrees", -20, 20),
     duration: optionalNumber(args.duration, "duration", 0.1, 2),
   };
+}
+
+const SET_EXPRESSION_FIELDS = [
+  ["smile", 0, 1],
+  ["frown", 0, 1],
+  ["brows", -1, 1],
+  ["eyesOpen", 0, 1.3],
+  ["jaw", 0, 1],
+  ["gazeX", -1, 1],
+  ["gazeY", -1, 1],
+  ["duration", 0, 5],
+] as const satisfies ReadonlyArray<
+  readonly [keyof SetExpressionArgs, number, number]
+>;
+
+function parseSetExpression(args: Record<string, unknown>): SetExpressionArgs {
+  const parsed: SetExpressionArgs = {};
+  for (const [name, minimum, maximum] of SET_EXPRESSION_FIELDS) {
+    const value = optionalNumber(args[name], name, minimum, maximum);
+    if (value !== undefined) parsed[name] = value;
+  }
+  return parsed;
 }
 
 function validateArguments<T>(
@@ -235,13 +270,84 @@ function createCharacterTools(handler: CharacterToolHandler): ExtensionTool[] {
       handler: (args, _ctx) => handler.setHeadPose(parseSetHeadPose(args)),
       validate: (args) => validateArguments(parseSetHeadPose, args),
     },
+    {
+      definition: {
+        type: "function",
+        function: {
+          name: "setExpression",
+          description:
+            "Patch facial axes on top of the current mood. Owned axes replace mapped face channels; they are not added to the mood. Omit a field to leave that channel unchanged; pass 0 for none (gaze 0 is look-center, not inherit mood). Does not replace the named mood. Use setMood for named moods. If you also call setMood this turn, call setMood first. gazeX/gazeY move the eyes only and stay until the next gaze write; use setHeadPose to turn the skull. Host auto-thinking at the start of a turn clears smile/frown/brows/eyes/jaw — re-apply intensity this turn if it should persist. Do not pass morph names.",
+          parameters: {
+            type: "object",
+            properties: {
+              smile: {
+                type: "number",
+                minimum: 0,
+                maximum: 1,
+                description:
+                  "Smile intensity. Omit to leave unchanged; 0 is none.",
+              },
+              frown: {
+                type: "number",
+                minimum: 0,
+                maximum: 1,
+                description:
+                  "Frown intensity. Omit to leave unchanged; 0 is none.",
+              },
+              brows: {
+                type: "number",
+                minimum: -1,
+                maximum: 1,
+                description:
+                  "Brow raise. -1 down, 0 rest, 1 up. Omit to leave unchanged.",
+              },
+              eyesOpen: {
+                type: "number",
+                minimum: 0,
+                maximum: 1.3,
+                description:
+                  "Eyelid openness. 0 closed, 1 normal, 1.3 wide. Omit to leave unchanged.",
+              },
+              jaw: {
+                type: "number",
+                minimum: 0,
+                maximum: 1,
+                description:
+                  "Jaw opening. 0 closed, 1 fully open. Omit to leave unchanged.",
+              },
+              gazeX: {
+                type: "number",
+                minimum: -1,
+                maximum: 1,
+                description:
+                  "Eye look, character's left to right. 0 is look-center (sticky until the next gaze write). Does not turn the skull or restore a mood-baked glance. Omit to leave unchanged.",
+              },
+              gazeY: {
+                type: "number",
+                minimum: -1,
+                maximum: 1,
+                description:
+                  "Eye look, down to up. 0 is look-center (sticky). Does not turn the skull. Omit to leave unchanged.",
+              },
+              duration: {
+                type: "number",
+                minimum: 0,
+                maximum: 5,
+                description: "Transition seconds. 0 snaps. Omit for ~0.35s.",
+              },
+            },
+          },
+        },
+      },
+      handler: (args, _ctx) => handler.setExpression(parseSetExpression(args)),
+      validate: (args) => validateArguments(parseSetExpression, args),
+    },
   ];
 }
 
 // =============================================================================
 // Extension Factory
 // =============================================================================
-
 
 const DEFAULT_EXTENSION_ID = "character";
 const CHARACTER_IPC_CHANNEL = `extension-tool:${DEFAULT_EXTENSION_ID}`;
@@ -271,6 +377,7 @@ function createRuntime(
     setMood: (args) => forward("setMood", { ...args }),
     triggerAction: (args) => forward("triggerAction", { ...args }),
     setHeadPose: (args) => forward("setHeadPose", { ...args }),
+    setExpression: (args) => forward("setExpression", { ...args }),
   };
 
   return {

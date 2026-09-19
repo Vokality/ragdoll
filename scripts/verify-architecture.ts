@@ -75,12 +75,12 @@ for (const directory of extensionPackageDirs) {
   const pkg = await readPackageJson(directory);
   for (const name of dependencyNames(pkg)) {
     if (
-      (name.startsWith("@vokality/ragdoll-extension-") &&
-        name !== pkg.name) ||
-      name === "electron"
+      (name.startsWith("@vokality/ragdoll-extension-") && name !== pkg.name) ||
+      name === "electron" ||
+      name === "@vokality/ragdoll"
     ) {
       violations.push(
-        `${directory}/package.json: extension packages cannot depend on apps or other extensions (${name})`,
+        `${directory}/package.json: extension packages cannot depend on the character framework, apps, or other extensions (${name})`,
       );
     }
   }
@@ -150,14 +150,18 @@ for await (const relativeFile of sourceGlob.scan({ cwd: workspaceRoot })) {
       extensionPackage &&
       (specifier.startsWith("@vokality/ragdoll-extension-") ||
         specifier === "electron" ||
+        specifier === "@vokality/ragdoll" ||
+        specifier.startsWith("@vokality/ragdoll/") ||
         target?.startsWith("apps/") ||
+        target === "packages/ragdoll" ||
+        target?.startsWith("packages/ragdoll/") ||
         (/^packages\/ragdoll-extension-[^/]+\//.test(target ?? "") &&
           !target?.startsWith(`${extensionPackage}/`)))
     ) {
       report(
         file,
         specifier,
-        "extension packages cannot depend on apps, Electron, or other extensions",
+        "extension packages cannot depend on the character framework, apps, Electron, or other extensions",
       );
     }
 
