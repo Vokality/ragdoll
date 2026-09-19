@@ -7,22 +7,8 @@ import {
   clampAxis,
   cloneExpression,
   FACE_AXES_CLEARED_ON_SET_MOOD,
-  GAZE_AXES,
 } from "../models/expression-axes";
 import { ActionController } from "./action-controller";
-
-function gazeOnlyOverlay(
-  overlay: Partial<ExpressionAxes>,
-): Partial<ExpressionAxes> {
-  const next: Partial<ExpressionAxes> = {};
-  for (const key of GAZE_AXES) {
-    const value = overlay[key];
-    if (value !== undefined) {
-      next[key] = value;
-    }
-  }
-  return next;
-}
 
 export class ExpressionController {
   private geometry: RagdollGeometry;
@@ -61,7 +47,14 @@ export class ExpressionController {
       return;
     }
 
-    this.overlayTarget = gazeOnlyOverlay(this.overlayTarget);
+    const gazeOverlay: Partial<ExpressionAxes> = {};
+    if (this.overlayTarget.gazeX !== undefined) {
+      gazeOverlay.gazeX = this.overlayTarget.gazeX;
+    }
+    if (this.overlayTarget.gazeY !== undefined) {
+      gazeOverlay.gazeY = this.overlayTarget.gazeY;
+    }
+    this.overlayTarget = gazeOverlay;
     this.overlayProgress = 1;
     // Gaze stays overlay-only so applyAxes does not double-apply pupilOffset.
     this.transitionStartExpression = cloneExpression(mixedNow);
