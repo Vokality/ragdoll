@@ -66,6 +66,16 @@ export class OAuthLoopbackService implements OAuthRedirectService {
         return;
       }
 
+      // A real redirect carries a code or an error. Anything else (a probe, a
+      // prefetch) must not consume the one-use callback and end the login.
+      if (
+        !requestUrl.searchParams.has("code") &&
+        !requestUrl.searchParams.has("error")
+      ) {
+        response.writeHead(400).end();
+        return;
+      }
+
       response
         .writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",

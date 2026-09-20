@@ -28,3 +28,21 @@ test("OS launch failures become operation failures rather than unhandled rejecti
     error: "No browser",
   });
 });
+
+test("loopback HTTP opens only for callers that ask for it", async () => {
+  const opened: string[] = [];
+  const service = new ExternalNavigationService(async (url) => {
+    opened.push(url);
+  });
+  const local = "http://127.0.0.1:8080/authorize";
+
+  expect((await service.open(local)).success).toBe(false);
+  expect(
+    (await service.open("http://example.com", { allowLoopbackHttp: true }))
+      .success,
+  ).toBe(false);
+  expect(await service.open(local, { allowLoopbackHttp: true })).toEqual({
+    success: true,
+  });
+  expect(opened).toEqual([local]);
+});

@@ -63,7 +63,17 @@ export class CharacterCommandService {
     name: string,
     args: Record<string, unknown>,
   ): void {
+    this.dispatch(controller, name, args);
+    // Only a command that took effect replaces the automatic reaction; a
+    // rejected one must not leave the face stuck on "thinking".
     this.explicitReaction = true;
+  }
+
+  private dispatch(
+    controller: CharacterCommands,
+    name: string,
+    args: Record<string, unknown>,
+  ): void {
     switch (name) {
       case "setMood": {
         const command = moodCommandSchema.parse(args);

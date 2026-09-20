@@ -184,3 +184,34 @@ it("a failed toggle does not poison later operations or overview loading", async
   expect(await successful).toEqual(["tasks"]);
   expect((await overview).disabled).toEqual(["tasks"]);
 });
+
+it("sends a field the user emptied as cleared but leaves untouched empty fields alone", async () => {
+  const sent: Record<string, unknown>[] = [];
+  const service = new ExtensionManagementService(
+    createGateway({
+      setConfigValues: async (_extensionId, values) => {
+        sent.push(values);
+        return { success: true };
+      },
+      getConfigSchema: async () => ({
+        clientId: { type: "string", label: "Client ID", required: true },
+        clientSecret: { type: "string", label: "Secret", secret: true },
+      }),
+      getConfigStatus: async () => ({
+        isConfigured: false,
+        missingFields: ["clientId"],
+        values: {},
+      }),
+    }),
+  );
+
+  // clientSecret is empty because saved secrets load redacted, not because
+  // the user cleared it.
+  await service.saveConfiguration(
+    "spotify",
+    { clientId: "", clientSecret: "" },
+    new Set(["clientId"]),
+  );
+
+  expect(sent).toEqual([{ clientId: "" }]);
+});

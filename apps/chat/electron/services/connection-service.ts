@@ -1,7 +1,12 @@
 import { ConnectionToolInputError } from "./mcp-connection-client.js";
 import { randomUUID } from "node:crypto";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ErrorCode,
+  McpError,
+  type Tool,
+  type CallToolResult,
+} from "@modelcontextprotocol/sdk/types.js";
 import {
   connectionSaveSchema,
   type ConnectionInfo,
@@ -53,7 +58,7 @@ export class ConnectionService {
     return [...this.entries.values()].map(({ info }) => structuredClone(info));
   }
   async save(input: ConnectionSave): Promise<ConnectionInfo> {
-    return this.mutate(async () => {
+    const saved = await this.mutate(async () => {
       const {
         id: requestedId,
         bearerToken,
@@ -94,6 +99,10 @@ export class ConnectionService {
       this.changed();
       return structuredClone(entry.info);
     });
+    // Editing stops the running client. An enabled connection has to come
+    // back, or the agent silently loses its tools until the next launch.
+    if (saved.enabled) void this.connect(saved.id, false);
+    return saved;
   }
   async connect(id: string, interactive = true): Promise<OperationResult> {
     await this.mutations;
@@ -229,6 +238,15 @@ export class ConnectionService {
       return await client.call(name, args, signal);
     } catch (error) {
       if (error instanceof ConnectionToolInputError) throw error;
+      // The server answered with an error of its own, so the link is healthy.
+      // Dropping it would take every tool away over one bad call.
+      if (
+        error instanceof McpError &&
+        error.code !== ErrorCode.RequestTimeout &&
+        error.code !== ErrorCode.ConnectionClosed
+      ) {
+        throw new Error("The remote server reported that the call failed.");
+      }
       if (
         error instanceof ConnectionAuthorizationRequired ||
         error instanceof UnauthorizedError
@@ -239,7 +257,8 @@ export class ConnectionService {
           toolCount: 0,
           error: "Sign in again from Settings",
         };
-        entry.client = undefined;
+        // A newer client may have replaced this one while the call ran.
+        if (entry.client === client) entry.client = undefined;
         await client.close();
         this.changed();
       } else if (!signal?.aborted && entry.client === client) {

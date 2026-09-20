@@ -9,6 +9,7 @@
  * - Syncs state changes to the renderer via IPC
  */
 
+import { pathToFileURL } from "node:url";
 import {
   createRegistry,
   type ExtensionRegistry,
@@ -69,6 +70,8 @@ export interface ExtensionManagerConfig {
   onNotification?: NotificationCallback;
   packageRoots: ExtensionLoaderConfig["packageRoots"];
   disabledExtensions: readonly string[];
+  /** Imports a package entry. Defaults to a fresh import on every load. */
+  importModule?: (modulePath: string) => Promise<unknown>;
   /** Function to open URLs in system browser (for OAuth) */
   openExternal: (url: string) => Promise<void>;
   oauthRedirects: OAuthRedirectService;
@@ -104,6 +107,17 @@ export interface BuiltInExtensionDefinition {
 // =============================================================================
 // Extension Manager
 // =============================================================================
+
+let moduleLoads = 0;
+
+// Node caches modules by URL. Without a fresh URL an updated package keeps
+// running the code that was imported before the update.
+function importFreshModule(modulePath: string): Promise<unknown> {
+  const url = pathToFileURL(modulePath);
+  url.searchParams.set("load", String((moduleLoads += 1)));
+  // eslint-disable-next-line react-doctor/no-dynamic-import-path -- Host-discovered extension entries are runtime modules, not application bundle chunks.
+  return import(url.href);
+}
 
 export class ExtensionManager {
   private registry: ExtensionRegistry;
@@ -159,6 +173,20 @@ export class ExtensionManager {
     return this.enqueueLifecycle(() => this.unloadPackageRuntime(packageName));
   }
 
+  /**
+   * Drop everything cached for an unloaded user package so its next load reads
+   * the files now on disk. Used after an update or uninstall replaces them.
+   */
+  forgetPackage(packageName: string): Promise<void> {
+    return this.enqueueLifecycle(async () => {
+      if (this.loadedExtensions.some((ext) => ext.packageName === packageName))
+        throw new Error(`Package '${packageName}' is still loaded`);
+      const info = this.getCachedPackageInfo(packageName);
+      if (info) this.evictPackage(info.extensionId);
+      this.loader.forgetPackage(packageName);
+    });
+  }
+
   async reloadPackage(
     packageName: string,
     config?: Record<string, unknown>,
@@ -203,6 +231,7 @@ export class ExtensionManager {
       packageRoots: config.packageRoots,
       continueOnError: true,
       fileSystem: config.fileSystem,
+      importModule: config.importModule ?? importFreshModule,
       getHostEnvironment: (manifest) => this.createHostEnvironment(manifest),
     });
 
@@ -502,12 +531,24 @@ export class ExtensionManager {
       packages.map((packageName) => this.loader.getPackageInfo(packageName)),
     );
     for (const info of packageInfos) {
-      if (info) this.cachePackageDescriptor(info);
+      if (!info) continue;
+      try {
+        this.cachePackageDescriptor(info);
+      } catch (error) {
+        this.reportPackageFailure(info.packageName, error);
+      }
     }
 
-    for (const descriptor of this.packageInfoCache.values()) {
-      // eslint-disable-next-line react-doctor/async-await-in-loop -- Initialization can refresh and persist OAuth tokens; finish each lifecycle before advancing to the next.
-      await this.initializePackageInfo(descriptor);
+    for (const descriptor of [...this.packageInfoCache.values()]) {
+      try {
+        // eslint-disable-next-line react-doctor/async-await-in-loop -- Initialization can refresh and persist OAuth tokens; finish each lifecycle before advancing to the next.
+        await this.initializePackageInfo(descriptor);
+      } catch (error) {
+        // A broken user package must not keep the app from starting.
+        if (this.isBuiltIn(descriptor.packageName)) throw error;
+        this.evictPackage(descriptor.extensionId);
+        this.reportPackageFailure(descriptor.packageName, error);
+      }
     }
 
     for (const definition of this.config.builtInExtensions) {
@@ -613,16 +654,33 @@ export class ExtensionManager {
     const results: LoadResult[] = [];
 
     for (const packageName of packages) {
-      const info =
-        this.getCachedPackageInfo(packageName) ??
-        // eslint-disable-next-line react-doctor/async-await-in-loop -- Metadata initialization and registration are one ordered package lifecycle.
-        (await this.loader.getPackageInfo(packageName));
-
-      if (!info) {
-        throw new Error(`Package metadata is unavailable for '${packageName}'`);
+      let info: ExtensionPackageDescriptor | undefined;
+      try {
+        info =
+          this.getCachedPackageInfo(packageName) ??
+          // eslint-disable-next-line react-doctor/async-await-in-loop -- Metadata initialization and registration are one ordered package lifecycle.
+          (await this.loader.getPackageInfo(packageName)) ??
+          undefined;
+        if (!info) {
+          throw new Error(
+            `Package metadata is unavailable for '${packageName}'`,
+          );
+        }
+        this.cachePackageDescriptor(info);
+        await this.initializePackageInfo(info);
+      } catch (error) {
+        // One broken package fails alone; the rest still load.
+        if (info && this.packageInfoCache.get(info.extensionId) === info)
+          this.evictPackage(info.extensionId);
+        this.reportPackageFailure(packageName, error);
+        results.push({
+          packageName,
+          extensionId: info?.extensionId ?? "",
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
       }
-      this.cachePackageDescriptor(info);
-      await this.initializePackageInfo(info);
 
       if (this.isExtensionDisabled(info.extensionId)) {
         continue;
@@ -757,11 +815,17 @@ export class ExtensionManager {
   private async setDisabledExtensionsRuntime(
     extensionIds: string[],
   ): Promise<void> {
-    const next = new Set(extensionIds);
     const extensions = this.getDiscoveredExtensions();
+    // Ids of extensions that were since uninstalled linger in saved lists.
+    // Rejecting them would make every later toggle fail.
+    const next = new Set(
+      extensionIds.filter((extensionId) =>
+        extensions.some(({ id }) => id === extensionId),
+      ),
+    );
     for (const extensionId of next) {
       const extension = extensions.find(({ id }) => id === extensionId);
-      if (!extension) throw new Error(`Unknown extension: ${extensionId}`);
+      if (!extension) continue;
       if (!extension.canDisable) {
         throw new Error(`Extension '${extensionId}' is required`);
       }
@@ -1126,6 +1190,27 @@ export class ExtensionManager {
 
     await this.registry.destroy();
     this.initialized = false;
+  }
+
+  private isBuiltIn(packageName: string): boolean {
+    return this.config.builtInExtensions.some(
+      ({ descriptor }) => descriptor.packageName === packageName,
+    );
+  }
+
+  private evictPackage(extensionId: string): void {
+    this.packageInfoCache.delete(extensionId);
+    this.configManagers.get(extensionId)?.destroy();
+    this.configManagers.delete(extensionId);
+    this.oauthManagers.get(extensionId)?.destroy();
+    this.oauthManagers.delete(extensionId);
+  }
+
+  private reportPackageFailure(packageName: string, error: unknown): void {
+    this.config.logger.error(
+      `Extension package '${packageName}' could not be initialized:`,
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   private getCachedPackageInfo(

@@ -5,6 +5,7 @@ import { ConnectionService } from "./connection-service.js";
 import type { McpConnectionFactory } from "./mcp-connection-client.js";
 import { ConnectionToolService } from "./connection-tool-service.js";
 import { connectionSaveSchema } from "../electron-api.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 
 function setup(
   factory: McpConnectionFactory = {
@@ -153,6 +154,59 @@ describe("connections", () => {
     expect(
       (await tools.executeTool("lumen_call_connection_tool", args)).success,
     ).toBe(false);
+    await service.destroy();
+  });
+  it("reconnects an enabled connection after it is renamed", async () => {
+    const { service } = setup();
+    const saved = await service.save(config);
+    await service.setEnabled(saved.id, true);
+    expect(service.list()[0]?.status).toBe("connected");
+
+    await service.save({
+      id: saved.id,
+      name: "Renamed",
+      serverUrl: config.serverUrl,
+      authentication: config.authentication,
+    });
+    // The reconnect runs after the save resolves, like the startup connects.
+    for (
+      let attempt = 0;
+      attempt < 50 && service.list()[0]?.status !== "connected";
+      attempt++
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    expect(service.list()[0]).toMatchObject({
+      name: "Renamed",
+      status: "connected",
+      enabled: true,
+    });
+    expect(service.tools(saved.id)).toHaveLength(1);
+    await service.destroy();
+  });
+  it("keeps the connection when the server itself rejects one call", async () => {
+    let closed = 0;
+    const { service } = setup({
+      connect: async () => ({
+        tools: [{ name: "read", inputSchema: { type: "object" } }],
+        call: async () => {
+          throw new McpError(ErrorCode.InvalidParams, "bad arguments");
+        },
+        close: async () => {
+          closed += 1;
+        },
+      }),
+    });
+    const saved = await service.save(config);
+    await service.setEnabled(saved.id, true);
+
+    await expect(service.call(saved.id, "read", {})).rejects.toThrow(
+      "reported that the call failed",
+    );
+
+    expect(service.list()[0]?.status).toBe("connected");
+    expect(closed).toBe(0);
     await service.destroy();
   });
   it("validates remote addresses and rejects misplaced credentials", () => {

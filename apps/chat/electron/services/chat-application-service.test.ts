@@ -294,6 +294,116 @@ describe("ChatApplicationService", () => {
     expect(reportedErrors).toEqual([agent.eventError]);
   });
 
+  it("runs later event jobs when an earlier one keeps failing", async () => {
+    const reportedErrors: unknown[] = [];
+    const evaluated: string[] = [];
+    const agent: AgentRunner = {
+      runUserTurn: async () => {},
+      runEventTurn: async (_key, _history, trigger) => {
+        evaluated.push(trigger.type);
+        if (trigger.type === "game.move") throw new Error("unowned tool");
+        return { disposition: "respond", content: "Time is up" };
+      },
+    };
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      configuredAgent(agent),
+      () => {},
+      (error) => reportedErrors.push(error),
+    );
+    const events = new ConversationEventService(storage, eventDependencies);
+    const blocked = await events.publish("game", {
+      type: "game.move",
+      payload: {},
+      turnPolicy: "start-turn",
+    });
+    await events.publish("pomodoro", {
+      type: "timer.completed",
+      payload: {},
+      turnPolicy: "start-turn",
+    });
+
+    await chat.schedulePendingEventTurns();
+
+    expect(evaluated).toEqual(["game.move", "timer.completed"]);
+    expect(reportedErrors).toHaveLength(1);
+    expect(storage.snapshot().pendingAgentTurns).toMatchObject([
+      { triggerEventId: blocked.eventId },
+    ]);
+    expect(storage.snapshot().conversation.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Time is up",
+    });
+  });
+
+  it("drops a pending job whose trigger event no longer exists", async () => {
+    const reportedErrors: unknown[] = [];
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      configuredAgent(new StubAgentRunner()),
+      () => {},
+      (error) => reportedErrors.push(error),
+    );
+    await storage.update((draft) => {
+      draft.pendingAgentTurns.push({ triggerEventId: "gone", createdAt: 1 });
+    });
+
+    await chat.schedulePendingEventTurns();
+
+    expect(storage.snapshot().pendingAgentTurns).toEqual([]);
+    expect(reportedErrors).toHaveLength(1);
+  });
+
+  it("leaves an event interrupted by shutdown pending and unintroduced", async () => {
+    let markStarted = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    // Mirrors PersonalAgent, which reports an aborted event turn as silent.
+    const agent: AgentRunner = {
+      runUserTurn: async () => {},
+      runEventTurn: (_key, _history, _trigger, signal) =>
+        new Promise((resolve) => {
+          markStarted();
+          signal?.addEventListener("abort", () =>
+            resolve({ disposition: "silent" }),
+          );
+        }),
+    };
+    const storage = createInMemoryStorageRepository();
+    const chat = new ChatApplicationService(
+      storage,
+      configuredAgent(agent),
+      () => {},
+      ignoreError,
+    );
+    await storage.update((draft) => {
+      draft.conversation.push({
+        kind: "app-event",
+        id: "onboarding",
+        type: "app.onboarding",
+        payload: {},
+        turnPolicy: "start-turn",
+        occurredAt: 1,
+      });
+      draft.pendingAgentTurns.push({
+        triggerEventId: "onboarding",
+        createdAt: 1,
+      });
+    });
+
+    const run = chat.schedulePendingEventTurns();
+    await started;
+    await Promise.all([chat.destroy(), run]);
+
+    expect(storage.snapshot().pendingAgentTurns).toEqual([
+      { triggerEventId: "onboarding", createdAt: 1 },
+    ]);
+    expect(storage.snapshot().experience.introduced).toBe(false);
+  });
+
   it("keeps partial streamed text when the user cancels mid-turn", async () => {
     let releaseTurn: () => void = () => {};
     const turnGate = new Promise<void>((resolve) => {

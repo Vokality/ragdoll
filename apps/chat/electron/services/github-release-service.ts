@@ -6,7 +6,8 @@ const releaseSchema = z.object({
     z.object({
       name: z.string().min(1),
       browser_download_url: z.url(),
-      digest: z.string().min(1).optional(),
+      // GitHub reports null for assets uploaded before it computed digests.
+      digest: z.string().min(1).nullish(),
     }),
   ),
 });
@@ -18,7 +19,9 @@ export interface ExtensionRelease {
   sha256?: string;
 }
 
-function parseSha256Digest(digest: string | undefined): string | undefined {
+function parseSha256Digest(
+  digest: string | null | undefined,
+): string | undefined {
   if (!digest) return undefined;
   const match = /^sha256:([a-fA-F0-9]{64})$/.exec(digest);
   if (!match) {

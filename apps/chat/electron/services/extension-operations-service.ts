@@ -16,6 +16,7 @@ export class ExtensionOperationsService {
       | "discoverAndLoadPackages"
       | "unloadPackage"
       | "loadPackage"
+      | "forgetPackage"
       | "getDisabledExtensions"
       | "setDisabledExtensions"
     >,
@@ -33,7 +34,13 @@ export class ExtensionOperationsService {
   async install(repoUrl: string): Promise<InstallResult> {
     const result = await this.installer.installFromGitHub(repoUrl);
     if (!result.success) return result;
-    await this.manager.discoverAndLoadPackages();
+    try {
+      await this.manager.discoverAndLoadPackages();
+    } catch (error) {
+      // Never leave a package on disk that the host could not activate.
+      await this.installer.uninstall(result.extensionId);
+      return { success: false, error: errorMessage(error) };
+    }
     const extension = this.manager
       .getDiscoveredExtensions()
       .find(({ id }) => id === result.extensionId);
@@ -51,6 +58,7 @@ export class ExtensionOperationsService {
     }
 
     await this.installer.uninstall(result.extensionId);
+    if (extension) await this.manager.forgetPackage(extension.packageName);
     return {
       success: false,
       error: `Extension '${result.extensionId}' did not load after installation`,
@@ -58,6 +66,9 @@ export class ExtensionOperationsService {
   }
 
   async uninstall(extensionId: string): Promise<OperationResult> {
+    const known = this.manager
+      .getDiscoveredExtensions()
+      .find(({ id }) => id === extensionId);
     const loaded = this.manager
       .getAvailableExtensions()
       .find(({ id }) => id === extensionId);
@@ -71,13 +82,19 @@ export class ExtensionOperationsService {
     try {
       result = await this.installer.uninstall(extensionId);
     } catch (error) {
-      result = {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      result = { success: false, error: errorMessage(error) };
     }
-    if (!result.success && loaded)
-      await this.restorePackage(loaded.packageName);
+    if (!result.success) {
+      if (loaded) await this.restoreAfterFailure(loaded.packageName);
+      return result;
+    }
+    if (known) await this.manager.forgetPackage(known.packageName);
+    // A removed extension left in the disabled list would be rejected as
+    // unknown on the next toggle of any other extension.
+    const disabled = this.manager.getDisabledExtensions();
+    if (disabled.includes(extensionId)) {
+      await this.setDisabled(disabled.filter((id) => id !== extensionId));
+    }
     return result;
   }
 
@@ -97,20 +114,25 @@ export class ExtensionOperationsService {
     const previous = this.manager.getDisabledExtensions();
     try {
       await this.manager.setDisabledExtensions(extensionIds);
+      const applied = this.manager.getDisabledExtensions();
       await this.storage.update((draft) => {
-        draft.settings.disabledExtensions = extensionIds;
+        draft.settings.disabledExtensions = applied;
       });
       return { success: true };
     } catch (error) {
-      await this.manager.setDisabledExtensions(previous);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      try {
+        await this.manager.setDisabledExtensions(previous);
+      } catch {
+        // The original failure is the one worth reporting.
+      }
+      return { success: false, error: errorMessage(error) };
     }
   }
 
   async update(extensionId: string): Promise<InstallResult> {
+    const known = this.manager
+      .getDiscoveredExtensions()
+      .find(({ id }) => id === extensionId);
     const loaded = this.manager
       .getAvailableExtensions()
       .find(({ id }) => id === extensionId);
@@ -125,22 +147,25 @@ export class ExtensionOperationsService {
     try {
       update = await this.installer.prepareUpdate(extensionId);
     } catch (error) {
-      if (loaded) await this.restorePackage(loaded.packageName);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      if (loaded) await this.restoreAfterFailure(loaded.packageName);
+      return { success: false, error: errorMessage(error) };
     }
     if ("success" in update) {
-      if (loaded) await this.restorePackage(loaded.packageName);
+      if (loaded) await this.restoreAfterFailure(loaded.packageName);
       return update;
     }
     try {
+      // Read the new version's metadata, not what was cached for the old one.
+      if (known) await this.manager.forgetPackage(known.packageName);
       const loadResults = await this.manager.discoverAndLoadPackages();
       const loadResult = loadResults.find(
         ({ extensionId: loadedId }) => loadedId === extensionId,
       );
-      if (!loadResult?.success) {
+      // A disabled or unconfigured extension is discovered without loading.
+      const discovered = this.manager
+        .getDiscoveredExtensions()
+        .some(({ id }) => id === extensionId);
+      if (loadResult ? !loadResult.success : loaded || !discovered) {
         throw new Error(
           loadResult?.error ??
             `Extension '${extensionId}' did not load after updating`,
@@ -149,17 +174,30 @@ export class ExtensionOperationsService {
       await update.commit();
       return update.result;
     } catch (error) {
-      await update.rollback();
-      if (loaded) await this.restorePackage(loaded.packageName);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      try {
+        await update.rollback();
+        if (known) await this.manager.forgetPackage(known.packageName);
+      } catch (rollbackError) {
+        return {
+          success: false,
+          error: `${errorMessage(error)}; restoring the previous version failed: ${errorMessage(rollbackError)}`,
+        };
+      }
+      if (loaded) await this.restoreAfterFailure(loaded.packageName);
+      return { success: false, error: errorMessage(error) };
     }
   }
-  private async restorePackage(packageName: string): Promise<void> {
-    const result = await this.manager.loadPackage(packageName);
-    if (!result.success)
-      throw new Error(result.error ?? `Failed to restore '${packageName}'`);
+
+  /** Best effort: the caller is already reporting the failure that led here. */
+  private async restoreAfterFailure(packageName: string): Promise<void> {
+    try {
+      await this.manager.loadPackage(packageName);
+    } catch {
+      // Reported through the operation result instead.
+    }
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

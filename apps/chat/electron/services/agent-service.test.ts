@@ -187,6 +187,36 @@ describe("ToolCallingAgentRunner event tool rounds", () => {
     ]);
   });
 
+  it("lets the model shorten an over-long event response instead of failing the turn", async () => {
+    const { runner, session } = createRunner(
+      [
+        round(toolCall("place-1", "tic_tac_toe_place", { row: 1, col: 1 })),
+        round(
+          toolCall("decision-1", "lumen_event_respond", {
+            content: "x".repeat(501),
+          }),
+        ),
+        round(
+          toolCall("decision-2", "lumen_event_respond", {
+            content: "Your move.",
+          }),
+        ),
+      ],
+      [{ success: true }],
+    );
+
+    await expect(
+      runner.runEventTurn("key", [trigger], trigger),
+    ).resolves.toMatchObject({ disposition: "respond", content: "Your move." });
+    expect(session.toolChoices.at(-1)).toEqual({
+      type: "function",
+      name: "lumen_event_respond",
+    });
+    expect(JSON.stringify(session.messages.at(-1))).toContain(
+      "Invalid event decision",
+    );
+  });
+
   it("feeds a successful extension result back before accepting a decision", async () => {
     const { runner, session, executed } = createRunner(
       [

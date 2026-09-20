@@ -8,8 +8,22 @@ import type {
   AgentResponseSessionFactory,
 } from "./agent-service.js";
 
+const SUMMARY_LIMIT = 2000;
+
+// Models count characters poorly. Rejecting an over-long summary would repeat
+// every batch request on each turn without ever converging, so it is cut at
+// the last whole word that fits instead.
 const summarySchema = z.strictObject({
-  summary: z.string().trim().min(1).max(2000),
+  summary: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((summary) => {
+      if (summary.length <= SUMMARY_LIMIT) return summary;
+      const cut = summary.slice(0, SUMMARY_LIMIT);
+      const lastSpace = cut.lastIndexOf(" ");
+      return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd();
+    }),
 });
 
 /** Rebuilds from current facts in bounded batches, so forgotten facts cannot linger. */

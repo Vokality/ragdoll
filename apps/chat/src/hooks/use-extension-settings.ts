@@ -188,6 +188,9 @@ export function useExtensionSettings(
         if (generation === refreshGeneration.current) {
           setDisabled(next);
           setOverviewLoad({ status: "ready" });
+          // Claiming the generation discarded any overview load in flight, and
+          // the toggle itself changed what is loaded. Resync quietly.
+          await loadOverview();
         }
       } catch (error) {
         if (generation !== refreshGeneration.current) return;
@@ -195,7 +198,7 @@ export function useExtensionSettings(
         await refresh();
       }
     },
-    [refresh, service],
+    [loadOverview, refresh, service],
   );
 
   return {

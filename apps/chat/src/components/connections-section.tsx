@@ -30,10 +30,11 @@ export function ConnectionsSection({
         const result = await service.list();
         if (active && request === generation) {
           setConnections(result);
+          setError(null);
           setLoading(false);
         }
       } catch {
-        if (active) {
+        if (active && request === generation) {
           setError("Could not load connections");
           setLoading(false);
         }

@@ -153,3 +153,23 @@ it('react("working") then react("completed") without execute still auto-smiles',
   service.react(controller, "completed");
   expect(moods).toEqual(["thinking", "smile"]);
 });
+
+it("a rejected command does not suppress the automatic completion smile", () => {
+  const moods: FacialMood[] = [];
+  const controller: CharacterCommands = {
+    setMood: (mood) => {
+      moods.push(mood);
+    },
+    triggerAction() {},
+    setHeadPose() {},
+    setExpression() {},
+  };
+  const service = new CharacterCommandService();
+  service.react(controller, "working");
+  expect(() => service.execute(controller, "unknownCommand", {})).toThrow();
+  expect(() =>
+    service.execute(controller, "setMood", { mood: "not-a-mood" }),
+  ).toThrow();
+  service.react(controller, "completed");
+  expect(moods).toEqual(["thinking", "smile"]);
+});

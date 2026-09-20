@@ -74,3 +74,40 @@ it("accepts existing conversations and rejects malformed execution records", () 
     }).success,
   ).toBe(false);
 });
+
+it("records a handler result that carries unexpected fields instead of stranding it as started", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lumen-tool-history-"));
+  try {
+    const storage = createStorageRepository(directory);
+    const history = new ToolHistoryService(storage);
+    const outcomes = async () =>
+      (await storage.read()).conversation
+        .filter(isToolExecution)
+        .map((entry) => entry.outcome);
+
+    const extra = await history.start(
+      { id: "call-1", name: "third_party_add", arguments: "{}" },
+      { type: "user" },
+    );
+    await history.complete(extra, {
+      success: true,
+      message: "added",
+    } as unknown as Parameters<ToolHistoryService["complete"]>[1]);
+    const malformed = await history.start(
+      { id: "call-2", name: "third_party_add", arguments: "{}" },
+      { type: "user" },
+    );
+    await history.complete(malformed, {
+      success: true,
+      error: null,
+    } as unknown as Parameters<ToolHistoryService["complete"]>[1]);
+
+    expect(await outcomes()).toMatchObject([
+      { status: "completed", result: { success: true } },
+      { status: "completed", result: { success: false, retryable: false } },
+    ]);
+    expect((await outcomes())[0]).not.toHaveProperty("result.message");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

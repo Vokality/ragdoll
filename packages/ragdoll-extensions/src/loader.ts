@@ -683,6 +683,17 @@ export class ExtensionLoader {
   }
 
   /**
+   * Forget cached metadata for a package whose files were replaced or removed,
+   * so the next read comes from disk.
+   */
+  forgetPackage(packageName: string): void {
+    if (this.loadedPackages.has(packageName)) {
+      throw new Error(`Package '${packageName}' is still loaded`);
+    }
+    this.packageInfoCache.delete(packageName);
+  }
+
+  /**
    * Get list of currently loaded packages.
    */
   getLoadedPackages(): Array<{ packageName: string; extensionId: string }> {

@@ -128,7 +128,11 @@ export function useExtensionConfiguration(
     setError(null);
     try {
       const { configuration, oauth: nextOAuth } =
-        await service.saveConfiguration(extensionId, values);
+        await service.saveConfiguration(
+          extensionId,
+          values,
+          new Set(savedFieldVersions.keys()),
+        );
       if (version !== loadVersion.current) return;
       setSchema(configuration.schema);
       setStatus(configuration.status);
@@ -137,6 +141,11 @@ export function useExtensionConfiguration(
           .filter(([key, revision]) => revision !== savedFieldVersions.get(key))
           .map(([key]) => key),
       );
+      // Saved edits are no longer edits. Left marked, a secret that reloads
+      // redacted as empty would be sent as cleared by the next save.
+      for (const key of [...fieldVersions.current.keys()]) {
+        if (!editedKeys.has(key)) fieldVersions.current.delete(key);
+      }
       setValues((current) => {
         const next = { ...configuration.values };
         for (const [key, value] of Object.entries(current)) {

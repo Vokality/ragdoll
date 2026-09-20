@@ -163,10 +163,15 @@ export class ChatApplicationService {
   }
 
   private async processPendingEventTurns(): Promise<void> {
+    // A job that fails stays pending for a later run, but must not keep the
+    // jobs queued behind it from running now.
+    const failed = new Set<string>();
     while (!this.stopping) {
       const data = await this.storage.read();
       if (this.stopping) return;
-      const job = data.pendingAgentTurns[0];
+      const job = data.pendingAgentTurns.find(
+        (pending) => !failed.has(pending.triggerEventId),
+      );
       if (!job) return;
 
       const trigger = data.conversation.find(
@@ -174,14 +179,23 @@ export class ChatApplicationService {
           isAgentConversationEvent(entry) && entry.id === job.triggerEventId,
       );
       if (!trigger) {
-        throw new Error(
-          `Pending agent turn references missing event '${job.triggerEventId}'`,
+        // Nothing is left to resume, so retrying can never succeed.
+        await this.storage.update((draft) => {
+          draft.pendingAgentTurns = draft.pendingAgentTurns.filter(
+            (pending) => pending.triggerEventId !== job.triggerEventId,
+          );
+        });
+        this.reportError(
+          new Error(
+            `Pending agent turn references missing event '${job.triggerEventId}'`,
+          ),
         );
+        continue;
       }
 
       const abort = new AbortController();
       this.activeUserTurn = abort;
-      let outcome;
+      let outcome: Awaited<ReturnType<AgentRunner["runEventTurn"]>>;
       try {
         const { runner, key } = await this.agent.create();
         outcome = await runner.runEventTurn(
@@ -190,9 +204,18 @@ export class ChatApplicationService {
           trigger,
           abort.signal,
         );
+      } catch (error) {
+        failed.add(job.triggerEventId);
+        this.reportError(error);
+        continue;
       } finally {
         if (this.activeUserTurn === abort) this.activeUserTurn = null;
       }
+      // An aborted turn reports silence without having reached a decision.
+      const interrupted =
+        abort.signal.aborted && outcome.disposition === "silent";
+      // Shutdown leaves the interrupted event for the next launch.
+      if (interrupted && this.stopping) return;
       const completed = await this.storage.update((draft) => {
         if (outcome.disposition === "respond") {
           draft.conversation.push({
@@ -202,7 +225,11 @@ export class ChatApplicationService {
             ...(outcome.sources ? { sources: outcome.sources } : {}),
           });
         }
-        if (trigger.kind === "app-event" && trigger.type === "app.onboarding") {
+        if (
+          !interrupted &&
+          trigger.kind === "app-event" &&
+          trigger.type === "app.onboarding"
+        ) {
           draft.experience.introduced = true;
         }
         draft.pendingAgentTurns = draft.pendingAgentTurns.filter(

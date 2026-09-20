@@ -82,6 +82,7 @@ async function fixture(
         );
       },
     },
+    reservedExtensionIds: ["tic-tac-toe"],
     createId: () => crypto.randomUUID(),
     now: () => 1,
     logger: console,
@@ -207,6 +208,63 @@ test("checks independent releases concurrently and preserves installed extension
       downloadUrl: "https://example.com/second.tar.gz",
     });
     await checks;
+    await f.dispose();
+  }
+});
+
+test("an update keeps the extension's stored data", async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.path, "storage.json"), '{"notes":["keep"]}');
+    const update = await f.installer.prepareUpdate("example");
+    if ("success" in update) throw new Error(update.error);
+    await update.commit();
+    expect(await readFile(join(f.path, "version.txt"), "utf8")).toBe("new");
+    expect(await readFile(join(f.path, "storage.json"), "utf8")).toBe(
+      '{"notes":["keep"]}',
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("a package cannot claim a built-in extension id", async () => {
+  const f = await fixture("tic-tac-toe");
+  try {
+    const result = await f.installer.installFromGitHub(f.original.repoUrl);
+    expect(result).toMatchObject({ success: false });
+    if (result.success) throw new Error("Expected a rejected install");
+    expect(result.error).toContain("built-in");
+    expect(await readdir(f.root)).toEqual(["example"]);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("concurrent installs of one package leave the winner intact", async () => {
+  const f = await fixture("fresh");
+  try {
+    const results = await Promise.all([
+      f.installer.installFromGitHub(f.original.repoUrl),
+      f.installer.installFromGitHub(f.original.repoUrl),
+    ]);
+    expect(results.map(({ success }) => success).sort()).toEqual([false, true]);
+    expect([...f.entries.keys()].sort()).toEqual(["example", "fresh"]);
+    expect(await readFile(join(f.root, "fresh", "version.txt"), "utf8")).toBe(
+      "new",
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("uninstall clears the registry entry when the directory is already gone", async () => {
+  const f = await fixture();
+  try {
+    await rm(f.path, { recursive: true });
+    expect(await f.installer.uninstall("example")).toEqual({ success: true });
+    expect([...f.entries.keys()]).toEqual([]);
+  } finally {
     await f.dispose();
   }
 });

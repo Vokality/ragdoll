@@ -15,6 +15,8 @@ import type { ServiceLogger } from "./service-logger.js";
 
 const TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
 const SCHEDULED_REFRESH_LEAD_MS = 5 * 60 * 1000;
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+const TOKEN_REQUEST_TIMEOUT_MS = 30_000;
 
 const oauthTokenResponseSchema = z
   .object({
@@ -119,7 +121,11 @@ export class OAuthManager implements HostOAuthCapability {
       }
 
       if (this.tokens.refreshToken) {
-        await this.refreshAccessToken();
+        // App startup awaits this method before opening a window, so the
+        // network refresh runs behind it. Token requests join the same
+        // refresh, and a failure records and announces itself.
+        this.setState({ status: "expired", isAuthenticated: false });
+        void this.refreshAccessToken().catch(() => undefined);
         return;
       }
 
@@ -360,7 +366,12 @@ export class OAuthManager implements HostOAuthCapability {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(parameters),
-      signal: this.lifetime.signal,
+      // A token endpoint that accepts the connection and never answers must
+      // not hold a login or refresh open indefinitely.
+      signal: AbortSignal.any([
+        this.lifetime.signal,
+        AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
+      ]),
     });
     if (!response.ok) {
       throw new Error(
@@ -437,6 +448,15 @@ export class OAuthManager implements HostOAuthCapability {
     const remaining = Math.max(0, this.tokens.expiresAt - this.config.now());
     const delay =
       remaining - Math.min(SCHEDULED_REFRESH_LEAD_MS, remaining / 2);
+    // Timers beyond 2^31-1 ms fire immediately, which would refresh a
+    // long-lived token in a tight loop. Wait in steps instead.
+    if (delay > MAX_TIMER_DELAY_MS) {
+      this.refreshTimer = this.config.timers.setTimeout(
+        () => this.scheduleTokenRefresh(),
+        MAX_TIMER_DELAY_MS,
+      );
+      return;
+    }
     this.refreshTimer = this.config.timers.setTimeout(() => {
       void this.refreshAccessToken().catch((error) => {
         this.log("error", "Scheduled OAuth token refresh failed", error);

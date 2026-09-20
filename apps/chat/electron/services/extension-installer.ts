@@ -29,10 +29,16 @@ export interface ExtensionInstallerConfig {
   >;
   releases: Pick<GitHubReleaseService, "resolve">;
   archives: Pick<ExtensionArchiveService, "downloadAndExtract">;
+  /** Extension ids owned by the host's built-in extensions. */
+  reservedExtensionIds: readonly string[];
   createId(): string;
   now(): number;
   logger: ServiceLogger;
 }
+
+// Extensions persist their data beside the package, so an update has to carry
+// it into the replacement directory.
+const EXTENSION_STORAGE_FILE = "storage.json";
 
 export interface PreparedExtensionUpdate {
   result: Extract<InstallResult, { success: true }>;
@@ -41,13 +47,33 @@ export interface PreparedExtensionUpdate {
 }
 
 export class ExtensionInstaller {
+  // Installs and uninstalls check, move, and register in several steps; two at
+  // once can each pass the checks and then destroy the other's directory.
+  private operations = Promise.resolve();
+
   constructor(private readonly config: ExtensionInstallerConfig) {}
 
   installFromGitHub(sourceUrl: string): Promise<InstallResult> {
     return this.installPackage(sourceUrl, { kind: "install" });
   }
 
-  private async installPackage(
+  private installPackage(
+    sourceUrl: string,
+    target: { kind: "install" } | { kind: "update"; extensionId: string },
+  ): Promise<InstallResult> {
+    return this.enqueue(() => this.installPackageNow(sourceUrl, target));
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operations.then(operation, operation);
+    this.operations = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async installPackageNow(
     sourceUrl: string,
     target: { kind: "install" } | { kind: "update"; extensionId: string },
   ): Promise<InstallResult> {
@@ -72,6 +98,11 @@ export class ExtensionInstaller {
       );
       const metadata = manifest.ragdollExtension;
       if (!metadata) throw new Error("Package is not a Ragdoll extension");
+      if (this.config.reservedExtensionIds.includes(metadata.id)) {
+        throw new Error(
+          `Extension id '${metadata.id}' belongs to a built-in extension`,
+        );
+      }
       if (target.kind === "update" && metadata.id !== target.extensionId) {
         throw new Error(
           `Update package id '${metadata.id}' does not match '${target.extensionId}'`,
@@ -99,8 +130,16 @@ export class ExtensionInstaller {
       const backupPath = `${finalPath}.backup-${this.config.createId()}`;
       if (existing) await rename(finalPath, backupPath);
 
+      let moved = false;
       try {
         await rename(extractedPath, finalPath);
+        moved = true;
+        if (existing) {
+          const storedData = join(backupPath, EXTENSION_STORAGE_FILE);
+          if (await this.pathExists(storedData)) {
+            await cp(storedData, join(finalPath, EXTENSION_STORAGE_FILE));
+          }
+        }
         await this.config.repository.set({
           id: metadata.id,
           name: metadata.name,
@@ -111,7 +150,8 @@ export class ExtensionInstaller {
           installedAt: new Date(this.config.now()).toISOString(),
         });
       } catch (error) {
-        await rm(finalPath, { recursive: true, force: true });
+        // Only remove what this install put there.
+        if (moved) await rm(finalPath, { recursive: true, force: true });
         if (existing) await rename(backupPath, finalPath);
         throw error;
       }
@@ -144,19 +184,24 @@ export class ExtensionInstaller {
     }
   }
 
-  async uninstall(extensionId: string): Promise<OperationResult> {
-    const extension = await this.config.repository.get(extensionId);
-    if (!extension) return { success: false, error: "Extension not found" };
-    const backupPath = `${extension.path}.uninstall-${this.config.createId()}`;
-    await rename(extension.path, backupPath);
-    try {
-      await this.config.repository.delete(extensionId);
-    } catch (error) {
-      await rename(backupPath, extension.path);
-      throw error;
-    }
-    await this.removeGarbage(backupPath);
-    return { success: true };
+  uninstall(extensionId: string): Promise<OperationResult> {
+    return this.enqueue(async () => {
+      const extension = await this.config.repository.get(extensionId);
+      if (!extension) return { success: false, error: "Extension not found" };
+      const backupPath = `${extension.path}.uninstall-${this.config.createId()}`;
+      // A directory that is already gone still leaves a registry entry to
+      // remove; otherwise the extension can be neither removed nor reinstalled.
+      const present = await this.pathExists(extension.path);
+      if (present) await rename(extension.path, backupPath);
+      try {
+        await this.config.repository.delete(extensionId);
+      } catch (error) {
+        if (present) await rename(backupPath, extension.path);
+        throw error;
+      }
+      if (present) await this.removeGarbage(backupPath);
+      return { success: true };
+    });
   }
 
   getInstalledExtensions(): Promise<InstalledExtension[]> {

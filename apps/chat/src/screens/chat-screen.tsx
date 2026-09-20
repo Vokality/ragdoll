@@ -124,9 +124,15 @@ export function ChatScreen({
   useEffect(() => {
     if (!controller) return;
     return subscribeToFunctionCalls((name, args) => {
-      characterCommands.execute(controller, name, args);
+      try {
+        characterCommands.execute(controller, name, args);
+      } catch (error) {
+        // Commands arrive over IPC from extensions; a malformed one is
+        // reported, not thrown out of the listener.
+        reportError(error);
+      }
     });
-  }, [characterCommands, controller, subscribeToFunctionCalls]);
+  }, [characterCommands, controller, reportError, subscribeToFunctionCalls]);
 
   const handleControllerReady = useCallback((ctrl: CharacterController) => {
     setController(ctrl);

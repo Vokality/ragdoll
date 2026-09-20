@@ -18,16 +18,88 @@ const logger = {
 };
 
 describe("ConfigManager", () => {
-  it("rejects stored fields outside the declared schema", async () => {
+  it("drops stored fields the current schema no longer accepts and keeps the rest", async () => {
+    const warnings: unknown[] = [];
+    const manager = new ConfigManager({
+      extensionId: "example",
+      schema: {
+        ...schema,
+        region: {
+          type: "select" as const,
+          label: "Region",
+          options: [{ label: "EU", value: "eu" }],
+        },
+      },
+      loadValues: async () => ({
+        clientId: "kept",
+        removedByUpdate: "value",
+        region: "us",
+      }),
+      saveValues: async () => undefined,
+      logger: { ...logger, warn: (...args) => warnings.push(args) },
+    });
+
+    await manager.initialize();
+
+    expect(manager.getValues()).toEqual({ clientId: "kept" });
+    expect(manager.isConfigured()).toBe(true);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it("starts unconfigured when stored values cannot be read", async () => {
+    const errors: unknown[] = [];
     const manager = new ConfigManager({
       extensionId: "example",
       schema,
-      loadValues: async () => ({ unexpected: "value" }),
+      loadValues: async () => {
+        throw new Error("decryption failed");
+      },
+      saveValues: async () => undefined,
+      logger: { ...logger, error: (...args) => errors.push(args) },
+    });
+
+    await manager.initialize();
+
+    expect(manager.isConfigured()).toBe(false);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("clears a saved value when it is set to an empty string", async () => {
+    let stored: ConfigValues | null = { clientId: "old", retries: 5 };
+    const manager = new ConfigManager({
+      extensionId: "example",
+      schema: {
+        ...schema,
+        retries: { type: "number" as const, label: "Retries", default: 3 },
+      },
+      loadValues: async () => stored,
+      saveValues: async (values) => {
+        stored = values;
+      },
+      logger,
+    });
+    await manager.initialize();
+
+    await manager.setValues({ clientId: "", retries: "" });
+
+    expect(manager.getValues()).toEqual({ retries: 3 });
+    expect(stored).toEqual({ retries: 3 });
+    expect(manager.isConfigured()).toBe(false);
+  });
+
+  it("still rejects writes to fields outside the declared schema", async () => {
+    const manager = new ConfigManager({
+      extensionId: "example",
+      schema,
+      loadValues: async () => null,
       saveValues: async () => undefined,
       logger,
     });
+    await manager.initialize();
 
-    await expect(manager.initialize()).rejects.toThrow("Unknown config field");
+    await expect(manager.setValues({ unexpected: "value" })).rejects.toThrow(
+      "Unknown config field",
+    );
   });
 
   it("changes in-memory values only after persistence succeeds", async () => {

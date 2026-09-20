@@ -130,6 +130,34 @@ describe("long-term summary", () => {
     });
     expect((await profile.get()).longTermSummary).toBeNull();
   });
+  it("saves an over-long summary cut to the limit instead of retrying forever", async () => {
+    const profile = new UserProfileService(
+      createInMemoryStorageRepository(),
+      () => {},
+    );
+    await profile.mutate({
+      action: "remember",
+      tier: "long_term",
+      text: "Birthday April 3",
+    });
+    let requests = 0;
+    const sessions: AgentResponseSessionFactory = {
+      create: () => ({
+        respond: async () => {
+          requests += 1;
+          return reply("birthday ".repeat(400));
+        },
+      }),
+    };
+
+    await refreshMemorySummary(profile, sessions, config, "test");
+    await refreshMemorySummary(profile, sessions, config, "test");
+
+    const summary = (await profile.get()).longTermSummary;
+    expect(summary?.length).toBeLessThanOrEqual(2000);
+    expect(summary?.endsWith("birthday")).toBe(true);
+    expect(requests).toBe(1);
+  });
   it("propagates cancellation without saving a partial summary", async () => {
     const profile = new UserProfileService(
       createInMemoryStorageRepository(),

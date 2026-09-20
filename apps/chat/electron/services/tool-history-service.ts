@@ -7,6 +7,10 @@ import {
   type ToolExecutionOrigin,
 } from "../domain/conversation.js";
 import type { StorageRepository } from "../infrastructure/storage-repository.js";
+import { z } from "zod";
+
+// Same fields as the strict storage schema, but unknown keys are stripped.
+const lenientToolResultSchema = z.object(persistedToolResultSchema.shape);
 
 export interface AgentToolHistory {
   start(call: ToolCall, origin: ToolExecutionOrigin): Promise<string>;
@@ -36,7 +40,16 @@ export class ToolHistoryService implements AgentToolHistory {
     // Use the same JSON boundary as the model transport, then validate it.
     // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone -- Serialization intentionally applies toJSON and omits non-JSON fields before persistence.
     const serialized: unknown = JSON.parse(JSON.stringify(result));
-    const persisted = persistedToolResultSchema.parse(serialized);
+    // The tool already ran, so a handler's stray keys must not fail the turn
+    // and strand this record as started. Keep only the persisted fields.
+    const parsed = lenientToolResultSchema.safeParse(serialized);
+    const persisted = parsed.success
+      ? parsed.data
+      : {
+          success: false,
+          error: "The tool returned a result Lumen could not record.",
+          retryable: false,
+        };
     await this.storage.update((draft) => {
       const entry = draft.conversation.find(
         (candidate) =>

@@ -93,7 +93,9 @@ export class LumenApplication {
         connectionCredentials,
         this.oauthRedirects,
         async (url) => {
-          const result = await this.navigation.open(url);
+          const result = await this.navigation.open(url, {
+            allowLoopbackHttp: true,
+          });
           if (!result.success) throw new Error(result.error);
         },
       ),
@@ -260,6 +262,9 @@ export class LumenApplication {
       ),
       releases: new GitHubReleaseService(fetch),
       archives: new ExtensionArchiveService(fetch),
+      reservedExtensionIds: BUILT_IN_EXTENSIONS.map(
+        ({ descriptor }) => descriptor.extensionId,
+      ),
       createId: () => globalThis.crypto.randomUUID(),
       now: Date.now,
       logger: console,

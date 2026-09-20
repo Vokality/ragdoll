@@ -132,13 +132,14 @@ export class ExtensionManagementService {
   async saveConfiguration(
     extensionId: string,
     values: Record<string, ExtensionConfigValue>,
+    editedKeys: ReadonlySet<string> = new Set(),
   ): Promise<{
     configuration: ExtensionConfiguration;
     oauth: OAuthState | null;
   }> {
     const result = await this.api.setConfigValues(
       extensionId,
-      this.getPersistedValues(values),
+      this.getPersistedValues(values, editedKeys),
     );
     if (!result.success) throw new Error(result.error);
 
@@ -180,10 +181,14 @@ export class ExtensionManagementService {
 
   private getPersistedValues(
     values: Record<string, ExtensionConfigValue>,
+    editedKeys: ReadonlySet<string>,
   ): Record<string, string | number | boolean> {
     const persisted: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(values)) {
       if (value !== "" && value !== undefined) persisted[key] = value;
+      // An untouched empty field is a redacted secret and must stay as saved;
+      // one the user emptied is sent as "" so the host clears it.
+      else if (editedKeys.has(key)) persisted[key] = "";
     }
     return persisted;
   }

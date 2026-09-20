@@ -65,10 +65,33 @@ export class ConfigManager implements HostConfigCapability {
   initialize(): Promise<void> {
     return this.enqueue(async () => {
       if (this.initialized) return;
-      const stored = await this.config.loadValues();
+      let stored: ConfigValues | null = null;
+      try {
+        stored = await this.config.loadValues();
+      } catch (error) {
+        // Unreadable values (a reset keychain, a field that changed secrecy)
+        // leave the extension unconfigured instead of failing app startup.
+        this.config.logger.error(
+          `Could not load stored config for '${this.config.extensionId}':`,
+          error,
+        );
+      }
       if (stored) {
-        this.validateValues(stored);
-        this.values = { ...this.values, ...stored };
+        // Stored values outlive the schema that wrote them. A field an update
+        // removed or narrowed is dropped so the extension asks for it again;
+        // rejecting it would fail every launch with no way to recover.
+        for (const [key, value] of Object.entries(stored)) {
+          const error = Object.hasOwn(this.config.schema, key)
+            ? this.validateValue(key, value, this.config.schema[key])
+            : `Unknown config field: ${key}`;
+          if (error) {
+            this.config.logger.warn(
+              `Ignoring stored config for '${this.config.extensionId}': ${error}`,
+            );
+            continue;
+          }
+          this.values[key] = value;
+        }
       }
       this.initialized = true;
     });
@@ -139,10 +162,22 @@ export class ConfigManager implements HostConfigCapability {
    * Set multiple values at once
    */
   async setValues(values: ConfigValues): Promise<void> {
-    const changes = { ...values };
+    // An empty string clears a field of any type; everything else is a value.
+    const changes: ConfigValues = {};
+    const cleared: string[] = [];
+    for (const [key, value] of Object.entries(values)) {
+      if (value === "" && Object.hasOwn(this.config.schema, key))
+        cleared.push(key);
+      else changes[key] = value;
+    }
     this.validateValues(changes);
     await this.enqueue(async () => {
       const nextValues = { ...this.values, ...changes };
+      for (const key of cleared) {
+        const fallback = this.config.schema[key].default;
+        if (fallback === undefined) delete nextValues[key];
+        else nextValues[key] = fallback;
+      }
       await this.config.saveValues(nextValues);
       this.values = nextValues;
       this.emitChange();

@@ -497,7 +497,31 @@ export class ToolCallingAgentRunner implements AgentRunner {
             `Event turn attempted a decision before required tool '${requiredToolName}' succeeded`,
           );
         }
-        const decision = parseEventDecision(decisions[0]);
+        let decision: EventTurnOutcome;
+        try {
+          decision = parseEventDecision(decisions[0]);
+        } catch (error) {
+          // An over-long or malformed decision is the model's to correct, as
+          // tool arguments are in a user turn, until the rounds run out.
+          if (round === this.config.maxToolRounds) throw error;
+          input.push({
+            type: "function_call_output",
+            call_id: decisions[0].id,
+            output: JSON.stringify({
+              success: false,
+              retryable: true,
+              error: `Invalid event decision: ${
+                error instanceof z.ZodError
+                  ? z.prettifyError(error)
+                  : error instanceof Error
+                    ? error.message
+                    : String(error)
+              } Responses are limited to 500 characters.`,
+            }),
+          });
+          retryToolName = decisions[0].name;
+          continue;
+        }
         return decision.disposition === "respond"
           ? {
               ...decision,

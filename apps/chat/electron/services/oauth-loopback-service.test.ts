@@ -33,6 +33,24 @@ describe("OAuthLoopbackService", () => {
     }
   });
 
+  it("keeps waiting when a request carries neither a code nor an error", async () => {
+    const service = new OAuthLoopbackService(
+      1_000,
+      createHostTimersCapability(),
+    );
+    const session = await service.createSession("spotify");
+    try {
+      expect((await fetch(session.redirectUri)).status).toBe(400);
+      await fetch(`${session.redirectUri}?code=real&state=expected`);
+      expect(await session.result).toMatchObject({
+        code: "real",
+        state: "expected",
+      });
+    } finally {
+      service.destroy();
+    }
+  });
+
   it("rejects startup interrupted by shutdown and forbids new sessions", async () => {
     const service = new OAuthLoopbackService(
       1_000,

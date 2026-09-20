@@ -273,6 +273,75 @@ it("schedules short-lived tokens before expiry without an immediate refresh loop
   expect(fixture.activeTimers.size).toBe(0);
 });
 
+it("waits in bounded steps for a long-lived token instead of refreshing at once", async () => {
+  const sixtyDays = 60 * 24 * 60 * 60 * 1000;
+  let tokenRequests = 0;
+  const fixture = createLifecycleFixture({
+    loadTokens: async () => ({
+      accessToken: "old",
+      refreshToken: "refresh",
+      expiresAt: sixtyDays,
+    }),
+    fetch: async () => {
+      tokenRequests += 1;
+      throw new Error("Unexpected token request");
+    },
+  });
+  await fixture.manager.initialize();
+  expect(fixture.delays).toEqual([2 ** 31 - 1]);
+
+  // The step timer re-evaluates the remaining time; it does not refresh.
+  fixture.clock.now = 2 ** 31 - 1;
+  for (const callback of [...fixture.activeTimers.values()]) callback();
+  expect(tokenRequests).toBe(0);
+  expect(fixture.delays).toHaveLength(2);
+  expect(fixture.delays[1]).toBeLessThanOrEqual(2 ** 31 - 1);
+  fixture.manager.destroy();
+});
+
+it("starts up without waiting for an expired token's refresh and announces its failure once", async () => {
+  const response = deferred<Response>();
+  const fixture = createLifecycleFixture({
+    loadTokens: async () => ({
+      accessToken: "old",
+      refreshToken: "refresh",
+      expiresAt: 1,
+    }),
+    fetch: async () => response.promise,
+  });
+  fixture.clock.now = 10_000;
+
+  // Resolves while the token endpoint still has not answered.
+  await fixture.manager.initialize();
+  expect(fixture.manager.getState().status).toBe("expired");
+
+  // A token request made meanwhile joins the same refresh.
+  const access = fixture.manager.getAccessToken();
+  response.reject(new Error("offline"));
+  await expect(access).rejects.toThrow("offline");
+  expect(fixture.failures).toEqual(["offline"]);
+  fixture.manager.destroy();
+});
+
+it("connects once a refresh started at startup succeeds", async () => {
+  const fixture = createLifecycleFixture({
+    loadTokens: async () => ({
+      accessToken: "old",
+      refreshToken: "refresh",
+      expiresAt: 1,
+    }),
+    fetch: async () =>
+      Response.json({ access_token: "fresh", expires_in: 3600 }),
+  });
+  fixture.clock.now = 10_000;
+  await fixture.manager.initialize();
+
+  expect(await fixture.manager.getAccessToken()).toBe("fresh");
+  expect(fixture.manager.isAuthenticated()).toBe(true);
+  expect(fixture.saved).toHaveLength(1);
+  fixture.manager.destroy();
+});
+
 it("does not save or reschedule a refresh response received after destruction", async () => {
   const response = deferred<Response>();
   let requestSignal: AbortSignal | null | undefined;
