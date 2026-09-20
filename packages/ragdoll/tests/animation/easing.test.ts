@@ -302,6 +302,11 @@ describe("Easing Functions", () => {
         expect(result).toBeLessThan(0);
       });
 
+      it("should be continuous where the pull back hands over", () => {
+        expect(anticipate(0.2 - 1e-6)).toBeCloseTo(anticipate(0.2), 3);
+        expect(anticipate(0.2)).toBeCloseTo(-0.2, 5);
+      });
+
       it("should use default anticipation amount", () => {
         const result1 = anticipate(0.1);
         const result2 = anticipate(0.1, 0.2);
@@ -409,4 +414,3 @@ describe("Easing Functions", () => {
     });
   });
 });
-

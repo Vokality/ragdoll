@@ -261,4 +261,12 @@ describe("HeadPoseController", () => {
       expect(Math.abs(pose.pitch - 0.2)).toBeLessThan(0.15);
     });
   });
+
+  describe("settling", () => {
+    it("lands exactly on the target and stays there", () => {
+      controller.setTargetPose({ yaw: 0.3, pitch: -0.1 });
+      for (let i = 0; i < 600; i++) controller.update(1 / 60);
+      expect(controller.getPose()).toEqual({ yaw: 0.3, pitch: -0.1 });
+    });
+  });
 });

@@ -160,8 +160,12 @@ describe("IdleController", () => {
       controller.update(0.1);
       const state2 = controller.getState();
       // Pupils should move (or be at target)
-      expect(Math.abs(state2.pupilOffsetX - state1.pupilOffsetX)).toBeGreaterThanOrEqual(0);
-      expect(Math.abs(state2.pupilOffsetY - state1.pupilOffsetY)).toBeGreaterThanOrEqual(0);
+      expect(
+        Math.abs(state2.pupilOffsetX - state1.pupilOffsetX),
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        Math.abs(state2.pupilOffsetY - state1.pupilOffsetY),
+      ).toBeGreaterThanOrEqual(0);
     });
 
     it("should limit saccade offset", () => {
@@ -294,6 +298,30 @@ describe("IdleController", () => {
       controller.update(1.0);
       const state = controller.getState();
       expect(state).toBeDefined();
+    });
+  });
+
+  describe("rest state", () => {
+    it("opens the eyes when disabled in the middle of a blink", () => {
+      controller.triggerBlink();
+      controller.update(0.07);
+      expect(controller.getState().blinkAmount).toBe(1);
+
+      controller.setEnabled(false);
+      controller.update(1);
+      const state = controller.getState();
+      expect(state.blinkAmount).toBe(0);
+      expect(state.isBlinking).toBe(false);
+      expect(state.pupilOffsetX).toBe(0);
+      expect(state.headMicroX).toBe(0);
+    });
+
+    it("clears isBlinking on reset", () => {
+      controller.triggerBlink();
+      controller.update(0.05);
+      controller.reset();
+      expect(controller.getState().isBlinking).toBe(false);
+      expect(controller.getState().blinkAmount).toBe(0);
     });
   });
 });

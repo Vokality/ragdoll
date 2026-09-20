@@ -121,10 +121,8 @@ export class CharacterController {
   }
 
   public setHeadPose(pose: Partial<HeadPose>, duration?: number): void {
+    // The state manager picks up the pose as it moves in the update loop.
     this.headPoseController.setTargetPose(pose, duration);
-    // Update state manager with current pose (will be updated in update loop)
-    const currentPose = this.headPoseController.getPose();
-    this.stateManager.setHeadPose(currentPose);
   }
 
   public nudgeHead(delta: Partial<HeadPose>, duration?: number): void {
@@ -134,8 +132,11 @@ export class CharacterController {
     const angle = command.angle ?? command.rotation;
     if (!angle) return;
 
-    const rotation = angle.y ?? angle.x ?? 0;
-    this.skeleton.setJointRotation(command.joint, rotation);
+    // The head pose controller drives both joints every frame, so a joint
+    // command has to retarget the pose or the next update overwrites it.
+    this.headPoseController.setTargetPose(
+      command.joint === "headPivot" ? { yaw: angle.y } : { pitch: angle.y },
+    );
   }
 
   public getJointRotation(joint: JointName): number | null {
@@ -160,7 +161,14 @@ export class CharacterController {
     // Sync state manager with current controller states
     const currentPose = this.headPoseController.getPose();
     this.stateManager.setHeadPose(currentPose);
-    this.stateManager.setAction(this.actionController.getActiveAction());
+    // triggerAction/clearAction already announced explicit changes; only a
+    // natural completion needs syncing here.
+    if (
+      this.actionController.getActiveAction() === null &&
+      this.stateManager.getState().action !== null
+    ) {
+      this.stateManager.setAction(null);
+    }
     this.stateManager.setActionProgress(
       this.actionController.getActionProgress(),
     );
@@ -363,7 +371,10 @@ export class CharacterController {
   }
 
   public setTheme(themeId: string): void {
-    this.theme = getTheme(themeId);
+    const theme = getTheme(themeId);
+    if (theme === this.theme) return;
+    this.theme = theme;
+    this.eventBus.emit({ type: "themeChanged", themeId: theme.id });
   }
 
   public getThemeId(): string {

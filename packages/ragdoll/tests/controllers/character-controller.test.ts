@@ -312,4 +312,115 @@ describe("CharacterController", () => {
       expect(state.action).toBe("wink");
     });
   });
+
+  describe("event emission", () => {
+    const countEvents = (run: (c: CharacterController) => void) => {
+      const counts: Partial<Record<StateEvent["type"], number>> = {};
+      controller.getEventBus().subscribe((event) => {
+        counts[event.type] = (counts[event.type] ?? 0) + 1;
+      });
+      run(controller);
+      return counts;
+    };
+
+    it("announces an action once, not on every frame it stays active", () => {
+      const counts = countEvents((c) => {
+        c.triggerAction("wink", 0.6);
+        for (let i = 0; i < 60; i++) c.update(1 / 60);
+      });
+      expect(counts.actionTriggered).toBe(1);
+      expect(counts.actionCleared).toBe(1);
+      expect(controller.getState().action).toBeNull();
+    });
+
+    it("stays silent about head pose while the head is at rest", () => {
+      const counts = countEvents((c) => {
+        for (let i = 0; i < 60; i++) c.update(1 / 60);
+      });
+      expect(counts.headPoseChanged).toBeUndefined();
+    });
+
+    it("stops emitting head pose changes once the head settles", () => {
+      controller.setHeadPose({ yaw: 0.3 });
+      for (let i = 0; i < 600; i++) controller.update(1 / 60);
+      expect(controller.getState().headPose.yaw).toBe(0.3);
+      const counts = countEvents((c) => {
+        for (let i = 0; i < 60; i++) c.update(1 / 60);
+      });
+      expect(counts.headPoseChanged).toBeUndefined();
+    });
+
+    it("emits themeChanged only when the theme changes", () => {
+      const counts = countEvents((c) => {
+        c.setTheme("default");
+        c.setTheme("robot");
+        c.setTheme("robot");
+      });
+      expect(counts.themeChanged).toBe(1);
+      expect(controller.getThemeId()).toBe("robot");
+    });
+  });
+
+  describe("state snapshots", () => {
+    it("does not change a snapshot after it was taken", () => {
+      const snapshot = controller.getState();
+      controller.triggerAction("talk", 1);
+      controller.setHeadPose({ yaw: 0.3 });
+      for (let i = 0; i < 30; i++) controller.update(1 / 60);
+      expect(snapshot.animation).toEqual({
+        action: null,
+        actionProgress: 0,
+        isTalking: false,
+      });
+      expect(snapshot.headPose).toEqual({ yaw: 0, pitch: 0 });
+      expect(snapshot.joints.headPivot.y).toBe(0);
+    });
+
+    it("ignores mutation of a returned snapshot", () => {
+      const snapshot = controller.getState();
+      snapshot.animation.isTalking = true;
+      snapshot.headPose.yaw = 1;
+      const next = controller.getState();
+      expect(next.animation.isTalking).toBe(false);
+      expect(next.headPose.yaw).toBe(0);
+    });
+  });
+
+  describe("joint commands", () => {
+    it("keeps a commanded joint rotation through the update loop", () => {
+      controller.setJointRotation({
+        joint: "neck",
+        angle: { x: 0, y: 0.2, z: 0 },
+      });
+      controller.setJointRotation({
+        joint: "headPivot",
+        angle: { x: 0, y: -0.3, z: 0 },
+      });
+      for (let i = 0; i < 600; i++) controller.update(1 / 60);
+      expect(controller.getJointRotation("neck")).toBeCloseTo(0.2, 3);
+      expect(controller.getJointRotation("headPivot")).toBeCloseTo(-0.3, 3);
+    });
+  });
+
+  describe("invalid numeric input", () => {
+    it("rejects non-finite values before they reach the animation state", () => {
+      expect(() => controller.setMood("smile", NaN)).toThrow("finite");
+      expect(() => controller.setExpression({ smile: 1 }, NaN)).toThrow(
+        "finite",
+      );
+      expect(() => controller.triggerAction("shake", NaN)).toThrow("finite");
+      expect(() => controller.setHeadPose({ yaw: NaN })).toThrow("finite");
+      expect(() => controller.setHeadPose({ yaw: 0.1 }, Infinity)).toThrow(
+        "finite",
+      );
+      expect(() => controller.nudgeHead({ pitch: NaN })).toThrow("finite");
+
+      for (let i = 0; i < 30; i++) controller.update(1 / 60);
+      const state = controller.getState();
+      expect(state.mood).toBe("neutral");
+      expect(state.action).toBeNull();
+      expect(state.headPose).toEqual({ yaw: 0, pitch: 0 });
+      expect(controller.getMixedExpression().mouth.cornerPull).toBe(0);
+    });
+  });
 });

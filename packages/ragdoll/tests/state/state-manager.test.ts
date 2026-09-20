@@ -212,4 +212,30 @@ describe("StateManager", () => {
       expect(bus.emit).toBeDefined();
     });
   });
+
+  describe("snapshot isolation", () => {
+    it("does not alias the initial state or returned snapshots", () => {
+      initialState.animation.isTalking = true;
+      const snapshot = stateManager.getState();
+      expect(snapshot.animation.isTalking).toBe(false);
+
+      stateManager.setActionProgress(0.5);
+      expect(snapshot.animation.actionProgress).toBe(0);
+      snapshot.joints.neck.y = 1;
+      expect(stateManager.getState().joints.neck.y).toBe(0);
+    });
+  });
+
+  describe("head pose events", () => {
+    it("does not emit when the pose is unchanged", () => {
+      const spy = new SpyEventBus();
+      const manager = new StateManager(
+        initialState,
+        spy as unknown as EventBus,
+      );
+      manager.setHeadPose({ yaw: 0.2, pitch: 0 });
+      manager.setHeadPose({ yaw: 0.2, pitch: 0 });
+      expect(spy.emittedEvents).toHaveLength(1);
+    });
+  });
 });

@@ -3,6 +3,8 @@ import { RagdollSkeleton } from "../models/ragdoll-skeleton";
 
 const MAX_YAW = (35 * Math.PI) / 180;
 const MAX_PITCH = (20 * Math.PI) / 180;
+// Below this distance and speed the spring is visually at rest.
+const SETTLE_EPSILON = 1e-5;
 
 export class HeadPoseController {
   private skeleton: RagdollSkeleton;
@@ -16,6 +18,9 @@ export class HeadPoseController {
   }
 
   public setTargetPose(pose: Partial<HeadPose>, duration: number = 0.35): void {
+    assertFinite("yaw", pose.yaw);
+    assertFinite("pitch", pose.pitch);
+    assertFinite("duration", duration);
     this.targetPose = {
       yaw:
         pose.yaw !== undefined ? this.clampYaw(pose.yaw) : this.targetPose.yaw,
@@ -101,6 +106,20 @@ export class HeadPoseController {
     const newVelocity = (velocity - omega * temp) * exp;
     const newValue = target + (change + temp) * exp;
 
+    // Land on the target instead of approaching it asymptotically forever.
+    if (
+      Math.abs(newValue - target) < SETTLE_EPSILON &&
+      Math.abs(newVelocity) < SETTLE_EPSILON
+    ) {
+      return { value: target, velocity: 0 };
+    }
+
     return { value: newValue, velocity: newVelocity };
+  }
+}
+
+function assertFinite(name: string, value: number | undefined): void {
+  if (value !== undefined && !Number.isFinite(value)) {
+    throw new Error(`${name} must be a finite number`);
   }
 }

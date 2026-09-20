@@ -35,6 +35,9 @@ export class ActionController {
     action: Exclude<FacialAction, "none">,
     duration?: number,
   ): void {
+    if (duration !== undefined && !Number.isFinite(duration)) {
+      throw new Error("duration must be a finite number");
+    }
     this.releaseActiveExpressionAction();
     if (this.actionState?.name === "shake" && action !== "shake") {
       this.headPoseController.lookForward(0.2);

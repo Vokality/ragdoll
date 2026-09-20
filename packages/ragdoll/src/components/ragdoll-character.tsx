@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { CharacterController } from "../controllers/character-controller";
 import type { RagdollTheme } from "../themes/types";
 import { computeRenderData } from "./render-data";
+import { frameDeltaSeconds } from "./frame-pacing";
 import { CharacterScene } from "../renderers/three/character-scene";
 
 interface RagdollCharacterProps {
@@ -74,8 +75,8 @@ function CharacterInstance({
     const tick = (now: number) => {
       if (!isMounted) return;
       frame = requestAnimationFrame(tick);
-      const deltaTime = Math.min((now - lastTime) / 1000, 0.05);
-      if (deltaTime < 1 / 60) return;
+      const deltaTime = frameDeltaSeconds(now, lastTime);
+      if (deltaTime === null) return;
       lastTime = now;
       controller.update(deltaTime);
       scene.setData(computeRenderData(controller));

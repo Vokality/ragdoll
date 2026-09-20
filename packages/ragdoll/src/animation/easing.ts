@@ -154,9 +154,11 @@ export function anticipate(
     const pullT = t / anticipationAmount;
     return -easeOutQuad(pullT) * anticipationAmount;
   } else {
-    // Forward phase
+    // Forward phase starts where the pull back ended
     const forwardT = (t - anticipationAmount) / (1 - anticipationAmount);
-    return easeOutCubic(forwardT);
+    return (
+      -anticipationAmount + (1 + anticipationAmount) * easeOutCubic(forwardT)
+    );
   }
 }
 

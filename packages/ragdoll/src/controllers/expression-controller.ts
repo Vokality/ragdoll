@@ -35,6 +35,9 @@ export class ExpressionController {
   }
 
   public setMood(mood: FacialMood, transitionDuration: number = 0.35): void {
+    if (!Number.isFinite(transitionDuration)) {
+      throw new Error("duration must be a finite number");
+    }
     const mixedNow = this.getMixedExpression();
     const hadFaceOverlay = FACE_AXES_CLEARED_ON_SET_MOOD.some(
       (key) => this.overlayTarget[key] !== undefined,
@@ -72,6 +75,9 @@ export class ExpressionController {
   }
 
   public setExpression(patch: ExpressionPatch, duration: number = 0.35): void {
+    if (!Number.isFinite(duration)) {
+      throw new Error("duration must be a finite number");
+    }
     const next: Partial<ExpressionAxes> = { ...this.overlayTarget };
     let wrote = false;
     for (const key of AXIS_KEYS) {

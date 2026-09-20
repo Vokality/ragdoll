@@ -1,6 +1,7 @@
 import {
   BufferGeometry,
   Color,
+  type DataTexture,
   Float32BufferAttribute,
   Group,
   Mesh,
@@ -79,6 +80,10 @@ export interface AnatomicalPart {
 // Only the bundled, immutable parts are keys; instances own cloned GPU attributes.
 const normalTemplates = new Map<AnatomicalPart, Float32BufferAttribute[]>();
 
+// Pupil sizes are painted in steps this fine (well under a texel of the iris)
+// so a dilation transition reuses textures instead of repainting every frame.
+const PUPIL_STEPS_PER_UNIT = 20;
+
 /** Artist-authored topology with complete eyelids, lips, ears, jaw, and expression shapes. */
 export class AnatomicalHead {
   readonly root = new Group();
@@ -94,7 +99,10 @@ export class AnatomicalHead {
     new MeshStandardMaterial(),
   );
   private identityKey = "";
-  private eyeKey = "";
+  private skinDetailAge: number | null = null;
+  private eyeColorsKey = "";
+  // Shared by both eyes and keyed by pupil step for the current theme colors.
+  private readonly eyeTextures = new Map<number, DataTexture>();
 
   constructor() {
     for (const source of anatomicalParts) {
@@ -272,7 +280,9 @@ export class AnatomicalHead {
         }
         if (eye || skin)
           mesh.geometry.setAttribute("uv", new Float32BufferAttribute(uv, 2));
-        if (skin) {
+        // The relief depends on age alone; a theme change must not repaint it.
+        if (skin && this.skinDetailAge !== data.appearance.age) {
+          this.skinDetailAge = data.appearance.age;
           mesh.material.bumpMap?.dispose();
           mesh.material.bumpMap = createSkinDetail(data.appearance.age);
           mesh.material.bumpScale = 0.5;
@@ -303,26 +313,13 @@ export class AnatomicalHead {
       this.scalp.geometry.computeBoundingSphere();
       this.scalpIndex.clear().fromGraphNode(this.scalp);
     }
-    const eyeKey = JSON.stringify([
-      data.currentTheme.colors,
-      data.expression.leftEye.pupilSize,
-      data.expression.rightEye.pupilSize,
+    const eyeColorsKey = JSON.stringify([
+      data.currentTheme.colors.eyes,
+      data.currentTheme.colors.skin.light,
     ]);
-    if (eyeKey !== this.eyeKey) {
-      this.eyeKey = eyeKey;
-      for (const { source, mesh } of this.parts) {
-        if (source.role !== "leftEye" && source.role !== "rightEye") continue;
-        const eye =
-          source.role === "leftEye"
-            ? data.expression.leftEye
-            : data.expression.rightEye;
-        mesh.material.map?.dispose();
-        mesh.material.map = createEyeTexture(
-          data.currentTheme.colors,
-          eye.pupilSize,
-        );
-        mesh.material.needsUpdate = true;
-      }
+    if (eyeColorsKey !== this.eyeColorsKey) {
+      this.eyeColorsKey = eyeColorsKey;
+      this.disposeEyeTextures();
     }
     for (const { source, mesh } of this.parts) {
       if (source.role !== "leftEye" && source.role !== "rightEye") continue;
@@ -330,6 +327,19 @@ export class AnatomicalHead {
         source.role === "leftEye"
           ? data.expression.leftEye
           : data.expression.rightEye;
+      const pupilStep = Math.round(eye.pupilSize * PUPIL_STEPS_PER_UNIT);
+      let texture = this.eyeTextures.get(pupilStep);
+      if (!texture) {
+        texture = createEyeTexture(
+          data.currentTheme.colors,
+          pupilStep / PUPIL_STEPS_PER_UNIT,
+        );
+        this.eyeTextures.set(pupilStep, texture);
+      }
+      if (mesh.material.map !== texture) {
+        mesh.material.map = texture;
+        mesh.material.needsUpdate = true;
+      }
       mesh.rotation.set(
         eye.pupilOffset.y * 0.035,
         eye.pupilOffset.x * 0.035,
@@ -409,11 +419,16 @@ export class AnatomicalHead {
     this.scalpIndex.clear();
     this.scalp.geometry.dispose();
     this.scalp.material.dispose();
+    this.disposeEyeTextures();
     for (const { mesh } of this.parts) {
       mesh.geometry.dispose();
-      mesh.material.map?.dispose();
       mesh.material.bumpMap?.dispose();
       mesh.material.dispose();
     }
+  }
+
+  private disposeEyeTextures(): void {
+    for (const texture of this.eyeTextures.values()) texture.dispose();
+    this.eyeTextures.clear();
   }
 }

@@ -6,6 +6,18 @@ import type {
 } from "../types";
 import { EventBus } from "./event-bus";
 
+function cloneState(state: CharacterState): CharacterState {
+  return {
+    ...state,
+    headPose: { ...state.headPose },
+    joints: {
+      headPivot: { ...state.joints.headPivot },
+      neck: { ...state.joints.neck },
+    },
+    animation: { ...state.animation },
+  };
+}
+
 /**
  * Central state manager for character state
  * Provides single source of truth and event notifications
@@ -15,7 +27,7 @@ export class StateManager {
   private eventBus: EventBus;
 
   constructor(initialState: CharacterState, eventBus: EventBus) {
-    this.currentState = { ...initialState };
+    this.currentState = cloneState(initialState);
     this.eventBus = eventBus;
   }
 
@@ -23,7 +35,7 @@ export class StateManager {
    * Get current state snapshot
    */
   public getState(): CharacterState {
-    return { ...this.currentState };
+    return cloneState(this.currentState);
   }
 
   /**
@@ -61,9 +73,11 @@ export class StateManager {
   }
 
   /**
-   * Update head pose and emit event
+   * Update head pose and emit event when the pose actually changed
    */
   public setHeadPose(pose: HeadPose): void {
+    const previous = this.currentState.headPose;
+    if (previous.yaw === pose.yaw && previous.pitch === pose.pitch) return;
     this.currentState.headPose = { ...pose };
     this.eventBus.emit({ type: "headPoseChanged", pose: { ...pose } });
   }

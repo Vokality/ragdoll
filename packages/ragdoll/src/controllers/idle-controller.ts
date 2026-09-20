@@ -68,16 +68,7 @@ export class IdleController {
   private headNoisePhase = Math.random() * 100;
 
   // Current state
-  private currentState: IdleState = {
-    blinkAmount: 0,
-    isBlinking: false,
-    breathPhase: 0,
-    breathAmount: 0,
-    pupilOffsetX: 0,
-    pupilOffsetY: 0,
-    headMicroX: 0,
-    headMicroY: 0,
-  };
+  private currentState: IdleState = restState();
 
   // Whether idle animations are enabled
   private enabled = true;
@@ -246,7 +237,11 @@ export class IdleController {
   }
 
   public setEnabled(enabled: boolean): void {
+    if (enabled === this.enabled) return;
     this.enabled = enabled;
+    // Updates stop while disabled, so a frozen mid-blink would hold the eyes
+    // shut. Return to rest and start the timers over.
+    this.reset();
   }
 
   public isEnabled(): boolean {
@@ -268,5 +263,19 @@ export class IdleController {
       currentY: 0,
       nextSaccadeTime: this.randomSaccadeInterval(),
     };
+    this.currentState = restState();
   }
+}
+
+function restState(): IdleState {
+  return {
+    blinkAmount: 0,
+    isBlinking: false,
+    breathPhase: 0,
+    breathAmount: 0,
+    pupilOffsetX: 0,
+    pupilOffsetY: 0,
+    headMicroX: 0,
+    headMicroY: 0,
+  };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Mesh, Raycaster, Vector3 } from "three";
+import { Mesh, type MeshStandardMaterial, Raycaster, Vector3 } from "three";
 import { AnatomicalHead } from "../../src/renderers/three/anatomical-head";
 import { CharacterController } from "../../src/controllers/character-controller";
 import { computeRenderData } from "../../src/components/render-data";
@@ -109,6 +109,55 @@ describe("anatomical head", () => {
         expect(mesh.rotation.y).toBe(pupilOffset.x * 0.035);
         expect(mesh.rotation.x).toBe(pupilOffset.y * 0.035);
       }
+    } finally {
+      head.dispose();
+      controller.destroy();
+    }
+  });
+  test("pupil dilation reuses eye textures and a theme change keeps the skin relief", () => {
+    const controller = new CharacterController({
+      variantId: "human",
+      themeId: "default",
+      onEventSubscriberError: console.error,
+    });
+    const head = new AnatomicalHead();
+    const eyeMaps = () =>
+      head.root.children
+        .filter((child): child is Mesh => child instanceof Mesh)
+        .map((mesh) => (mesh.material as MeshStandardMaterial).map)
+        .filter((map) => map !== null);
+    try {
+      head.update(computeRenderData(controller));
+      const [left, right] = eyeMaps();
+      expect(left).toBeDefined();
+      expect(left).toBe(right);
+      const relief = head.skin.material.bumpMap;
+      expect(relief).not.toBeNull();
+
+      // A full neutral -> surprise -> neutral round trip at 60fps.
+      const painted = new Set([left]);
+      controller.setMood("surprise");
+      for (let i = 0; i < 40; i++) {
+        controller.update(1 / 60);
+        head.update(computeRenderData(controller));
+        for (const map of eyeMaps()) painted.add(map);
+      }
+      const dilated = eyeMaps()[0];
+      expect(dilated).not.toBe(left);
+      controller.setMood("neutral");
+      for (let i = 0; i < 40; i++) {
+        controller.update(1 / 60);
+        head.update(computeRenderData(controller));
+        for (const map of eyeMaps()) painted.add(map);
+      }
+      // pupilSize spans 1 -> 1.3: at most seven 0.05 steps, not one per frame.
+      expect(painted.size).toBeLessThanOrEqual(7);
+      expect(eyeMaps()[0]).toBe(left);
+
+      controller.setTheme("robot");
+      head.update(computeRenderData(controller));
+      expect(head.skin.material.bumpMap).toBe(relief);
+      expect(eyeMaps()[0]).not.toBe(left);
     } finally {
       head.dispose();
       controller.destroy();
