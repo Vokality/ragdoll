@@ -388,6 +388,11 @@ export class AnatomicalHead {
       Math.max(0, e.mouth.lowerLipTop - e.mouth.upperLipBottom - 2) / 26,
     );
     set("mouthPucker", Math.max(0, 1 - e.mouth.width));
+    set("mouthLeft", e.mouth.skew);
+    set("mouthRight", -e.mouth.skew);
+    // The sideways shapes part the lips; a mouth pushed aside stays pressed.
+    set("mouthPress_L", Math.abs(e.mouth.skew));
+    set("mouthPress_R", Math.abs(e.mouth.skew));
     set("mouthStretch_L", e.mouth.width - 1);
     set("mouthStretch_R", e.mouth.width - 1);
     set("noseSneer_L", e.noseScrunch);

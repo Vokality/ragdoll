@@ -18,6 +18,8 @@ import { registerChatIpc } from "./register-chat-ipc.js";
 import { registerExtensionIpc } from "./register-extension-ipc.js";
 import { registerSettingsIpc } from "./register-settings-ipc.js";
 import { registerShellIpc } from "./register-shell-ipc.js";
+import { registerCharacterIpc } from "./register-character-ipc.js";
+import type { ExtensionMessageBus } from "../services/extension-message-bus.js";
 
 export interface IpcServices {
   profile: UserProfileService;
@@ -30,6 +32,7 @@ export interface IpcServices {
   extensionOperations: ExtensionOperationsService;
   navigation: ExternalNavigationService;
   storage: StorageRepository;
+  messageBus: ExtensionMessageBus;
 }
 
 export function registerIpc(
@@ -63,6 +66,7 @@ export function registerIpc(
     registerCardIpc(registrar, services.cards);
     registerSettingsIpc(registrar, services.storage);
     registerShellIpc(registrar, services.navigation);
+    registerCharacterIpc(registrar, services.messageBus);
   } catch (error) {
     void registrar.dispose();
     throw error;

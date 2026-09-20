@@ -21,7 +21,7 @@ export const AXIS_KEYS: readonly ExpressionAxis[] = [
   ...GAZE_AXES,
 ];
 
-// +gazeX is the character's right (−X / ARKit _R). Thinking's baked glance stays +4.
+// +gazeX is the character's right (−X / ARKit _R). Thinking's baked glance stays positive.
 export const GAZE_OFFSET_X = -4;
 export const GAZE_OFFSET_Y = 5;
 

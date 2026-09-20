@@ -9,16 +9,28 @@ import {
   parseExtensionPackageJson,
 } from "@vokality/ragdoll-extensions/loader";
 import packageJson from "../package.json" with { type: "json" };
-import { createExtension } from "./index.js";
+import {
+  CHARACTER_STATE_TOPIC,
+  createExtension,
+  parseCharacterCommand,
+} from "./index.js";
 
 function hostWithIpc(
   publish: (topic: string, payload: unknown) => void,
+  subscribe: NonNullable<ExtensionHostEnvironment["ipc"]>["subscribe"] = () =>
+    () =>
+      undefined,
+  timers: Partial<NonNullable<ExtensionHostEnvironment["timers"]>> = {},
 ): ExtensionHostEnvironment {
   return {
-    capabilities: new Set<ExtensionHostCapability>(["ipc"]),
-    ipc: {
-      publish,
-      subscribe: () => () => undefined,
+    capabilities: new Set<ExtensionHostCapability>(["ipc", "timers"]),
+    ipc: { publish, subscribe },
+    timers: {
+      setTimeout: () => undefined,
+      clearTimeout: () => undefined,
+      setInterval: () => undefined,
+      clearInterval: () => undefined,
+      ...timers,
     },
   };
 }
@@ -28,8 +40,11 @@ describe("Character package boundaries", () => {
     const descriptor = createExtensionPackageDescriptor(
       parseExtensionPackageJson(JSON.stringify(packageJson)),
     );
-    expect(descriptor?.requiredCapabilities).toEqual(["ipc"]);
-    expect(createExtension().manifest.requiredCapabilities).toEqual(["ipc"]);
+    expect(descriptor?.requiredCapabilities).toEqual(["ipc", "timers"]);
+    expect(createExtension().manifest.requiredCapabilities).toEqual([
+      "ipc",
+      "timers",
+    ]);
     expect(createExtension().manifest.optionalCapabilities).toEqual([]);
   });
 
@@ -241,6 +256,130 @@ describe("Character package boundaries", () => {
     }
   });
 
+  it("forwards resetExpression and clearAction, and rejects unknown axes", async () => {
+    const published: unknown[] = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc((_topic, payload) => published.push(payload)),
+    });
+    try {
+      expect(
+        (await registry.executeTool("resetExpression", { axes: ["jawline"] }))
+          .success,
+      ).toBe(false);
+      expect(published).toEqual([]);
+
+      await registry.executeTool("resetExpression", {
+        axes: ["gazeX", "gazeY"],
+        duration: 0,
+      });
+      await registry.executeTool("resetExpression", {});
+      await registry.executeTool("clearAction", {});
+
+      expect(published).toEqual([
+        {
+          extensionId: "character",
+          tool: "resetExpression",
+          args: { axes: ["gazeX", "gazeY"], duration: 0 },
+        },
+        { extensionId: "character", tool: "resetExpression", args: {} },
+        { extensionId: "character", tool: "clearAction", args: {} },
+      ]);
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("returns the state the host publishes for its own request only", async () => {
+    let deliver: (payload: unknown) => void = () => undefined;
+    const requests: string[] = [];
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    const state = {
+      mood: "smile",
+      action: null,
+      headPose: { yawDegrees: 10, pitchDegrees: 0 },
+      expression: { gazeX: 0.5 },
+    };
+    await registry.register(createExtension(), {
+      host: hostWithIpc(
+        (_topic, payload) => {
+          const { requestId } = parseCharacterCommand(
+            "getCharacterState",
+            (payload as { args: Record<string, unknown> }).args,
+          ).args as { requestId: string };
+          requests.push(requestId);
+          // A reply to someone else's request must be ignored.
+          deliver({ requestId: "other", state: { mood: "sad" } });
+          deliver({ requestId, state });
+        },
+        (topic, listener) => {
+          expect(topic).toBe(CHARACTER_STATE_TOPIC);
+          deliver = listener;
+          return () => undefined;
+        },
+      ),
+    });
+    try {
+      expect(await registry.executeTool("getCharacterState", {})).toEqual({
+        success: true,
+        data: state,
+      });
+      expect(requests).toHaveLength(1);
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("reports that the character is off screen when no reply arrives", async () => {
+    let expire: () => void = () => undefined;
+    const registry = createRegistry({
+      now: Date.now,
+      onListenerError: () => undefined,
+    });
+    await registry.register(createExtension(), {
+      host: hostWithIpc(
+        () => undefined,
+        () => () => undefined,
+        {
+          setTimeout: (callback) => {
+            expire = callback;
+            return 1;
+          },
+        },
+      ),
+    });
+    try {
+      const read = registry.executeTool("getCharacterState", {});
+      await Promise.resolve();
+      expire();
+      expect(await read).toMatchObject({ success: false, retryable: false });
+    } finally {
+      await registry.destroy();
+    }
+  });
+
+  it("parses forwarded calls into one typed command contract", () => {
+    expect(
+      parseCharacterCommand("setHeadPose", { yawDegrees: 10, extra: true }),
+    ).toEqual({ tool: "setHeadPose", args: { yawDegrees: 10 } });
+    expect(parseCharacterCommand("clearAction", { anything: 1 })).toEqual({
+      tool: "clearAction",
+      args: {},
+    });
+    expect(() => parseCharacterCommand("setMood", { mood: "bored" })).toThrow(
+      "Invalid mood",
+    );
+    expect(() => parseCharacterCommand("dance", {})).toThrow(
+      "Unsupported character command",
+    );
+  });
+
   it("rejects registration when the host advertises ipc without an implementation", async () => {
     const registry = createRegistry({
       now: Date.now,
@@ -248,7 +387,7 @@ describe("Character package boundaries", () => {
     });
     await expect(
       registry.register(createExtension(), {
-        host: { capabilities: new Set(["ipc"]) },
+        host: { capabilities: new Set(["ipc", "timers"]) },
       }),
     ).rejects.toThrow("without an implementation");
   });

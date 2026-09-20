@@ -1,20 +1,43 @@
 import { expect, it } from "bun:test";
-import type {
-  CharacterController,
-  ExpressionPatch,
-  FacialMood,
-} from "@vokality/ragdoll";
-import { CharacterCommandService } from "./character-command-service";
+import type { ExpressionPatch, FacialMood } from "@vokality/ragdoll";
+import {
+  CharacterCommandService,
+  type CharacterCommands,
+  type CharacterStateReply,
+} from "./character-command-service";
 
-type CharacterCommands = Pick<
-  CharacterController,
-  "setMood" | "triggerAction" | "setHeadPose" | "setExpression"
->;
+function fakeController(
+  overrides: Partial<CharacterCommands> = {},
+): CharacterCommands {
+  return {
+    setMood() {},
+    triggerAction() {},
+    clearAction() {},
+    setHeadPose() {},
+    setExpression() {},
+    resetExpression() {},
+    getState: () => ({
+      mood: "neutral",
+      action: null,
+      headPose: { yaw: 0, pitch: 0 },
+      joints: {
+        headPivot: { x: 0, y: 0, z: 0 },
+        neck: { x: 0, y: 0, z: 0 },
+      },
+      animation: { action: null, actionProgress: 0, isTalking: false },
+    }),
+    getAxisOverlay: () => ({}),
+    ...overrides,
+  };
+}
+
+const createService = (reply: CharacterStateReply = () => undefined) =>
+  new CharacterCommandService(reply);
 
 it("reacts to actual lifecycle events and preserves explicit expressions on completion", () => {
   const moods: FacialMood[] = [];
   const actions: string[] = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood: (mood) => {
       moods.push(mood);
     },
@@ -23,8 +46,8 @@ it("reacts to actual lifecycle events and preserves explicit expressions on comp
     },
     setHeadPose() {},
     setExpression() {},
-  };
-  const service = new CharacterCommandService();
+  });
+  const service = createService();
   service.react(controller, "working");
   service.react(controller, "completed");
   expect(moods).toEqual(["thinking", "smile"]);
@@ -41,15 +64,15 @@ it("reacts to actual lifecycle events and preserves explicit expressions on comp
 
 it("executes setExpression with the parsed patch and omitted duration", () => {
   const calls: Array<{ patch: ExpressionPatch; duration?: number }> = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood() {},
     triggerAction() {},
     setHeadPose() {},
     setExpression: (patch, duration) => {
       calls.push({ patch, duration });
     },
-  };
-  new CharacterCommandService().execute(controller, "setExpression", {
+  });
+  createService().execute(controller, "setExpression", {
     smile: 0.5,
     gazeY: -1,
   });
@@ -60,15 +83,15 @@ it("executes setExpression with the parsed patch and omitted duration", () => {
 
 it("strips duration from the setExpression patch", () => {
   const calls: Array<{ patch: ExpressionPatch; duration?: number }> = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood() {},
     triggerAction() {},
     setHeadPose() {},
     setExpression: (patch, duration) => {
       calls.push({ patch, duration });
     },
-  };
-  new CharacterCommandService().execute(controller, "setExpression", {
+  });
+  createService().execute(controller, "setExpression", {
     smile: 0.5,
     duration: 0.3,
   });
@@ -76,13 +99,13 @@ it("strips duration from the setExpression patch", () => {
 });
 
 it("rejects invalid setExpression args", () => {
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood() {},
     triggerAction() {},
     setHeadPose() {},
     setExpression() {},
-  };
-  const service = new CharacterCommandService();
+  });
+  const service = createService();
   expect(() =>
     service.execute(controller, "setExpression", { smile: 1.1 }),
   ).toThrow();
@@ -110,15 +133,15 @@ it("rejects invalid setExpression args", () => {
 
 it("does not force a smile after setExpression completes", () => {
   const moods: FacialMood[] = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood: (mood) => {
       moods.push(mood);
     },
     triggerAction() {},
     setHeadPose() {},
     setExpression() {},
-  };
-  const service = new CharacterCommandService();
+  });
+  const service = createService();
   service.execute(controller, "setExpression", { smile: 0.5 });
   service.react(controller, "completed");
   expect(moods).toEqual([]);
@@ -126,29 +149,29 @@ it("does not force a smile after setExpression completes", () => {
 
 it('react("working") calls setMood("thinking", 0.3)', () => {
   const moods: Array<{ mood: FacialMood; duration?: number }> = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood: (mood, duration) => {
       moods.push({ mood, duration });
     },
     triggerAction() {},
     setHeadPose() {},
     setExpression() {},
-  };
-  new CharacterCommandService().react(controller, "working");
+  });
+  createService().react(controller, "working");
   expect(moods).toEqual([{ mood: "thinking", duration: 0.3 }]);
 });
 
 it('react("working") then react("completed") without execute still auto-smiles', () => {
   const moods: FacialMood[] = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood: (mood) => {
       moods.push(mood);
     },
     triggerAction() {},
     setHeadPose() {},
     setExpression() {},
-  };
-  const service = new CharacterCommandService();
+  });
+  const service = createService();
   service.react(controller, "working");
   service.react(controller, "completed");
   expect(moods).toEqual(["thinking", "smile"]);
@@ -156,20 +179,86 @@ it('react("working") then react("completed") without execute still auto-smiles',
 
 it("a rejected command does not suppress the automatic completion smile", () => {
   const moods: FacialMood[] = [];
-  const controller: CharacterCommands = {
+  const controller = fakeController({
     setMood: (mood) => {
       moods.push(mood);
     },
     triggerAction() {},
     setHeadPose() {},
     setExpression() {},
-  };
-  const service = new CharacterCommandService();
+  });
+  const service = createService();
   service.react(controller, "working");
   expect(() => service.execute(controller, "unknownCommand", {})).toThrow();
   expect(() =>
     service.execute(controller, "setMood", { mood: "not-a-mood" }),
   ).toThrow();
   service.react(controller, "completed");
+  expect(moods).toEqual(["thinking", "smile"]);
+});
+
+it("routes clearAction and resetExpression to the controller", () => {
+  const calls: unknown[] = [];
+  const controller = fakeController({
+    clearAction: () => {
+      calls.push("clearAction");
+    },
+    resetExpression: (axes, duration) => {
+      calls.push({ axes, duration });
+    },
+  });
+  const service = createService();
+  service.execute(controller, "clearAction", {});
+  service.execute(controller, "resetExpression", {
+    axes: ["gazeX"],
+    duration: 0,
+  });
+  service.execute(controller, "resetExpression", {});
+  expect(calls).toEqual([
+    "clearAction",
+    { axes: ["gazeX"], duration: 0 },
+    { axes: undefined, duration: undefined },
+  ]);
+  expect(() =>
+    service.execute(controller, "resetExpression", { axes: ["chin"] }),
+  ).toThrow("Invalid axis");
+});
+
+it("answers a state read in degrees without counting as a reaction", () => {
+  const replies: Array<Parameters<CharacterStateReply>> = [];
+  const moods: FacialMood[] = [];
+  const controller = fakeController({
+    setMood: (mood) => {
+      moods.push(mood);
+    },
+    getState: () => ({
+      mood: "thinking",
+      action: "talk",
+      headPose: { yaw: Math.PI / 18, pitch: -Math.PI / 36 },
+      joints: {
+        headPivot: { x: 0, y: 0, z: 0 },
+        neck: { x: 0, y: 0, z: 0 },
+      },
+      animation: { action: "talk", actionProgress: 0.5, isTalking: true },
+    }),
+    getAxisOverlay: () => ({ gazeX: 0.5 }),
+  });
+  const service = createService((...reply) => replies.push(reply));
+
+  service.react(controller, "working");
+  service.execute(controller, "getCharacterState", { requestId: "state-1" });
+  service.react(controller, "completed");
+
+  expect(replies).toEqual([
+    [
+      "state-1",
+      {
+        mood: "thinking",
+        action: "talk",
+        headPose: { yawDegrees: 10, pitchDegrees: -5 },
+        expression: { gazeX: 0.5 },
+      },
+    ],
+  ]);
   expect(moods).toEqual(["thinking", "smile"]);
 });

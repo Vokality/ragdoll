@@ -64,6 +64,8 @@ export interface MouthState {
   width: number; // Mouth width multiplier
   // Corners
   cornerPull: number; // -1 = frown, 0 = neutral, 1 = smile
+  // Sideways shift
+  skew: number; // -1 = toward the character's right, 0 = centered, 1 = left
 }
 
 export interface MouthPaths {
@@ -85,6 +87,32 @@ export interface ExpressionConfig {
   mouth: MouthState;
   cheekPuff: number; // 0 = normal, 1 = puffed
   noseScrunch: number; // 0 = normal, 1 = scrunched
+}
+
+/**
+ * A small head movement added on top of the commanded head pose, in radians.
+ * Positive yaw turns toward +X like a positive gaze x, negative pitch lifts
+ * the chin, and positive roll tips the crown toward +X.
+ */
+export interface HeadOffset {
+  yaw: number;
+  pitch: number;
+  roll: number;
+}
+
+export const NO_HEAD_OFFSET: Readonly<HeadOffset> = {
+  yaw: 0,
+  pitch: 0,
+  roll: 0,
+};
+
+/** One held pose of a mood that moves, such as thinking. */
+export interface MoodPose {
+  expression: ExpressionConfig;
+  /** Where the head drifts while the pose is held. */
+  head: HeadOffset;
+  /** Seconds to hold the pose once the face has reached it. */
+  hold: number;
 }
 
 /**
@@ -224,6 +252,7 @@ export class RagdollGeometry {
         lowerLipCurve: 0.5,
         width: 1,
         cornerPull: 0,
+        skew: 0,
       },
       cheekPuff: 0,
       noseScrunch: 0,
@@ -418,37 +447,123 @@ export class RagdollGeometry {
         };
 
       case "thinking":
-        return {
-          ...base,
-          leftEye: {
-            ...base.leftEye,
-            openness: 0.85,
-            pupilOffset: { x: 4, y: -3 },
-          },
-          rightEye: {
-            ...base.rightEye,
-            openness: 0.85,
-            pupilOffset: { x: 4, y: -3 },
-          },
-          leftEyebrow: { ...base.leftEyebrow, innerY: 2, arcY: 5, outerY: 3 },
-          rightEyebrow: {
-            ...base.rightEyebrow,
-            innerY: -1,
-            arcY: 2,
-            outerY: 0,
-          },
-          mouth: {
-            ...base.mouth,
-            upperLipBottom: 1,
-            lowerLipTop: 3,
-            width: 0.75,
-            cornerPull: 0.1,
-          },
-        };
+        return this.getThinkingPoses()[0].expression;
 
       default:
         return base;
     }
+  }
+
+  /**
+   * Poses a mood moves through while it is held, or null for a static mood.
+   * The first pose is the one `getExpressionForMood` returns.
+   */
+  public getMoodSequence(mood: FacialMood): readonly MoodPose[] | null {
+    return mood === "thinking" ? this.getThinkingPoses() : null;
+  }
+
+  /** Thinking wanders: up and away, down in concentration, away again. */
+  private getThinkingPoses(): MoodPose[] {
+    const base = this.createNeutralExpression();
+    const cocked = { ...base.leftEyebrow, innerY: 3, arcY: 9, outerY: 10 };
+    const lowered = { innerY: -6, arcY: -3, outerY: -1 };
+    const pursed = {
+      ...base.mouth,
+      upperLipBottom: 1,
+      lowerLipTop: 3,
+      width: 0.6,
+      cornerPull: -0.08,
+    };
+    const lookingUp = (x: number) => ({ pupilOffset: { x, y: -4 } });
+    const degrees = (yaw: number, pitch: number, roll: number): HeadOffset => ({
+      yaw: (yaw * Math.PI) / 180,
+      pitch: (pitch * Math.PI) / 180,
+      roll: (roll * Math.PI) / 180,
+    });
+
+    return [
+      {
+        // "Hmm": eyes up and away, one brow cocked, mouth pursed aside.
+        hold: 2.4,
+        // The head follows the eyes: turned and lifted, tipped to the side.
+        head: degrees(4, -3, 4),
+        expression: {
+          ...base,
+          leftEye: { ...base.leftEye, openness: 1.2, ...lookingUp(5) },
+          rightEye: {
+            ...base.rightEye,
+            openness: 1.1,
+            squint: 0.25,
+            ...lookingUp(5),
+          },
+          leftEyebrow: cocked,
+          rightEyebrow: { ...base.rightEyebrow, ...lowered, rotation: -0.12 },
+          mouth: { ...pursed, skew: 0.5 },
+        },
+      },
+      {
+        // Concentrating: eyes down, brows knit, lips pressed.
+        hold: 1.8,
+        head: degrees(-2, 4, -1),
+        expression: {
+          ...base,
+          leftEye: {
+            ...base.leftEye,
+            openness: 0.8,
+            squint: 0.3,
+            pupilOffset: { x: -3, y: 4 },
+          },
+          rightEye: {
+            ...base.rightEye,
+            openness: 0.8,
+            squint: 0.3,
+            pupilOffset: { x: -3, y: 4 },
+          },
+          leftEyebrow: { ...base.leftEyebrow, ...lowered, rotation: 0.12 },
+          rightEyebrow: { ...base.rightEyebrow, ...lowered, rotation: -0.12 },
+          mouth: { ...pursed, width: 0.8, cornerPull: -0.15, skew: 0.15 },
+        },
+      },
+      {
+        // The first pose mirrored, a little smaller.
+        hold: 2.2,
+        head: degrees(-4, -3, -4),
+        expression: {
+          ...base,
+          leftEye: {
+            ...base.leftEye,
+            openness: 1.1,
+            squint: 0.2,
+            ...lookingUp(-5),
+          },
+          rightEye: { ...base.rightEye, openness: 1.2, ...lookingUp(-5) },
+          leftEyebrow: { ...base.leftEyebrow, ...lowered, rotation: 0.1 },
+          rightEyebrow: { ...cocked, outerY: 8 },
+          mouth: { ...pursed, skew: -0.4 },
+        },
+      },
+      {
+        // Considering: both brows up, eyes ahead and slightly raised.
+        hold: 1.4,
+        head: degrees(0, -2, 0),
+        expression: {
+          ...base,
+          leftEye: {
+            ...base.leftEye,
+            openness: 1.15,
+            pupilOffset: { x: 0, y: -3 },
+          },
+          rightEye: {
+            ...base.rightEye,
+            openness: 1.15,
+            pupilOffset: { x: 0, y: -3 },
+          },
+          leftEyebrow: { ...base.leftEyebrow, innerY: 7, arcY: 8, outerY: 7 },
+          rightEyebrow: { ...base.rightEyebrow, innerY: 7, arcY: 8, outerY: 7 },
+          mouth: { ...pursed, width: 0.75, cornerPull: 0 },
+        },
+      },
+    ];
   }
 
   /**
@@ -886,6 +1001,7 @@ export class RagdollGeometry {
       lowerLipCurve: lerp(a.lowerLipCurve, b.lowerLipCurve),
       width: lerp(a.width, b.width),
       cornerPull: lerp(a.cornerPull, b.cornerPull),
+      skew: lerp(a.skew, b.skew),
     });
 
     return {

@@ -1,3 +1,4 @@
+import type { CharacterStateSnapshot } from "@vokality/ragdoll-extension-character";
 import type {
   ModelProviderId,
   ModelProviderInfo,
@@ -247,6 +248,9 @@ export const IPC_CHANNELS = {
     functionCall: "chat:function-call",
     streamEnd: "chat:stream-end",
   },
+  character: {
+    stateReply: "character:state-reply",
+  },
   cards: {
     getActive: "cards:get-active",
     select: "cards:select",
@@ -372,6 +376,11 @@ export interface ElectronAPI {
     callback: (name: string, args: Record<string, unknown>) => void,
   ): () => void;
   onStreamEnd(callback: () => void): () => void;
+  /** Answers a getCharacterState command received through onFunctionCall. */
+  replyCharacterState(
+    requestId: string,
+    state: CharacterStateSnapshot,
+  ): Promise<OperationResult>;
 
   getSettings(): Promise<CharacterSettings>;
   setSettings(settings: CharacterSettingsUpdate): Promise<OperationResult>;

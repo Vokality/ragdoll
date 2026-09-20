@@ -229,6 +229,8 @@ export class IdleController {
   }
 
   public triggerBlink(): void {
+    // A blink started while disabled would never be advanced or finished.
+    if (!this.enabled) return;
     if (this.blinkState.blinkPhase === "idle") {
       this.blinkState.blinkPhase = "closing";
       this.blinkState.blinkProgress = 0;

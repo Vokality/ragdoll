@@ -102,6 +102,10 @@ export type FacialCommand =
   | {
       action: "setExpression";
       params: ExpressionPatch & { duration?: number };
+    }
+  | {
+      action: "resetExpression";
+      params: { axes?: readonly ExpressionAxis[]; duration?: number };
     };
 
 export interface FacialStatePayload {

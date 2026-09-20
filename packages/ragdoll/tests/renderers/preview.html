@@ -63,11 +63,19 @@
           <option>sad</option>
           <option>angry</option>
           <option>surprise</option>
+          <option>frown</option>
+          <option>confusion</option>
+          <option>thinking</option>
         </select></label
       >
       <label
         >Pitch <input id="pitch" type="range" min="-40" max="40" value="0"
       /></label>
+      <label
+        >Held for
+        <input id="held" type="range" min="0" max="12" step="0.1" value="0" />
+        <output id="heldValue">0s</output></label
+      >
       <label><input id="blink" type="checkbox" />Closed eyes</label>
     </header>
     <div id="views"></div>

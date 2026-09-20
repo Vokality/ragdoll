@@ -1,6 +1,6 @@
 import { RagdollSkeleton } from "../models/ragdoll-skeleton";
 import { RagdollGeometry } from "../models/ragdoll-geometry";
-import type { ExpressionConfig } from "../models/ragdoll-geometry";
+import type { ExpressionConfig, HeadOffset } from "../models/ragdoll-geometry";
 import { ExpressionController } from "./expression-controller";
 import { HeadPoseController } from "./head-pose-controller";
 import { ActionController } from "./action-controller";
@@ -22,6 +22,7 @@ import type {
   JointName,
   HeadPose,
   ExpressionAxes,
+  ExpressionAxis,
   ExpressionPatch,
 } from "../types";
 
@@ -94,6 +95,9 @@ export class CharacterController {
         this.setExpression(patch, duration);
         break;
       }
+      case "resetExpression":
+        this.resetExpression(command.params.axes, command.params.duration);
+        break;
     }
   }
 
@@ -105,6 +109,13 @@ export class CharacterController {
 
   public setExpression(patch: ExpressionPatch, duration?: number): void {
     this.expressionController.setExpression(patch, duration);
+  }
+
+  public resetExpression(
+    axes?: readonly ExpressionAxis[],
+    duration?: number,
+  ): void {
+    this.expressionController.resetExpression(axes, duration);
   }
 
   public triggerAction(
@@ -147,6 +158,9 @@ export class CharacterController {
     // Update action controller (handles shake and other actions)
     this.actionController.update(deltaTime);
     this.expressionController.update(deltaTime);
+    // People blink as their gaze shifts; it sells a moving mood like thinking.
+    if (this.expressionController.consumePoseChange())
+      this.idleController.triggerBlink();
     this.headPoseController.update(deltaTime);
     this.idleController.update(deltaTime);
     this.skeleton.update(deltaTime);
@@ -216,6 +230,14 @@ export class CharacterController {
 
   public getExpressionWithAction(): ExpressionConfig {
     return this.expressionController.getExpressionWithAction();
+  }
+
+  /**
+   * Head movement the current mood adds for rendering. It is not part of
+   * `getState().headPose`, which stays the commanded pose.
+   */
+  public getMoodHeadOffset(): Readonly<HeadOffset> {
+    return this.expressionController.getHeadOffset();
   }
 
   public getGeometry(): RagdollGeometry {

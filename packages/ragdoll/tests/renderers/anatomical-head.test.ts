@@ -163,4 +163,32 @@ describe("anatomical head", () => {
       controller.destroy();
     }
   });
+  test("thinking pushes a pressed mouth to one side and cocks one brow over the other", () => {
+    const controller = new CharacterController({
+      variantId: "human",
+      themeId: "default",
+      onEventSubscriberError: console.error,
+    });
+    const head = new AnatomicalHead();
+    try {
+      controller.setIdleEnabled(false);
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      head.update(computeRenderData(controller));
+      const dictionary = head.skin.morphTargetDictionary;
+      const influences = head.skin.morphTargetInfluences;
+      if (!dictionary || !influences) {
+        throw new Error("Missing morph dictionary");
+      }
+      expect(influences[dictionary.mouthLeft]).toBeCloseTo(0.5);
+      expect(influences[dictionary.mouthRight]).toBe(0);
+      expect(influences[dictionary.mouthPress_L]).toBeCloseTo(0.5);
+      expect(influences[dictionary.browOuterUp_L]).toBeGreaterThan(0.7);
+      expect(influences[dictionary.browDown_R]).toBeGreaterThan(0.5);
+      expect(influences[dictionary.eyeBlink_L]).toBe(0);
+    } finally {
+      head.dispose();
+      controller.destroy();
+    }
+  });
 });

@@ -40,7 +40,8 @@
       "tools"
     ],
     "requiredCapabilities": [
-      "ipc"
+      "ipc",
+      "timers"
     ],
     "optionalCapabilities": [],
     "entry": "./dist/index.js",

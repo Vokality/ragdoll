@@ -423,4 +423,35 @@ describe("CharacterController", () => {
       expect(controller.getMixedExpression().mouth.cornerPull).toBe(0);
     });
   });
+
+  describe("moving moods", () => {
+    it("blinks when thinking shifts to its next pose", () => {
+      // Push the natural blink past the window so only the pose change counts.
+      const random = Math.random;
+      Math.random = () => 0.99;
+      try {
+        const steady = new CharacterController(defaultConfig);
+        steady.setMood("thinking", 0);
+        let blinkedAt: number | null = null;
+        for (let t = 0; t < 4 && blinkedAt === null; t += 1 / 60) {
+          steady.update(1 / 60);
+          if (steady.getIdleState().isBlinking) blinkedAt = t;
+        }
+        expect(blinkedAt).not.toBeNull();
+        expect(blinkedAt ?? 0).toBeGreaterThan(2.3);
+        expect(blinkedAt ?? 0).toBeLessThan(2.7);
+        steady.destroy();
+      } finally {
+        Math.random = random;
+      }
+    });
+
+    it("does not start a blink while idle animation is disabled", () => {
+      controller.setIdleEnabled(false);
+      controller.setMood("thinking", 0);
+      for (let t = 0; t < 4; t += 1 / 60) controller.update(1 / 60);
+      expect(controller.getIdleState().isBlinking).toBe(false);
+      expect(controller.getIdleState().blinkAmount).toBe(0);
+    });
+  });
 });

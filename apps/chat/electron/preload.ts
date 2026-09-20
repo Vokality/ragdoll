@@ -112,6 +112,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener(IPC_CHANNELS.chat.functionCall, handler);
     };
   },
+  replyCharacterState: (requestId, state) =>
+    ipcRenderer.invoke(IPC_CHANNELS.character.stateReply, requestId, state),
   onStreamEnd: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on(IPC_CHANNELS.chat.streamEnd, handler);

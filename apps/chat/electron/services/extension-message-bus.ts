@@ -53,6 +53,11 @@ export class ExtensionMessageBus {
     };
   }
 
+  /** Host-originated message to whichever extension subscribed to `topic`. */
+  deliver(topic: string, payload: unknown): void {
+    for (const listener of this.listeners.get(topic) ?? []) listener(payload);
+  }
+
   clear(): void {
     this.listeners.clear();
   }

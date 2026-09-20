@@ -222,7 +222,7 @@ describe("expression mixer", () => {
     );
     expect(
       controller.getMixedExpression().leftEye.pupilOffset.x,
-    ).not.toBeCloseTo(4);
+    ).not.toBeCloseTo(controller.getExpression().leftEye.pupilOffset.x);
   });
 
   it("leaves omitted overlay keys unchanged", () => {
@@ -271,13 +271,15 @@ describe("expression mixer", () => {
   it("eases thinking gazeX toward 0", () => {
     controller.setMood("thinking");
     settle(controller);
+    const baked = controller.getExpression().leftEye.pupilOffset.x;
+    expect(baked).toBeGreaterThan(0);
     expect(controller.getMixedExpression().leftEye.pupilOffset.x).toBeCloseTo(
-      4,
+      baked,
     );
     controller.setExpression({ gazeX: 0, duration: 0.35 });
     controller.update(0.1);
     const x = controller.getMixedExpression().leftEye.pupilOffset.x;
-    expect(x).toBeLessThan(4);
+    expect(x).toBeLessThan(baked);
     expect(x).toBeGreaterThan(0);
   });
 
@@ -387,5 +389,171 @@ describe("expression mixer", () => {
     } finally {
       character.destroy();
     }
+  });
+
+  it("resetExpression hands gaze back to the mood's baked glance", () => {
+    controller.setMood("thinking");
+    controller.setExpression({ gazeX: 0.8, smile: 0.4 }, 0);
+    settle(controller);
+
+    controller.resetExpression(["gazeX"], 0);
+
+    expect(controller.getAxisOverlay()).toEqual({ smile: 0.4 });
+    expect(controller.getMixedExpression().leftEye.pupilOffset.x).toBeCloseTo(
+      controller.getExpression().leftEye.pupilOffset.x,
+    );
+    expect(controller.getMixedExpression().mouth.cornerPull).toBeCloseTo(0.4);
+  });
+
+  it("resetExpression without axes releases every owned axis and eases back", () => {
+    controller.setMood("smile");
+    settle(controller);
+    controller.setExpression({ smile: 0, gazeY: 1 }, 0);
+
+    controller.resetExpression(undefined, 0.4);
+
+    expect(controller.getAxisOverlay()).toEqual({});
+    // Eases from the patched face instead of snapping to the mood.
+    expect(controller.getMixedExpression().mouth.cornerPull).toBeCloseTo(0);
+    controller.update(0.2);
+    const midway = controller.getMixedExpression().mouth.cornerPull;
+    expect(midway).toBeGreaterThan(0);
+    expect(midway).toBeLessThan(0.8);
+    settle(controller);
+    expect(controller.getMixedExpression().mouth.cornerPull).toBeCloseTo(0.8);
+  });
+
+  it("resetExpression ignores axes that are not owned and rejects a bad duration", () => {
+    controller.setExpression({ smile: 0.5 }, 0);
+    controller.resetExpression(["jaw"], 0);
+    expect(controller.getAxisOverlay()).toEqual({ smile: 0.5 });
+    expect(() => controller.resetExpression(["smile"], NaN)).toThrow("finite");
+    expect(controller.getAxisOverlay()).toEqual({ smile: 0.5 });
+  });
+
+  it("routes resetExpression through executeCommand", () => {
+    const character = createCharacter();
+    try {
+      character.setExpression({ smile: 0.5, gazeX: 1 }, 0);
+      character.executeCommand({
+        action: "resetExpression",
+        params: { axes: ["smile"], duration: 0 },
+      });
+      expect(character.getAxisOverlay()).toEqual({ gazeX: 1 });
+    } finally {
+      character.destroy();
+    }
+  });
+
+  describe("moods that move through poses", () => {
+    const step = (seconds: number) => {
+      for (let t = 0; t < seconds; t += 0.05) controller.update(0.05);
+    };
+    const gazeX = () => controller.getMixedExpression().leftEye.pupilOffset.x;
+
+    it("walks thinking through its poses and loops back to the first", () => {
+      const poses = geometry.getMoodSequence("thinking");
+      if (!poses) throw new Error("thinking should define poses");
+      expect(poses.length).toBeGreaterThan(2);
+      expect(geometry.getExpressionForMood("thinking")).toEqual(
+        poses[0].expression,
+      );
+
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      const seen = [gazeX()];
+      for (const pose of poses) {
+        step(pose.hold + 0.7);
+        seen.push(gazeX());
+      }
+
+      expect(seen.slice(0, -1)).toEqual(
+        poses.map((pose) => pose.expression.leftEye.pupilOffset.x),
+      );
+      expect(seen.at(-1)).toBeCloseTo(seen[0]);
+      expect(controller.getCurrentMood()).toBe("thinking");
+    });
+
+    it("eases between poses instead of snapping", () => {
+      const poses = geometry.getMoodSequence("thinking");
+      if (!poses) throw new Error("thinking should define poses");
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      step(poses[0].hold);
+      controller.update(0.2);
+
+      const from = poses[0].expression.leftEye.pupilOffset.x;
+      const to = poses[1].expression.leftEye.pupilOffset.x;
+      expect(gazeX()).toBeLessThan(Math.max(from, to));
+      expect(gazeX()).toBeGreaterThan(Math.min(from, to));
+    });
+
+    it("reports each pose change once so the eyes can blink", () => {
+      const poses = geometry.getMoodSequence("thinking");
+      if (!poses) throw new Error("thinking should define poses");
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      expect(controller.consumePoseChange()).toBe(false);
+      step(poses[0].hold + 0.1);
+      expect(controller.consumePoseChange()).toBe(true);
+      expect(controller.consumePoseChange()).toBe(false);
+    });
+
+    it("keeps a gaze patch on top while the poses change underneath", () => {
+      const poses = geometry.getMoodSequence("thinking");
+      if (!poses) throw new Error("thinking should define poses");
+      controller.setMood("thinking", 0);
+      controller.setExpression({ gazeX: 1 }, 0);
+      step(poses[0].hold + 1);
+
+      expect(gazeX()).toBeCloseTo(GAZE_OFFSET_X);
+      expect(controller.getMixedExpression().mouth.skew).toBeCloseTo(
+        poses[1].expression.mouth.skew,
+      );
+    });
+
+    it("drifts the head with each pose and eases it between them", () => {
+      const poses = geometry.getMoodSequence("thinking");
+      if (!poses) throw new Error("thinking should define poses");
+      expect(controller.getHeadOffset()).toEqual({ yaw: 0, pitch: 0, roll: 0 });
+
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      expect(controller.getHeadOffset()).toEqual(poses[0].head);
+
+      step(poses[0].hold);
+      controller.update(0.2);
+      const midway = controller.getHeadOffset().pitch;
+      expect(midway).toBeGreaterThan(poses[0].head.pitch);
+      expect(midway).toBeLessThan(poses[1].head.pitch);
+
+      step(1);
+      expect(controller.getHeadOffset()).toEqual(poses[1].head);
+    });
+
+    it("eases the head back to rest when another mood takes over", () => {
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      controller.setMood("smile", 0.4);
+      controller.update(0.2);
+      const yaw = controller.getHeadOffset().yaw;
+      expect(yaw).toBeGreaterThan(0);
+      expect(yaw).toBeLessThan(
+        geometry.getMoodSequence("thinking")?.[0].head.yaw ?? 0,
+      );
+      step(1);
+      expect(controller.getHeadOffset()).toEqual({ yaw: 0, pitch: 0, roll: 0 });
+    });
+
+    it("stops moving when another mood replaces it", () => {
+      controller.setMood("thinking", 0);
+      controller.update(0.05);
+      controller.setMood("smile", 0);
+      step(6);
+      expect(controller.getExpression()).toEqual(
+        geometry.getExpressionForMood("smile"),
+      );
+      expect(geometry.getMoodSequence("smile")).toBeNull();
+    });
   });
 });

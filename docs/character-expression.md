@@ -71,7 +71,7 @@ Lumen’s agent reaches those commands only through `@vokality/ragdoll-extension
 - Changing head-pose units (tools stay degrees; `HeadPoseController` stays radians).
 - Driving unused ARKit morphs 1:1 (later framework slice).
 - Changing `ExperienceService` / `CharacterCommandService.react` (host `setMood("thinking")` on `"working"` stays; it is a mixer writer under the new rules).
-- A v1 API to un-own gaze or restore mood-baked glance after a gaze patch (`clearExpression`, `resetGaze`, or `setMood` dropping gaze). Sticky gaze; `0` = center.
+- `setMood` dropping gaze. Gaze stays sticky with `0` = center; un-owning an axis is the separate `resetExpression` tool added after v1 (see Alternative 9).
 
 ## Key Decisions
 
@@ -87,7 +87,7 @@ Lumen’s agent reaches those commands only through `@vokality/ragdoll-extension
 
 6. **v1 overlay animation is a visual `ExpressionConfig` lerp, not a sparse axis lerp.** Newly owned keys have no well-defined numeric start (`smile: 0` on a smile mood is not “start at 0”). On `setExpression`, snapshot the current mixed face and lerp it toward `applyAxes(moodExpr, overlayTarget)` with the same `easeInOutCubic` as mood. Sparse `overlayTarget` is the settled ownership mask, updated on write, applied as `applyAxes` once `overlayProgress === 1` and on later settled frames.
 
-7. **v1 gaze overlay is sticky.** `setMood` does not drop `gazeX`/`gazeY`. Omit cannot un-own a key. Explicit `gazeX: 0` / `gazeY: 0` is look-center, not “inherit thinking/sad baked `pupilOffset`.” Mood-baked glance is only the never-patched default. `RagdollCharacter` remounts on variant change (`key={props.variant}`), not on conversation switch, so a gaze patch lasts until the next gaze write or a variant remount. No `clearExpression` / `resetGaze` tool in this slice.
+7. **v1 gaze overlay is sticky.** `setMood` does not drop `gazeX`/`gazeY`. Omit cannot un-own a key. Explicit `gazeX: 0` / `gazeY: 0` is look-center, not “inherit thinking/sad baked `pupilOffset`.” Mood-baked glance is only the never-patched default. `RagdollCharacter` remounts on variant change (`key={props.variant}`), not on conversation switch, so a gaze patch lasts until the next gaze write or a variant remount. `resetExpression` (added after this slice) is the only way to un-own a key.
 
 8. **v1 is an `ExpressionConfig` adapter; v2 is a `MorphName` mixer.** Do not grow `ExpressionConfig`. Keep adapter constants (gaze pixels, brow Y scale) inside `@vokality/ragdoll`.
 
@@ -446,11 +446,13 @@ pupilOffset.x = gazeX * GAZE_OFFSET_X;
 pupilOffset.y = -gazeY * GAZE_OFFSET_Y; // spec: +gazeY is up; sad mood uses y:+2 as down
 ```
 
-Sign of `gazeX` matches existing `pupilOffset.x` (thinking’s `+4`). `AnatomicalHead` already turns eyeballs with `rotation.set(pupilOffset.y * 0.035, pupilOffset.x * 0.035, 0)`. v1 does **not** drive unused `eyeLook*` morphs.
+Sign of `gazeX` matches existing `pupilOffset.x` (thinking’s positive x). `AnatomicalHead` already turns eyeballs with `rotation.set(pupilOffset.y * 0.035, pupilOffset.x * 0.035, 0)`. v1 does **not** drive unused `eyeLook*` morphs.
 
 PR 1 bun tests lock **adapter arithmetic and the `* 0.035` Euler mapping**, not character-left vs character-right on the mesh. Assert `gazeX: 1` → `pupilOffset.x ≈ 4` (same as thinking’s bake), `smile: 0.5` → `mouthSmile_L ≈ 0.5`, `jaw: 1` → `jawOpen ≈ 1`, and `rotation.y === pupilOffset.x * 0.035` (and `rotation.x === pupilOffset.y * 0.035`). Same-sign `rotation.y` vs `pupilOffset.x` is implied by that product and is not the left/right gate. Whether positive Euler Y is the character’s right is a visual check in PR 4 (Key Decision 13); if the 3D head looks the wrong way, flip `GAZE_OFFSET_*` only. Do not change the agent schema.
 
-Mood-baked `pupilOffset` (`sad` y:+2, `thinking` x:+4 y:-3, `confusion` opposing offsets) shows through **only while the corresponding gaze key is absent** from `overlayTarget`. After the first gaze patch, those keys stay until a later gaze write or variant remount. `gazeX: 0` is center, not “give thinking’s glance back.”
+Thinking is a moving mood: `RagdollGeometry.getMoodSequence("thinking")` returns held poses that `ExpressionController` eases between (0.6s) and loops while the mood lasts, and `CharacterController` blinks on each change. Each pose also carries a small head offset (yaw, pitch, roll) that eases with the face; `computeRenderData` adds it to the commanded head pose like idle sway, so it never fights `setHeadPose` and is not part of `getState().headPose`. The values below are its first pose, which is also what `getExpressionForMood` returns. The axis overlay applies on top of whichever pose is current.
+
+Mood-baked `pupilOffset` (`sad` y:+2, `thinking` x:+5 y:-4, `confusion` opposing offsets) shows through **only while the corresponding gaze key is absent** from `overlayTarget`. After the first gaze patch, those keys stay until a later gaze write or variant remount. `gazeX: 0` is center, not “give thinking’s glance back.”
 
 ### Sequencing: v1 adapter vs later 1:1 morph mixer
 
@@ -717,7 +719,7 @@ Extract `FacialMood` + axis ranges so the extension does not duplicate.
 ### 9. `clearExpression` / `resetGaze` / `setMood` also dropping gaze
 
 - **Pros:** Could restore thinking’s baked glance after a gaze patch.
-- **Cons:** Extra tool or a behavior change to `setMood` that contradicts “does not clear gaze.” Sticky gaze with `0` = center is the v1 product. **Deferred.**
+- **Cons:** Extra tool or a behavior change to `setMood` that contradicts “does not clear gaze.” Sticky gaze with `0` = center is the v1 product. **Deferred in v1; since added as `resetExpression`.** It is its own tool (`axes?: string[]` of axis names, `duration?`) so `setExpression` stays a flat object of optional numbers for Grok; `setMood` still does not clear gaze. `ExpressionController.resetExpression` removes the keys from the overlay and eases from the mixed face, like a patch.
 
 ## Security & Privacy Considerations
 
@@ -770,7 +772,7 @@ Rollback: revert the last PR. No stored overlay to migrate. Users on an older re
 | **Same-mood `setMood` early return.** Current code skips overlay clear. After a smile patch, `setMood("smile")` would leave the patch. | High if unfixed | Rewrite as specified. Test: patch `smile: 0.2` on smile mood, `setMood("smile")`, settled `getMixedExpression().mouth.cornerPull` matches `getExpressionForMood("smile")` (~0.8), overlay face keys empty. |
 | **Tool order.** `setMood` after `setExpression` in one turn wipes face patches. `parallel_tool_calls: true` means Grok may list expression first. | Medium | Last-writer-wins; do not coalesce. Tool description + prompt say mood first; tests document both orders. Do not claim the prompt makes order reliable. |
 | **Host auto-thinking.** Every turn `react("working")` → `setMood("thinking")` clears face overlays. | Medium | Document as a mixer writer. Prompt: re-apply intensity each turn. PR 3 tests. Do not change `ExperienceService`. |
-| **Sticky gaze.** First `gazeX` patch hides sad/thinking baked glance for the controller lifetime (variant remount). | Medium (accepted) | Key Decision 7. `0` = center. Test: `{ gazeX: 0.8 }` then `{ gazeY: 0 }` then `setMood("thinking")` does not restore `x: 4`. |
+| **Sticky gaze.** First `gazeX` patch hides sad/thinking baked glance for the controller lifetime (variant remount). | Medium (accepted) | Key Decision 7. `0` = center. Test: `{ gazeX: 0.8 }` then `{ gazeY: 0 }` then `setMood("thinking")` does not restore the baked x. |
 | **Mood-baked gaze vs overlay.** Mood lerp includes `pupilOffset`. If `moodStart` bakes gaze and overlay also applies gaze, eyes double-deflect during the transition. | High if unfixed | Mood start uses mixedNow with mood `pupilOffset`; gaze keys stay overlay-only. |
 | **Talk + jaw.** Talk rewrites `mouth` from the mixed expression (`action-controller.ts`). After v1 that is the jaw-patched mouth. `getMouthPath` can throw. | Medium | Additive talk accepted (same as talk on `laugh` today). Tests: `jaw: 1` on laugh + talk through `getMouthPath` / `computeRenderData`; `getExpression()` mood objects unchanged. |
 | **Mutating `currentExpression`.** `applyAxes` that writes `mouth` in place permanently corrupts the mood lerp. | High if unfixed | Deep clone; assert `getExpression()` identity/values unchanged after `setExpression`. |

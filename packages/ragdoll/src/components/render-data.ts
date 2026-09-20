@@ -96,11 +96,17 @@ export function computeRenderData(controller: CharacterController): RenderData {
     idleState.pupilOffsetY,
   );
 
-  const yaw = state.headPose.yaw + (idleState.headMicroX * Math.PI) / 180;
-  const pitch = state.headPose.pitch + (idleState.headMicroY * Math.PI) / 180;
+  const moodHead = controller.getMoodHeadOffset();
+  const yaw =
+    state.headPose.yaw + moodHead.yaw + (idleState.headMicroX * Math.PI) / 180;
+  const pitch =
+    state.headPose.pitch +
+    moodHead.pitch +
+    (idleState.headMicroY * Math.PI) / 180;
   const breathingOffsetY = -idleState.breathAmount * dims.headHeight * 0.25;
   const breathingScale = 1 + idleState.breathAmount * 0.4;
-  const headRoll = (idleState.headMicroX * 0.35 * Math.PI) / 180;
+  const headRoll =
+    moodHead.roll + (idleState.headMicroX * 0.35 * Math.PI) / 180;
 
   return {
     dims,

@@ -1,51 +1,36 @@
 import type { CharacterReaction } from "../../electron/electron-api";
-import type { CharacterController, FacialMood } from "@vokality/ragdoll";
-import { z } from "zod";
+import type { CharacterController } from "@vokality/ragdoll";
+import {
+  parseCharacterCommand,
+  type CharacterStateSnapshot,
+} from "@vokality/ragdoll-extension-character";
 
-const moodCommandSchema = z.object({
-  mood: z.enum([
-    "neutral",
-    "smile",
-    "frown",
-    "laugh",
-    "angry",
-    "sad",
-    "surprise",
-    "confusion",
-    "thinking",
-  ] satisfies [FacialMood, ...FacialMood[]]),
-  duration: z.number().min(0).max(5).optional(),
-});
-
-const actionCommandSchema = z.object({
-  action: z.enum(["wink", "talk", "shake"]),
-  duration: z.number().min(0.2).max(5).optional(),
-});
-
-const headPoseCommandSchema = z.object({
-  yawDegrees: z.number().min(-35).max(35).optional(),
-  pitchDegrees: z.number().min(-20).max(20).optional(),
-  duration: z.number().min(0.1).max(2).optional(),
-});
-
-const expressionCommandSchema = z.object({
-  smile: z.number().min(0).max(1).optional(),
-  frown: z.number().min(0).max(1).optional(),
-  brows: z.number().min(-1).max(1).optional(),
-  eyesOpen: z.number().min(0).max(1.3).optional(),
-  jaw: z.number().min(0).max(1).optional(),
-  gazeX: z.number().min(-1).max(1).optional(),
-  gazeY: z.number().min(-1).max(1).optional(),
-  duration: z.number().min(0).max(5).optional(),
-});
-
-type CharacterCommands = Pick<
+export type CharacterCommands = Pick<
   CharacterController,
-  "setMood" | "triggerAction" | "setHeadPose" | "setExpression"
+  | "setMood"
+  | "triggerAction"
+  | "clearAction"
+  | "setHeadPose"
+  | "setExpression"
+  | "resetExpression"
+  | "getState"
+  | "getAxisOverlay"
 >;
+
+/** Sends the answer to a getCharacterState request back to the host. */
+export type CharacterStateReply = (
+  requestId: string,
+  state: CharacterStateSnapshot,
+) => void;
+
+const toDegrees = (radians: number): number =>
+  Math.round(((radians * 180) / Math.PI) * 10) / 10;
 
 export class CharacterCommandService {
   private explicitReaction = false;
+
+  constructor(private readonly replyState: CharacterStateReply) {}
+
   react(controller: CharacterCommands, reaction: CharacterReaction): void {
     if (reaction === "working") {
       this.explicitReaction = false;
@@ -63,53 +48,73 @@ export class CharacterCommandService {
     name: string,
     args: Record<string, unknown>,
   ): void {
-    this.dispatch(controller, name, args);
     // Only a command that took effect replaces the automatic reaction; a
     // rejected one must not leave the face stuck on "thinking".
-    this.explicitReaction = true;
+    if (this.dispatch(controller, name, args)) this.explicitReaction = true;
   }
 
   private dispatch(
     controller: CharacterCommands,
     name: string,
     args: Record<string, unknown>,
-  ): void {
-    switch (name) {
-      case "setMood": {
-        const command = moodCommandSchema.parse(args);
-        controller.setMood(command.mood, command.duration);
-        return;
-      }
-      case "triggerAction": {
-        const command = actionCommandSchema.parse(args);
-        controller.triggerAction(command.action, command.duration);
-        return;
-      }
+  ): boolean {
+    // The extension owns the argument shapes and ranges; this only maps a
+    // parsed command onto the controller.
+    const command = parseCharacterCommand(name, args);
+    switch (command.tool) {
+      case "setMood":
+        controller.setMood(command.args.mood, command.args.duration);
+        return true;
+      case "triggerAction":
+        controller.triggerAction(command.args.action, command.args.duration);
+        return true;
+      case "clearAction":
+        controller.clearAction();
+        return true;
       case "setHeadPose": {
-        const command = headPoseCommandSchema.parse(args);
+        const { yawDegrees, pitchDegrees, duration } = command.args;
         controller.setHeadPose(
           {
             yaw:
-              command.yawDegrees === undefined
+              yawDegrees === undefined
                 ? undefined
-                : (command.yawDegrees * Math.PI) / 180,
+                : (yawDegrees * Math.PI) / 180,
             pitch:
-              command.pitchDegrees === undefined
+              pitchDegrees === undefined
                 ? undefined
-                : (command.pitchDegrees * Math.PI) / 180,
+                : (pitchDegrees * Math.PI) / 180,
           },
-          command.duration,
+          duration,
         );
-        return;
+        return true;
       }
       case "setExpression": {
-        const command = expressionCommandSchema.parse(args);
-        const { duration, ...patch } = command;
+        const { duration, ...patch } = command.args;
         controller.setExpression(patch, duration);
-        return;
+        return true;
+      }
+      case "resetExpression":
+        controller.resetExpression(command.args.axes, command.args.duration);
+        return true;
+      case "getCharacterState": {
+        const state = controller.getState();
+        this.replyState(command.args.requestId, {
+          mood: state.mood,
+          action:
+            state.action === null || state.action === "none"
+              ? null
+              : state.action,
+          headPose: {
+            yawDegrees: toDegrees(state.headPose.yaw),
+            pitchDegrees: toDegrees(state.headPose.pitch),
+          },
+          expression: { ...controller.getAxisOverlay() },
+        });
+        // Looking is not a reaction; the automatic one still applies.
+        return false;
       }
       default:
-        throw new Error(`Unsupported character command: ${name}`);
+        return command satisfies never;
     }
   }
 }

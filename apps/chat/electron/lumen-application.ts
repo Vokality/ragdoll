@@ -54,6 +54,7 @@ export class LumenApplication {
   private readonly apiKeys;
   private readonly chat;
   private readonly conversationEvents;
+  private readonly messageBus: ExtensionMessageBus;
   private readonly unsubscribeConversationEvents: () => void;
   private disposeIpc: (() => Promise<void>) | null = null;
 
@@ -101,9 +102,10 @@ export class LumenApplication {
       ),
       () => this.rendererEvents.connectionsChanged(),
     );
-    const messageBus = new ExtensionMessageBus((name, args) =>
+    this.messageBus = new ExtensionMessageBus((name, args) =>
       this.rendererEvents.functionCall(name, args),
     );
+    const messageBus = this.messageBus;
     this.extensions = new ExtensionManager({
       packageRoots: [{ path: config.userExtensionsPath, layout: "installed" }],
       builtInExtensions: BUILT_IN_EXTENSIONS,
@@ -287,6 +289,7 @@ export class LumenApplication {
         extensionOperations,
         navigation: this.navigation,
         storage: this.storage,
+        messageBus: this.messageBus,
       },
       (event) => this.windows.authorizeIpc(event),
     );

@@ -36,7 +36,9 @@ export function createRendererServices(api: ElectronAPI): RendererServices {
       createElectronChatGateway(api),
       DEFAULT_CHARACTER_SETTINGS,
     ),
-    characterCommands: new CharacterCommandService(),
+    characterCommands: new CharacterCommandService((requestId, state) => {
+      void api.replyCharacterState(requestId, state).catch(reportError);
+    }),
     extensionSlots: new ExtensionSlotService(api, reportError),
     extensions: new ExtensionManagementService(api),
     connections: new ConnectionManagementService(api),

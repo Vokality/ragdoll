@@ -107,4 +107,25 @@ describe("computeRenderData", () => {
     }
     expect(blinked).toBe(true);
   });
+
+  it("adds the mood's head drift to the commanded pose without changing the reported state", () => {
+    const controller = tracked(createController());
+    controller.setIdleEnabled(false);
+    controller.setHeadPose({ yaw: 0.2 });
+    for (let i = 0; i < 600; i++) controller.update(1 / 60);
+    const before = computeRenderData(controller);
+    expect(before.yaw).toBeCloseTo(0.2);
+    expect(before.headRoll).toBe(0);
+
+    controller.setMood("thinking", 0);
+    controller.update(0.05);
+    const drift = controller.getMoodHeadOffset();
+    const data = computeRenderData(controller);
+
+    expect(drift.yaw).toBeGreaterThan(0);
+    expect(data.yaw).toBeCloseTo(0.2 + drift.yaw);
+    expect(data.pitch).toBeCloseTo(drift.pitch);
+    expect(data.headRoll).toBeCloseTo(drift.roll);
+    expect(controller.getState().headPose.yaw).toBeCloseTo(0.2);
+  });
 });

@@ -1,6 +1,16 @@
-import type { ExpressionAxes, ExpressionPatch, FacialMood } from "../types";
+import type {
+  ExpressionAxes,
+  ExpressionAxis,
+  ExpressionPatch,
+  FacialMood,
+} from "../types";
 import { RagdollGeometry } from "../models/ragdoll-geometry";
-import type { ExpressionConfig } from "../models/ragdoll-geometry";
+import {
+  NO_HEAD_OFFSET,
+  type ExpressionConfig,
+  type HeadOffset,
+  type MoodPose,
+} from "../models/ragdoll-geometry";
 import {
   applyAxes,
   AXIS_KEYS,
@@ -9,6 +19,12 @@ import {
   FACE_AXES_CLEARED_ON_SET_MOOD,
 } from "../models/expression-axes";
 import { ActionController } from "./action-controller";
+
+// Slower than a mood change: a thought drifting, not a reaction.
+const POSE_TRANSITION_SECONDS = 0.6;
+
+const lerp = (from: number, to: number, t: number): number =>
+  from + (to - from) * t;
 
 export class ExpressionController {
   private geometry: RagdollGeometry;
@@ -23,6 +39,15 @@ export class ExpressionController {
   private overlayProgress = 1;
   private overlayDuration = 0.35;
   private actionController: ActionController;
+  // A mood that moves through poses, and where it currently is in them.
+  private moodSequence: readonly MoodPose[] | null = null;
+  private poseIndex = 0;
+  private poseHeld = 0;
+  private poseChanged = false;
+  // Eased with the face, so the head arrives when the expression does.
+  private headStart: HeadOffset = NO_HEAD_OFFSET;
+  private headTarget: HeadOffset = NO_HEAD_OFFSET;
+  private headOffset: HeadOffset = NO_HEAD_OFFSET;
 
   constructor(geometry: RagdollGeometry, actionController: ActionController) {
     this.geometry = geometry;
@@ -72,6 +97,11 @@ export class ExpressionController {
     this.transitionDuration = Math.max(0.05, transitionDuration);
     this.currentMood = mood;
     this.targetExpression = this.geometry.getExpressionForMood(mood);
+    this.moodSequence = this.geometry.getMoodSequence(mood);
+    this.poseIndex = 0;
+    this.poseHeld = 0;
+    this.headStart = this.headOffset;
+    this.headTarget = this.moodSequence?.[0].head ?? NO_HEAD_OFFSET;
   }
 
   public setExpression(patch: ExpressionPatch, duration: number = 0.35): void {
@@ -96,6 +126,27 @@ export class ExpressionController {
     this.overlayProgress = duration <= 0 ? 1 : 0;
   }
 
+  /**
+   * Hand axes back to the current mood. Omit `axes` to release all of them,
+   * including the otherwise sticky gaze.
+   */
+  public resetExpression(
+    axes: readonly ExpressionAxis[] = AXIS_KEYS,
+    duration: number = 0.35,
+  ): void {
+    if (!Number.isFinite(duration)) {
+      throw new Error("duration must be a finite number");
+    }
+    const owned = axes.filter((key) => this.overlayTarget[key] !== undefined);
+    if (owned.length === 0) return;
+    this.overlayVisualStart = cloneExpression(this.getMixedExpression());
+    const next = { ...this.overlayTarget };
+    for (const key of owned) delete next[key];
+    this.overlayTarget = next;
+    this.overlayDuration = duration;
+    this.overlayProgress = duration <= 0 ? 1 : 0;
+  }
+
   public getActionController(): ActionController {
     return this.actionController;
   }
@@ -108,6 +159,17 @@ export class ExpressionController {
       );
       const t = this.easeInOutCubic(this.transitionProgress);
       this.interpolateExpression(t);
+      // Land exactly on the target; a lerp at t=1 can miss it by a rounding.
+      this.headOffset =
+        this.transitionProgress >= 1
+          ? this.headTarget
+          : {
+              yaw: lerp(this.headStart.yaw, this.headTarget.yaw, t),
+              pitch: lerp(this.headStart.pitch, this.headTarget.pitch, t),
+              roll: lerp(this.headStart.roll, this.headTarget.roll, t),
+            };
+    } else if (this.moodSequence) {
+      this.advancePose(deltaTime);
     }
 
     if (this.overlayProgress < 1) {
@@ -118,6 +180,34 @@ export class ExpressionController {
     }
 
     this.geometry.setExpression(this.currentExpression);
+  }
+
+  /** Head movement the current mood adds on top of the commanded pose. */
+  public getHeadOffset(): Readonly<HeadOffset> {
+    return this.headOffset;
+  }
+
+  /** True once after the mood moved to its next pose; lets the eyes blink. */
+  public consumePoseChange(): boolean {
+    const changed = this.poseChanged;
+    this.poseChanged = false;
+    return changed;
+  }
+
+  private advancePose(deltaTime: number): void {
+    const poses = this.moodSequence;
+    if (!poses || poses.length < 2) return;
+    this.poseHeld += deltaTime;
+    if (this.poseHeld < poses[this.poseIndex].hold) return;
+    this.poseIndex = (this.poseIndex + 1) % poses.length;
+    this.poseHeld = 0;
+    this.poseChanged = true;
+    this.transitionStartExpression = this.currentExpression;
+    this.targetExpression = poses[this.poseIndex].expression;
+    this.headStart = this.headOffset;
+    this.headTarget = poses[this.poseIndex].head;
+    this.transitionProgress = 0;
+    this.transitionDuration = POSE_TRANSITION_SECONDS;
   }
 
   public getCurrentMood(): FacialMood {

@@ -89,6 +89,9 @@ const PRESENTATION_TOOLS = new Set([
   "triggerAction",
   "setHeadPose",
   "setExpression",
+  "resetExpression",
+  "clearAction",
+  "getCharacterState",
 ]);
 
 class PersonalTools implements AgentToolService {
