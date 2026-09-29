@@ -1,4 +1,4 @@
-## A conversation that gets things done
+## Screenshots
 
 <div class="product-gallery">
 
@@ -6,22 +6,22 @@
 
 ![Lumen suggests a morning plan in chat](/screenshots/lumen-chat.png)
 
-<figcaption>Plan your day in a conversation with Lumen.</figcaption>
+<figcaption>Planning a morning in chat.</figcaption>
 </figure>
 
 <figure>
 
 ![Lumen opens an interactive task card above the conversation](/screenshots/lumen-tasks.png)
 
-<figcaption>Work with your tasks while keeping the conversation visible.</figcaption>
+<figcaption>The task card open above the conversation.</figcaption>
 </figure>
 
 </div>
 
-## What is Lumen?
+## What Lumen is
 
-Lumen is an Electron desktop assistant powered by your choice of OpenAI or Grok and the Ragdoll character framework. Its agent can perform tool actions, control which extension card is open, and continue through several steps before replying. The animated character stays visible alongside your work.
+Lumen is a desktop chat assistant built on Electron and the Ragdoll character framework. It talks to OpenAI or Grok, calls tools, opens and closes extension cards, and can take several steps before it replies. An animated character sits next to the conversation the whole time.
 
-These pages document the current source version of Lumen in the [Ragdoll repository](https://github.com/Vokality/ragdoll). Lumen runs on your desktop; this website contains documentation, not a browser version of the app.
+These pages describe the current source version in the [Ragdoll repository](https://github.com/Vokality/ragdoll). Lumen runs only as a desktop app; there is no web version.
 
-Follow [Getting started](./getting-started.md), then try the examples in [How to use Lumen](./using-lumen.md).
+Start with [Getting started](./getting-started.md), then try the examples in [How to use Lumen](./using-lumen.md).

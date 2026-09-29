@@ -1,93 +1,95 @@
 # How to use Lumen
 
-Describe the outcome you want. Lumen can use tools and show the corresponding card while the chat remains available.
+Ask for what you want done. Lumen calls the tools it needs and opens the matching card, and the chat stays available the whole time.
 
 ## Chat and controls
 
-- **Enter:** send your message.
-- **Shift+Enter:** add a newline.
-- **Cmd/Ctrl+K:** focus the composer.
-- **Stop:** cancel the current response or ongoing tool work where cancellation is supported.
+| Key or control | Action                                                                         |
+| -------------- | ------------------------------------------------------------------------------ |
+| Enter          | Send the message                                                               |
+| Shift+Enter    | New line                                                                       |
+| Cmd/Ctrl+K     | Focus the composer                                                             |
+| Stop           | Cancel the current reply, and any running tool work that supports cancellation |
 
-User and assistant messages render Markdown, including emphasis, lists, quotes, code blocks, tables, and task lists. Referenced images are links rather than automatically loaded remote images. Search sources appear as pills below assistant messages.
+Messages render Markdown: emphasis, lists, quotes, code blocks, tables, and task lists. Images in a message appear as links; Lumen doesn't load remote images on its own. Web search sources show up as pills under the reply.
 
-Quick questions and actions default to no preamble. For work likely to take longer, the model may send a short acknowledgment, perform the work, and follow up with a final reply. The loading indicator remains active until the turn ends.
+Short questions get a direct answer. For longer work, the model may send a quick acknowledgment first, do the work, and then post the result. The loading indicator stays on until the turn is over.
 
 ## Built-in features
 
-| Feature      | Try asking                                             |
-| ------------ | ------------------------------------------------------ |
-| Tasks        | “Show my tasks and add ‘Book a haircut.’”              |
-| Working list | “Show the five emails I should reply to.”              |
-| Notes        | “Write a weekend itinerary as a note instead of in chat.” |
-| Focus timer  | “Start a 30-minute focus timer.”                       |
-| Flash cards  | “Create five flash cards for basic Spanish greetings.” |
-| Tic-tac-toe  | “Let's play tic-tac-toe.”                              |
-| Canvas       | “Draw a simple house on the canvas.”                   |
-| Web search   | “Find a recent NASA update and summarize it.”          |
-| Character    | “Smile,” “wink,” or “tilt your head.”                  |
+| Feature      | Try asking                                                |
+| ------------ | --------------------------------------------------------- |
+| Tasks        | "Show my tasks and add 'Book a haircut.'"                 |
+| Working list | "Show the five emails I should reply to."                 |
+| Notes        | "Write a weekend itinerary as a note instead of in chat." |
+| Focus timer  | "Start a 30-minute focus timer."                          |
+| Flash cards  | "Create five flash cards for basic Spanish greetings."    |
+| Tic-tac-toe  | "Let's play tic-tac-toe."                                 |
+| Canvas       | "Draw a simple house on the canvas."                      |
+| Web search   | "Find a recent NASA update and summarize it."             |
+| Character    | "Smile," "wink," or "tilt your head."                     |
 
-Spotify tools are also included, but require setup under **Settings → Extensions → Integrations**. Supply the Spotify Client ID and register the redirect URI shown in the configuration before signing in. Available playback actions depend on your Spotify account and devices.
+Spotify is also built in, but you have to set it up first under Settings → Extensions → Integrations: enter your Spotify Client ID and register the redirect URI shown there, then sign in. Which playback controls work depends on your Spotify account and devices.
 
-Character, Tasks, Working List, and Notes are always enabled. Pomodoro, Canvas, Flash Cards, Tic-Tac-Toe, and Spotify can be enabled or disabled under **Settings → Extensions → Features**. Enable an optional feature before asking the agent to use it. Focus sessions support 5, 15, 30, 60, or 120 minutes; breaks support 5, 10, 15, or 30 minutes.
+Character, Tasks, Working List, and Notes are always on. Pomodoro, Canvas, Flash Cards, Tic-Tac-Toe, and Spotify can be switched on or off under Settings → Extensions → Features, and the agent can only use the ones that are on. Focus sessions last 5, 15, 30, 60, or 120 minutes; breaks last 5, 10, 15, or 30.
 
 ## Notes and the working list
 
-Use **Notes** for plans, summaries, drafts, and other writing you want to keep. Ask Lumen to save the text as a note, then open Notes from the Cards folder in the toolbar. Select a title to read its full text; **All notes** returns to the list. The body preserves line breaks and displays plain text. Notes are ordered by their most recent update.
+Notes is for writing you want to keep: plans, summaries, drafts. Ask Lumen to save something as a note, then open Notes from the Cards folder in the toolbar. Pick a title to read the note, and use All notes to go back to the list. Note bodies are plain text with line breaks kept, and the list puts the most recently updated note first.
 
-Lumen stores up to 40 notes, each with a title of up to 80 characters and a body of up to 4,000 characters. Ask to update an existing note to replace its title or body. **Delete** removes the saved note; there is no undo command. Notes survive app restarts, while the selected note resets to the list. Closing the card or clearing chat history does not delete notes.
+You can keep up to 40 notes. Titles can be 80 characters and bodies 4,000. Ask Lumen to update a note to change its title or body. Delete removes a note permanently. Notes survive restarts, closing the card, and clearing chat history; only the currently open note resets to the list on restart.
 
-Use **Working List** for a short snapshot of up to five items to handle next. Selecting a row asks the agent to continue with that item. Clearing the working list only clears that local snapshot. It does not delete emails or other items in a connected service.
+The working list is a short snapshot of up to five things to handle next. Clicking a row asks the agent to pick up that item. Clearing the list only clears the snapshot here. The emails or other items it pointed to stay where they are.
 
 ## Cards and actions
 
-Open the Cards folder in the toolbar, then choose a card, or ask the agent to show it. The character becomes a small head in the card's upper-left corner. Card content scrolls separately from its controls and the conversation.
+Open a card from the Cards folder in the toolbar, or ask the agent to show it. While a card is open, the character shrinks to a small head in the card's top-left corner. The card's content scrolls on its own, separate from its controls and from the chat.
 
-**Opening or closing a card changes presentation.** It does not start or stop the underlying activity. For example, “Close the timer card” hides it; ask to stop the timer if that is your intended action.
+Opening and closing a card only changes what's on screen. "Close the timer card" hides the timer and leaves it running; to end it, ask Lumen to stop the timer.
 
-The agent can read and change extension state independently of a card. You can also use the card's buttons and controls directly.
+The agent can read and change an extension's state whether or not its card is open, and you can use the card's buttons yourself at any time.
 
 ## Settings
 
-Settings opens a compact menu. Select a section to drill in; use Back or Escape to return to its parent. Memory edits, connection drafts, and the extension install URL remain while navigating within Settings. Closing Settings discards unsaved drafts.
+Settings opens as a compact menu. Pick a section to open it; Back or Escape goes up one level. Unsaved memory edits, connection drafts, and the extension install URL are kept while you move around inside Settings and discarded when you close it.
 
-| Section                        | What it controls                                     |
-| ------------------------------ | ---------------------------------------------------- |
-| About you                      | Review saved memory and check-ins                    |
-| Appearance                     | Change the character and theme                       |
-| Connections                    | Add MCP services, sign in, and manage agent access   |
-| Extensions → Features          | Toggle extensions that can be disabled               |
-| Extensions → Integrations      | Configure services such as Spotify                   |
-| Extensions → Extension library | Install, update, configure, or uninstall extensions  |
-| AI provider                    | Choose OpenAI or Grok and manage their API keys      |
-| Chat data                      | Clear the conversation and its recorded tool history |
+| Section                        | What it controls                                           |
+| ------------------------------ | ---------------------------------------------------------- |
+| About you                      | Saved memory and check-ins                                 |
+| Appearance                     | Character and theme                                        |
+| Connections                    | MCP services, sign-in, and agent access                    |
+| Extensions → Features          | Extensions that can be turned off                          |
+| Extensions → Integrations      | Services that need setup, such as Spotify                  |
+| Extensions → Extension library | Installing, updating, configuring, and removing extensions |
+| AI provider                    | OpenAI or Grok, and their API keys                         |
+| Chat data                      | Clearing the conversation and its tool history             |
 
-An MCP connection and an installed extension are different things. Use [Connections](./mcp/index.md) for MCP servers and the extension library for packages built with the [extension contract](./extensions/index.md).
+Connections and extensions are separate. [Connections](./mcp/index.md) are MCP servers. The extension library installs packages written against the [extension contract](./extensions/index.md).
 
 ## History and cancellation
 
-Lumen saves messages and tool execution outcomes. The agent can use that history to remember what happened, but historical results are not a guarantee of current remote state.
+Lumen saves every message and the outcome of every tool call. The agent uses that history to recall what it did, but the history is a record of the past. A remote service may have changed since.
 
-Stopping a reply **does not undo an action that already completed**. If an interrupted tool has an unknown outcome, check the resulting state before asking to repeat a mutation. Clearing conversation history also does not delete your tasks, notes, drawings, or remote service data.
+Stop cancels what hasn't happened yet. Anything that already finished stays done. If a tool was interrupted and its outcome is unknown, check the result yourself before asking Lumen to run the change again. Clearing chat history leaves your tasks, notes, drawings, and remote data in place.
 
 ## Where data goes
 
-Conversation history, settings, and extension data are stored locally. Model-provider keys and connection credentials are encrypted. Relevant chat context and tool results, including note text when a tool reads it, are sent to the selected provider (OpenAI or xAI). Connected services receive their tool requests. Lumen requires online model access.
+Conversation history, settings, and extension data stay on your computer. Provider keys and connection credentials are stored encrypted. The parts of the conversation and the tool results the agent needs, including note text when a tool reads it, go to your model provider (OpenAI or xAI). Connected services receive the tool calls addressed to them. Lumen needs a network connection to reach the model.
 
 ## Your name and personal memory
 
-Tell Lumen what to call you and share small preferences or routines you want it to remember. For example, “Call me Sam. I prefer short focus sessions.” Lumen saves your name and two kinds of memory locally.
+Tell Lumen what to call you, and mention preferences or routines you want it to remember, for example "Call me Sam. I prefer short focus sessions." It keeps your name and two kinds of memory on your computer.
 
-**Working memory** holds up to 50 facts useful across your current conversations. When it fills up, the least recently used fact moves to long-term memory, which has no fact-count limit. Birthdays and other durable details go directly into long-term memory. Lumen maintains a concise model-generated summary of long-term memory and retrieves exact facts when needed, instead of sending the entire archive with every message.
+Working memory holds up to 50 facts that are useful across your current conversations. When it's full, the least recently used fact moves to long-term memory, which has no size limit. Durable details such as birthdays go straight to long-term memory. Rather than sending the whole archive with every message, Lumen keeps a short model-written summary of long-term memory and looks up individual facts when it needs them.
 
-In Settings → About you, browse both kinds of memory, read the long-term summary, edit facts, change their memory type, or forget them. Summary updates follow long-term changes during the next agent turn; if generation fails, the facts remain saved and the summary retries later. Lumen asks for your name in the onboarding conversation; declining to share it does not block any feature.
+Settings → About you lists both kinds of memory and the long-term summary. You can edit a fact, move it between working and long-term memory, or delete it. The summary is regenerated during the next agent turn after a long-term change; if that fails, the facts are still saved and the summary is retried later.
 
-Ask Lumen to forget a detail, or open **Settings → About you → Edit memory** to review, edit, or remove saved information. Clearing chat does not erase this profile. Saved personal context is included in future requests to the selected model provider; it is kept separately from the conversation on your computer. Lumen is instructed not to save secrets or sensitive details.
+To remove something, ask Lumen to forget it or open Settings → About you → Edit memory. Clearing chat doesn't touch this profile. Saved memory is sent with future requests to your model provider, but it's stored separately from the conversation. Lumen is instructed not to save secrets or sensitive details. Skipping the name question during onboarding doesn't lock you out of anything.
 
 ## Check-ins and character reactions
 
-The character reacts while Lumen works, after successful or failed turns, and when a timer completes. An explicit expression requested during a turn takes precedence over its ordinary completion reaction.
+The character reacts while Lumen works, when a turn succeeds or fails, and when a timer ends. If you asked for a specific expression during a turn, that expression wins over the usual end-of-turn reaction.
 
-Timer completion can prompt a short model-authored message. After you have completed a useful action, returning to Lumen after at least 15 minutes away can also prompt a check-in, at most once every four hours. The agent can choose silence when it has nothing useful to add. Check-ins do not automatically start another task or timer.
+When a timer ends, Lumen may post a short message about it. Once you've done something useful in the app, coming back after 15 minutes or more away can also trigger a check-in, at most once every four hours. The agent stays quiet if it has nothing worth saying, and a check-in never starts a task or timer by itself.
 
-Turn off **Occasional check-ins** in About you to suppress timer and focus check-in conversations. The timer's desktop notifications remain separate. Stop can cancel an in-flight onboarding or check-in response as well as a normal chat response.
+To turn off timer and focus check-ins, switch off Occasional check-ins in About you. Timer desktop notifications aren't affected. Stop cancels an onboarding message or check-in the same way it cancels a normal reply.

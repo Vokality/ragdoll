@@ -1,50 +1,50 @@
 # Cards and host capabilities
 
-## Use the shared panel regions
+## Panel regions
 
-Extensions describe semantic panel state. The renderer owns spacing, scrolling, and control sizes so panels fit Lumen's compact card.
+An extension describes what its panel contains. Lumen's renderer decides spacing, scrolling, and control sizes so every panel fits the compact card.
 
-| Region | Contract | Guidance |
-| --- | --- | --- |
-| Identity | `PanelFrame.title` | Keep the name stable; the host reserves avatar and close-control space. |
-| State | `status`, `progress` | Show changing state here instead of adding fake list rows. |
-| Content | List, grid, cards, canvas, or document panel | Choose the shape that matches the domain. |
-| Controls | `PanelFrame.actions`, study `answerInput` | Use short action labels; the shared footer stays reachable. |
+| Region   | Contract                                     | Guidance                                                                        |
+| -------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| Identity | `PanelFrame.title`                           | Keep the name stable. The host leaves room for the avatar and the close button. |
+| State    | `status`, `progress`                         | Put changing state here, not in placeholder list rows.                          |
+| Content  | List, grid, cards, canvas, or document panel | Pick the shape that fits the data.                                              |
+| Controls | `PanelFrame.actions`, study `answerInput`    | Keep action labels short. The footer stays visible while content scrolls.       |
 
-Lists suit growing collections; grids suit bounded boards; study cards provide front/revealed states and submission or rating controls. Canvas panels carry typed rectangles, ellipses, paths, and text in a `CanvasDocument`, rather than arbitrary SVG markup. Document panels show a scrolling plain-text body for longer writing.
+Lists fit collections that grow. Grids fit fixed-size boards. Study cards have a front and a revealed side, plus answer or rating controls. A canvas panel holds a `CanvasDocument` of typed rectangles, ellipses, paths, and text; it never holds raw SVG. A document panel shows a long plain-text body that scrolls.
 
-See the [panel contract](https://github.com/Vokality/ragdoll/blob/main/docs/extension-card-layout.md) and [first-party extension implementations](https://github.com/Vokality/ragdoll/tree/main/packages) for complete examples.
+The [panel contract](https://github.com/Vokality/ragdoll/blob/main/docs/extension-card-layout.md) and the [first-party extensions](https://github.com/Vokality/ragdoll/tree/main/packages) have complete examples.
 
 ## State and action routing
 
-Slots contain React-free observable state. Before crossing Electron IPC, Lumen uses `serializeSlotState` to remove callbacks while preserving action availability as `canClick`, `canToggle`, and `canSubmit`. The renderer sends an action descriptor back to the owning callback.
+Slots hold React-free observable state. Before a slot crosses Electron IPC, Lumen runs `serializeSlotState` on it. That strips the callbacks and records which actions are available as `canClick`, `canToggle`, and `canSubmit`. When the user clicks, the renderer sends an action descriptor back, and the host routes it to the callback that owns it.
 
-Do not send functions across IPC, build a second action-routing path, or assume a window-sized panel. Keep domain state in the extension and layout in the shared renderer.
+Don't send functions over IPC, don't build a second routing path for actions, and don't assume the panel is as big as the window. Domain state belongs in the extension; layout belongs to the shared renderer.
 
-An action ID must identify its target. For example, Notes uses `delete:<noteId>` for the selected note's Delete action. If the selection changes before a queued click reaches the host, the old ID is rejected instead of deleting the newly selected note. Keep an ID stable while its target remains the same.
+An action ID has to name the thing it acts on. Notes gives the selected note's Delete button the ID `delete:<noteId>`. If the selection changes while a click is still on its way to the host, the host rejects the stale ID and the newly selected note survives. Keep an ID the same for as long as it points at the same target.
 
 ## Document cards and persistence
 
-Use a `document` panel with `title`, plain-text `body`, and optional footer `actions` for longer writing. The shared renderer preserves line breaks and keeps controls reachable while the body scrolls. Markup is displayed as text.
+For long text, use a `document` panel with a `title`, a plain-text `body`, and optional footer `actions`. The renderer keeps line breaks and keeps the controls on screen while the body scrolls. Any markup in the body is shown as literal text.
 
-Notes persists its validated `{ notes }` document through host storage before updating the slot. The selected note is runtime view state: opening a row or returning to the list does not write storage. Writing or selecting a note updates `notes.main`; it does not open the card. Use the host's separate `lumen_open_card` tool for that.
+Notes validates its `{ notes }` document and saves it through host storage before it updates the slot. Which note is open is view state that lives only at runtime, so opening a note or going back to the list doesn't write to storage. Writing or selecting a note updates the `notes.main` slot without opening the card; opening the card is the host's `lumen_open_card` tool's job.
 
 ## Card visibility belongs to Lumen
 
-The agent uses `lumen_list_cards`, `lumen_open_card`, and `lumen_close_card` to control presentation independently of extension actions. A registered visible slot is discoverable without the extension importing app code.
+The agent shows and hides cards with `lumen_list_cards`, `lumen_open_card`, and `lumen_close_card`, which are separate from any extension's actions. Once a slot is registered as visible, the agent can find it without the extension importing any app code.
 
-Closing a card does not stop a timer or unload an extension. Expose a separate tool for stopping a timer, clearing a drawing, or any other domain action.
+Closing a card doesn't stop a timer or unload the extension. If the agent should be able to stop a timer or clear a drawing, give it a tool for that.
 
-## Request host capabilities
+## Host capabilities
 
-Declare required and optional host capabilities in both the package descriptor and runtime factory. The lists must match exactly. An `ExtensionHostEnvironment` advertises a capability only when its corresponding implementation exists.
+Declare required and optional host capabilities in both the package descriptor and the runtime factory, with identical lists. An `ExtensionHostEnvironment` advertises a capability only if it implements it.
 
-Use required capabilities for features your extension cannot function without. Check optional capabilities before using them. Keep credentials in host-owned config and OAuth services, not extension storage or panel state.
+Mark a capability required when the extension can't work without it. Check that an optional capability is present before using it. Credentials belong in host-owned configuration and OAuth services, never in extension storage or panel state.
 
-For OAuth integrations, declare provider endpoints, scopes, the public client ID configuration key, and PKCE support in the package metadata. Lumen handles configuration readiness, system-browser login, loopback callbacks, encrypted tokens, and refresh. See the [host OAuth contract](https://github.com/Vokality/ragdoll/blob/main/docs/extension-host-oauth.md).
+For OAuth, declare the provider endpoints, the scopes, the configuration key for the public client ID, and PKCE support in the package metadata. Lumen handles checking that configuration is ready, the system-browser login, the loopback callback, token encryption, and refresh. See the [host OAuth contract](https://github.com/Vokality/ragdoll/blob/main/docs/extension-host-oauth.md).
 
 ## Lifecycle and conversation context
 
-Release resources created by `createRuntime` through the returned contribution's `dispose` callback. The factory also supports `onDestroy` for lifecycle cleanup. Test unregistering and reloading; closing a card is not a lifecycle cleanup signal.
+Anything `createRuntime` creates should be released by the `dispose` callback on the contribution it returns. The factory also accepts `onDestroy` for lifecycle cleanup. Test unregistering and reloading the extension. Closing a card is not a cleanup signal.
 
-For activity that should enter agent context, use the host's documented [conversation events](https://github.com/Vokality/ragdoll/blob/main/docs/conversation-events.md). Report completed operations and real state changes. Do not manufacture assistant messages or success results to simulate model activity.
+To put extension activity into the agent's context, use the host's [conversation events](https://github.com/Vokality/ragdoll/blob/main/docs/conversation-events.md). Only report operations that finished and state that changed; never fake an assistant message or a success result.

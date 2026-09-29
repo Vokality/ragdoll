@@ -1,38 +1,38 @@
 # Connect an MCP service
 
-MCP (Model Context Protocol) lets Lumen discover and call tools offered by another service. A **connection** is a named account or endpoint managed by Lumen. It is independent of installed extensions and their cards.
+MCP (Model Context Protocol) lets Lumen discover and call tools that another service offers. In Lumen, a connection is a named endpoint or account that you add in Settings. Connections are separate from installed extensions and have no cards.
 
 ## Add a connection
 
-1. Open **Settings → Connections** and add a connection.
-2. Give it a recognizable connection name, such as “Personal tasks.”
-3. Enter the provider's **Streamable HTTP MCP endpoint**. Use its documented MCP URL, not its website or OAuth authorization URL.
-4. Choose OAuth, bearer token, or no authentication, according to the provider.
-5. Save, then connect. For OAuth, complete sign-in in your system browser.
-6. Enable the connection's agent-access switch to make its tools available to the agent.
+1. Open Settings → Connections and add a connection.
+2. Name it something you'll recognize, such as "Personal tasks."
+3. Enter the provider's Streamable HTTP MCP endpoint. Use the MCP URL from the provider's documentation, not its website or its OAuth authorization URL.
+4. Choose OAuth, a bearer token, or no authentication, depending on what the provider supports.
+5. Save, then connect. For OAuth, finish signing in in your system browser.
+6. Turn on "Allow agent to use this connection" so the agent can call its tools.
 
-Saving, connecting, and allowing agent access are separate steps. A successful connection shows the discovered tool count. Failures appear in Settings rather than being presented as a connected account.
+Saving, connecting, and granting agent access are three separate steps. A working connection shows how many tools it found. If connecting fails, Settings shows the error and the connection doesn't appear as connected.
 
 ## Use a connected service
 
-Ask for a task that the service supports, for example:
+Ask for something the service can do:
 
 > What is on my personal to-do list?
 
-The agent discovers available connections, inspects their tools, and calls the appropriate tool. Follow-up requests can make additional calls. Lumen records tool invocations and results in conversation history, so the agent can check which actions ran.
+The agent looks up the available connections, reads their tool lists, and calls the right tool, making more calls for follow-up requests. Every call and result is saved in the conversation history, so the agent can check what it already ran.
 
-An MCP service contributes tools; it does **not** automatically create a visual card. Build a [Ragdoll extension](../extensions/index.md) when you need an interactive panel inside Lumen.
+MCP services only provide tools; they don't get a card in Lumen. If you want an interactive panel, write a [Ragdoll extension](../extensions/index.md).
 
 ## Manage access
 
-| Control | Effect |
-| --- | --- |
-| Disable agent access | Stops the session and agent access; keeps saved credentials. |
-| Disconnect | Also removes local credentials and disables access. |
-| Remove | Deletes the saved connection and its credentials. |
+| Control                 | Effect                                                             |
+| ----------------------- | ------------------------------------------------------------------ |
+| Agent access switch off | Ends the session and blocks the agent. Saved credentials are kept. |
+| Disconnect              | Blocks the agent and deletes the local credentials.                |
+| Remove                  | Deletes the connection and its credentials.                        |
 
-Enabled connections attempt to reconnect when Lumen starts. If the provider requires another sign-in, reconnect through Settings. Changing the endpoint or authentication invalidates the old credentials.
+Connections with agent access on reconnect when Lumen starts. If the provider asks you to sign in again, reconnect from Settings. Changing a connection's endpoint or authentication discards its old credentials.
 
-Connection access covers its tools; this version does not show a separate approval dialog for each call. Disabling access cannot undo an operation already performed by a provider.
+Agent access applies to all of a connection's tools. Lumen doesn't ask for approval before each call, and turning access off can't undo something the provider already did.
 
-See [authentication and supported transports](./authentication.md) for provider requirements.
+[Authentication and access](./authentication.md) covers what providers need to support.

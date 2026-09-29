@@ -1,7 +1,7 @@
 export const site = {
   title: "Lumen",
   description:
-    "Get started with Lumen, use its tools, connect MCP services, and build extensions.",
+    "Documentation for Lumen: setup, everyday use, MCP connections, and extension development.",
   base: "/ragdoll/",
   origin: "https://vokality.github.io",
   repository: "https://github.com/Vokality/ragdoll",
@@ -47,9 +47,9 @@ export const navigation = [
 
 export const home = {
   name: "Lumen / Documentation",
-  title: "An assistant you can work with.",
+  title: "Lumen documentation",
   tagline:
-    "Chat with an expressive character, use interactive tools, and connect your services. Start here to make Lumen your own.",
+    "Lumen is a desktop chat assistant with an animated character, tool cards, and MCP connections. These guides cover setup, daily use, and writing extensions.",
   actions: [
     { title: "Get started", path: "getting-started.html", primary: true },
     {
@@ -62,28 +62,28 @@ export const home = {
     {
       title: "Get started",
       details:
-        "Build and launch Lumen, add your API key, and give your assistant its first task.",
+        "Build Lumen from source, add an OpenAI or xAI key, and send a first request.",
       path: "getting-started.html",
       label: "Set up Lumen",
     },
     {
       title: "Use Lumen",
       details:
-        "Manage tasks, save longer notes, focus with a timer, study flash cards, draw on a canvas, and research the web while keeping the conversation visible.",
+        "Tasks, notes, the focus timer, flash cards, the canvas, web search, settings, and where your data goes.",
       path: "using-lumen.html",
-      label: "Explore the app",
+      label: "Use Lumen",
     },
     {
       title: "Connect through MCP",
       details:
-        "Add remote or local MCP servers, sign in with your provider, and choose which tools the agent can use on your behalf.",
+        "Add a Streamable HTTP MCP server, sign in with OAuth or a token, and turn agent access on or off per connection.",
       path: "mcp/",
       label: "Connect a service",
     },
     {
-      title: "Extend its capabilities",
+      title: "Write an extension",
       details:
-        "Create tools and interactive cards using the Ragdoll extension framework. Lumen supplies storage, configuration, OAuth, and other host services.",
+        "Add tools and cards with the Ragdoll extension framework. Lumen provides storage, configuration, OAuth, and notifications.",
       path: "extensions/",
       label: "Build an extension",
     },

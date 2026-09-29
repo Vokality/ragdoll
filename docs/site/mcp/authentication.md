@@ -1,43 +1,43 @@
 # Authentication and access
 
-Lumen owns MCP login and credentials in its Electron main process. The model requests tool calls; it does not receive provider access or refresh tokens.
+Lumen's Electron main process handles MCP sign-in and stores the credentials. The model asks for tool calls; it never sees access or refresh tokens.
 
 ## Supported connections
 
-| Requirement | Support |
-| --- | --- |
-| Transport | Streamable HTTP |
-| Server URL | HTTPS; HTTP is allowed for localhost and loopback servers |
-| Authentication | None, bearer access token, or OAuth authorization-code public client |
-| OAuth registration | Pre-registered public client ID, supported dynamic registration, or an optional hosted client metadata document URL |
-| Callback | Local loopback callback, with an optional fixed port |
+| Requirement        | Support                                                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Transport          | Streamable HTTP                                                                                                                         |
+| Server URL         | HTTPS; plain HTTP only for localhost and loopback addresses                                                                             |
+| Authentication     | None, a bearer access token, or OAuth authorization code with a public client                                                           |
+| OAuth registration | A pre-registered public client ID, dynamic registration if the provider supports it, or an optional hosted client metadata document URL |
+| Callback           | Local loopback, optionally on a fixed port                                                                                              |
 
-Legacy SSE-only endpoints, stdio server processes, custom authentication headers, and confidential clients requiring a backend secret are not supported. Server URLs cannot contain embedded credentials, query strings, or fragments. HTTP redirects are rejected; enter the final MCP endpoint directly.
+Lumen doesn't support SSE-only endpoints, stdio servers, custom authentication headers, or confidential clients that need a backend secret. Server URLs can't contain embedded credentials, a query string, or a fragment. Lumen doesn't follow HTTP redirects, so enter the final MCP endpoint.
 
 ## OAuth setup
 
-For providers supporting discovery and dynamic client registration, choose OAuth and connect. If the provider requires a registered application:
+If the provider supports discovery and dynamic client registration, choose OAuth and connect. If it requires you to register an application first:
 
-1. Register a **public desktop client** with the provider.
-2. Save its public client ID in the connection's OAuth settings.
-3. If registration requires a fixed callback port, configure that port.
-4. Save the connection, then edit it to view the exact redirect URI. Register that URI with the provider.
-5. Connect and approve the requested access in your system browser.
+1. Register a public desktop client with the provider.
+2. Enter its public client ID in the connection's OAuth settings.
+3. If the provider requires a fixed callback port, set it.
+4. Save the connection, then edit it to see the exact redirect URI, and register that URI with the provider.
+5. Connect, and approve the access request in your system browser.
 
-Lumen uses authorization code flow with PKCE S256, verifies callback state and issuer, exchanges the code, and encrypts the resulting credentials. Refresh is handled in the host. Lumen does not provide its own hosted client metadata document; only enter a metadata URL appropriate for your client registration.
+Lumen uses the authorization code flow with PKCE (S256). It checks the callback's state and issuer, exchanges the code for tokens, encrypts them, and refreshes them when needed. Lumen doesn't host a client metadata document of its own; only enter a metadata URL if your client registration has one.
 
-For protocol details, see the [official MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
+The [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) has the protocol details.
 
 ## Bearer tokens and public servers
 
-For bearer authentication, supply the access token issued by the service. It is stored encrypted and is not returned in Settings snapshots. Replace it when it expires or is revoked.
+For bearer authentication, paste the access token the service gave you. Lumen stores it encrypted and never shows it again in Settings. Replace it when it expires or is revoked.
 
-Choose no authentication only when the endpoint supports unauthenticated access.
+Choose no authentication only if the endpoint accepts unauthenticated requests.
 
 ## Data and consent
 
-Credentials stay in host-owned encrypted storage. Relevant remote tool results are passed to the selected model provider (OpenAI or xAI) as conversation context. Grant access only to accounts and capabilities you intend to use with Lumen.
+Credentials stay in Lumen's encrypted storage. Results from remote tools become part of the conversation, which is sent to your model provider (OpenAI or xAI). Only connect accounts and grant access you're comfortable using through Lumen.
 
-Disconnecting removes local credentials; it does not revoke provider-side consent. Revoke that separately in the provider's account settings when needed. The agent cannot start login or grant itself connection access.
+Disconnecting deletes the credentials on your computer but doesn't revoke the access you granted the provider. Revoke it in the provider's account settings if you need to. The agent can't sign in or turn on its own access to a connection.
 
-If a network failure leaves the result of an action unknown, verify the provider's state before requesting the action again. Lumen does not blindly retry remote mutations.
+If a network error leaves an action's outcome unknown, check the provider before asking for the action again. Lumen doesn't retry changes to remote services automatically.
