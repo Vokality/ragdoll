@@ -54,7 +54,7 @@ Lumen’s agent reaches those commands only through `@vokality/ragdoll-extension
 
 - Treat face pose as a stacked mix per frame: **named mood base → `setExpression` axis overlay → timed action overlay → idle (always additive) → render**. Head pose stays independent.
 - Keep `setMood`, `triggerAction`, and `setHeadPose`. Add one unprefixed `setExpression` tool.
-- v1 maps the ~6 face/gaze axes onto existing `ExpressionConfig` fields so `AnatomicalHead` and SVG path generators keep working without a morph-level mixer.
+- v1 maps the ~6 face/gaze axes onto existing `ExpressionConfig` fields so `AnatomicalHead` keeps working without a morph-level mixer.
 - Preserve current `setMood` / `triggerAction` / `setHeadPose` observable behavior except where mix rules require `setMood` to clear leftover face-axis patches (including same-mood calls that currently no-op).
 - Wire `setExpression` through the existing fire-and-forget path. `chat-screen.tsx` does not gain a new subscription.
 - Duplicate validation ranges in the character extension (main process) to match today’s `VALID_MOODS` pattern. Do not import `@vokality/ragdoll` from the extension.
@@ -65,7 +65,7 @@ Lumen’s agent reaches those commands only through `@vokality/ragdoll-extension
 - A `lookAt: "card" | "user"` tool (gaze axes first; lookAt is later sugar).
 - Moving named moods into an extension, or applying morphs from Electron main.
 - Growing `ExpressionConfig` as the long-term public generic API.
-- Deleting SVG path generators (`getFacePath`, `getMouthPath`, …) or `applyBlink`.
+- Reintroducing SVG path generators or a second blink compositor.
 - Persisting expression overlay across sessions, conversations, or settings.
 - Feature flags. Lumen has no flag infrastructure in `AGENTS.md`.
 - Changing head-pose units (tools stay degrees; `HeadPoseController` stays radians).
@@ -172,7 +172,7 @@ Shake remains an `ActionController` writer into `HeadPoseController`. It does no
 | Idle | `applyIdleToExpression` in `packages/ragdoll/src/components/render-data.ts` (unchanged position: last additive face layer) |
 | Morph mapping | `AnatomicalHead.update` (unchanged in v1) |
 
-`ExpressionController.applyBlink` is **not** on the production path. Production blink is `applyIdleToExpression`. Keep `applyBlink` as a test helper or thin wrapper; do not add a third blink compositor.
+Production blink is `applyIdleToExpression`; do not add a second blink compositor.
 
 ### Controller state
 
@@ -225,7 +225,7 @@ Internal overlay state:
 | `getMixedExpression()` | `applyAxes` when settled; else `interpolateExpression(overlayVisualStart, applyAxes(currentExpression, overlayTarget), easeInOutCubic(overlayProgress))`. No action, no idle. **Retargets the visual end each frame** so a concurrent mood lerp is not frozen. | Overlay visual effects (`cornerPull`, `pupilOffset`, brows, jaw, openness) |
 | `getExpressionWithAction()` | `getMixedExpression()` then action overlay | Wink/talk compose |
 
-`geometry.setExpression(this.currentExpression)` in `update` stays mood-only (existing leftover). Production frames use `computeRenderData` → `getExpressionWithAction()` → idle.
+Production frames use `computeRenderData` → `getExpressionWithAction()` → idle.
 
 ### `setMood` rewrite (behavior-preserving except overlay clear)
 
@@ -369,8 +369,6 @@ case "setExpression": {
 }
 ```
 
-`FacialStatePayload` is unused in production; leave it alone.
-
 ### Frame compose
 
 ```ts
@@ -382,7 +380,6 @@ public update(deltaTime: number): void {
       this.overlayProgress + deltaTime / Math.max(this.overlayDuration, 1e-6),
     );
   }
-  this.geometry.setExpression(this.currentExpression); // mood-only, unchanged
 }
 
 public getExpressionWithAction(): ExpressionConfig {
@@ -437,7 +434,7 @@ mouth.lowerLipBottom = Math.max(
 );
 ```
 
-Do not keep a running `previousOpening` on the live mood object. `getMouthPath` throws on intersecting lips or lip thickness `< 2`. Unit tests must compose `jaw` `0`, `0.5`, and `1` on `neutral` and `laugh` without throwing, including **in-transition** overlay frames and **talk-during-jaw**.
+Do not keep a running `previousOpening` on the live mood object. Mouth invariants (`tests/support/expression-invariants.ts`) require lip thickness `>= 2` and non-intersecting inner lip edges. Unit tests must compose `jaw` `0`, `0.5`, and `1` on `neutral` and `laugh` within those invariants, including **in-transition** overlay frames and **talk-during-jaw**.
 
 **gazeX / gazeY → `pupilOffset` on both eyes**
 
@@ -767,14 +764,14 @@ Rollback: revert the last PR. No stored overlay to migrate. Users on an older re
 | **Grok schema.** A node with both `type` and `anyOf` is treated as an empty shape (canvas comment; `ToolValueSchema` forbids `anyOf`, `ToolUnionSchema` forbids `type`). | High | Flat optional numbers only. No `anyOf` at all on this tool. No morph map. Extension test: every property `type === "number"`; `anyOf` absent; no `required`. |
 | **Sparse-axis lerp pops.** Newly owned keys have no numeric start; smile→`{smile:0}` and smile→`{frown:1}` snap if missing=`0`. | High if unfixed | Visual `ExpressionConfig` lerp from current mixed to `applyAxes(mood, overlayTarget)`. Tests at `t=0.1` of a 0.35s transition. |
 | **Blink vs wink.** Idle blink multiplies **both** eyes after the wink overlay (`applyIdleToExpression`). `eyesOpen: 0` makes wink invisible. `eyesOpen: 1.3` still blinks. Wink is right-eye only (`ActionController`). | Medium | Keep idle last and additive. Do not disable blink when `eyesOpen` is patched. Tests: wink on a smile patch still closes the right eye more than the left; blink still reaches `< 0.4` openness over a few seconds (`render-data.test.ts` already covers idle blink). |
-| **Leftover SVG `ExpressionConfig`.** `computeRenderData` still builds `facePath` / `mouthPaths` / crease paths for a Three.js renderer that reads scalars + morphs. Path generators throw on invalid lip geometry. | Medium | `applyAxes` clones and keeps `getMouthPath` invariants (settled, in-transition, talk+jaw). Do not add fields to `ExpressionConfig`. v2 morph mixer is the exit. |
+| **Path-era `ExpressionConfig`.** The Three.js renderer reads `ExpressionConfig` scalars and morphs; the SVG path generators are gone, but the path-era field set remains. | Medium | `applyAxes` clones and keeps the mouth invariants (settled, in-transition, talk+jaw). Do not add fields to `ExpressionConfig`. v2 morph mixer is the exit. |
 | **Duplicated validation.** Extension `optionalNumber`, renderer Zod, controller `clampAxis` can drift (already true for `VALID_MOODS` vs `moodCommandSchema` vs `FacialMood`). | Medium | Copy the range table into the three sites in the same PR that introduces the field. Extension test rejects `NaN` / `Infinity` / `1.31` eyesOpen / `gazeX: 1.1`. Command-service test rejects the same. Controller test clamps `smile: 2` → `1`. |
 | **Same-mood `setMood` early return.** Current code skips overlay clear. After a smile patch, `setMood("smile")` would leave the patch. | High if unfixed | Rewrite as specified. Test: patch `smile: 0.2` on smile mood, `setMood("smile")`, settled `getMixedExpression().mouth.cornerPull` matches `getExpressionForMood("smile")` (~0.8), overlay face keys empty. |
 | **Tool order.** `setMood` after `setExpression` in one turn wipes face patches. `parallel_tool_calls: true` means Grok may list expression first. | Medium | Last-writer-wins; do not coalesce. Tool description + prompt say mood first; tests document both orders. Do not claim the prompt makes order reliable. |
 | **Host auto-thinking.** Every turn `react("working")` → `setMood("thinking")` clears face overlays. | Medium | Document as a mixer writer. Prompt: re-apply intensity each turn. PR 3 tests. Do not change `ExperienceService`. |
 | **Sticky gaze.** First `gazeX` patch hides sad/thinking baked glance for the controller lifetime (variant remount). | Medium (accepted) | Key Decision 7. `0` = center. Test: `{ gazeX: 0.8 }` then `{ gazeY: 0 }` then `setMood("thinking")` does not restore the baked x. |
 | **Mood-baked gaze vs overlay.** Mood lerp includes `pupilOffset`. If `moodStart` bakes gaze and overlay also applies gaze, eyes double-deflect during the transition. | High if unfixed | Mood start uses mixedNow with mood `pupilOffset`; gaze keys stay overlay-only. |
-| **Talk + jaw.** Talk rewrites `mouth` from the mixed expression (`action-controller.ts`). After v1 that is the jaw-patched mouth. `getMouthPath` can throw. | Medium | Additive talk accepted (same as talk on `laugh` today). Tests: `jaw: 1` on laugh + talk through `getMouthPath` / `computeRenderData`; `getExpression()` mood objects unchanged. |
+| **Talk + jaw.** Talk rewrites `mouth` from the mixed expression (`action-controller.ts`). After v1 that is the jaw-patched mouth. The mouth can break the lip invariants. | Medium | Additive talk accepted (same as talk on `laugh` today). Tests: `jaw: 1` on laugh + talk through the mouth invariants / `computeRenderData`; `getExpression()` mood objects unchanged. |
 | **Mutating `currentExpression`.** `applyAxes` that writes `mouth` in place permanently corrupts the mood lerp. | High if unfixed | Deep clone; assert `getExpression()` identity/values unchanged after `setExpression`. |
 | **PR 2 without PR 3.** Model can call `setExpression`; renderer throws. | Medium | Merge order PR 1 → PR 3 → PR 2. |
 
@@ -823,9 +820,9 @@ New `expression-mixer.test.ts` (or extend `expression-controller.test.ts` + `cha
 | Clamp | `{ smile: 2, brows: -4 }` | overlay `{ smile: 1, brows: -1 }` |
 | Non-finite | `{ smile: NaN }` | throw |
 | `applyAxes` does not mutate mood | capture `getExpression()`; `setExpression({ jaw: 1, smile: 0.5 })` | `getExpression()` deep-equal to capture |
-| Jaw geometry settled | `{ jaw: 1 }` on neutral and laugh | `getMouthPath` does not throw; `jawOpen` formula `> 0.9` |
-| Jaw geometry in transition | `{ jaw: 1, duration: 0.35 }` on laugh; sample `t=0.1` mixed mouth | `getMouthPath` does not throw |
-| Talk + jaw | laugh + `{ jaw: 1 }` + `triggerAction("talk")` | `getMouthPath` / `computeRenderData` do not throw |
+| Jaw geometry settled | `{ jaw: 1 }` on neutral and laugh | mouth invariants hold; `jawOpen` formula `> 0.9` |
+| Jaw geometry in transition | `{ jaw: 1, duration: 0.35 }` on laugh; sample `t=0.1` mixed mouth | mouth invariants hold |
+| Talk + jaw | laugh + `{ jaw: 1 }` + `triggerAction("talk")` | mouth invariants hold; `computeRenderData` does not throw |
 | Head pose independent | `setHeadPose({ yaw: 0.3 })` + `{ gazeX: 1 }` | pose yaw still moving; gaze on pupils |
 | `executeCommand` strips duration | `{ action: "setExpression", params: { smile: 0.5, duration: 0.2 } }` | overlay smile 0.5; duration is not an axis key |
 
@@ -879,7 +876,7 @@ None. Gaze adapter constants and the extension ↛ `@vokality/ragdoll` linter ar
 
 - `packages/ragdoll/src/types/index.ts` — `FacialMood`, `FacialAction`, `FacialCommand`, `HeadPose`
 - `packages/ragdoll/src/models/ragdoll-geometry.ts` — `ExpressionConfig`, `getExpressionForMood`, `interpolateExpression`
-- `packages/ragdoll/src/controllers/expression-controller.ts` — mood lerp, `getExpressionWithAction`, `applyBlink`, `easeInOutCubic`
+- `packages/ragdoll/src/controllers/expression-controller.ts` — mood lerp, `getExpressionWithAction`
 - `packages/ragdoll/src/controllers/action-controller.ts` — wink / talk overlay, shake → head pose
 - `packages/ragdoll/src/controllers/idle-controller.ts` — blink, saccade (`saccadeMaxOffset = 3`), head micro
 - `packages/ragdoll/src/controllers/character-controller.ts` — `executeCommand`, public writers

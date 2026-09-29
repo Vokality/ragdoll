@@ -99,41 +99,14 @@ describe("ExpressionController", () => {
       controller.update(0.1);
       const expr = controller.getExpression();
       expect(expr).toBeDefined();
-      expect(geometry.currentExpression).toBeDefined();
     });
   });
 
   describe("action controller integration", () => {
-    it("should return action controller", () => {
-      expect(controller.getActionController()).toBe(actionController);
-    });
-
-    it("should delegate active action to action controller", () => {
-      actionController.triggerAction("wink", 0.5);
-      expect(controller.getActiveAction()).toBe("wink");
-    });
-
-    it("should delegate isTalking to action controller", () => {
-      actionController.triggerAction("talk", 0.5);
-      expect(controller.isTalking()).toBe(true);
-    });
-
-    it("should report progress owned by the action controller", () => {
-      actionController.triggerAction("wink", 1.0);
-      actionController.update(0.5);
-      expect(controller.getActionProgress()).toBeCloseTo(0.5, 2);
-    });
-
-    it("should report elapsed time owned by the action controller", () => {
-      actionController.triggerAction("wink", 1.0);
-      actionController.update(0.3);
-      expect(controller.getActionElapsed()).toBeCloseTo(0.3, 2);
-    });
-
     it("should not advance action time from the expression update", () => {
       actionController.triggerAction("wink", 0.5);
       controller.update(0.1);
-      expect(controller.getActionProgress()).toBe(0);
+      expect(actionController.getActionProgress()).toBe(0);
     });
   });
 
@@ -182,29 +155,6 @@ describe("ExpressionController", () => {
       actionController.update(0.1);
       const exprWithAction = controller.getExpressionWithAction();
       expect(exprWithAction.rightEye.openness).toBeLessThan(1);
-    });
-  });
-
-  describe("blink application", () => {
-    it("should apply blink to expression", () => {
-      const expr = controller.getExpression();
-      const blinkedExpr = controller.applyBlink(0.5);
-      expect(blinkedExpr.leftEye.openness).toBeLessThan(expr.leftEye.openness);
-      expect(blinkedExpr.rightEye.openness).toBeLessThan(
-        expr.rightEye.openness,
-      );
-    });
-
-    it("should not modify expression when blink amount is 0", () => {
-      const expr = controller.getExpression();
-      const blinkedExpr = controller.applyBlink(0);
-      expect(blinkedExpr).toEqual(expr);
-    });
-
-    it("should fully close eyes when blink amount is 1", () => {
-      const blinkedExpr = controller.applyBlink(1.0);
-      expect(blinkedExpr.leftEye.openness).toBe(0);
-      expect(blinkedExpr.rightEye.openness).toBe(0);
     });
   });
 });

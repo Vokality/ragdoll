@@ -34,29 +34,10 @@ export interface HeadPose {
   pitch: number;
 }
 
-// Vector3-like interface for compatibility
 export interface Vector3Like {
   x: number;
   y: number;
   z: number;
-}
-
-export interface Joint {
-  name: JointName;
-  minAngle: Vector3Like;
-  maxAngle: Vector3Like;
-  currentAngle: Vector3Like;
-}
-
-export interface Skeleton {
-  joints: Map<JointName, Joint>;
-  ikChains: IKChain[];
-}
-
-export interface IKChain {
-  name: string;
-  target: Vector3Like;
-  poleTarget?: Vector3Like;
 }
 
 export interface FacialAnimationState {
@@ -107,26 +88,3 @@ export type FacialCommand =
       action: "resetExpression";
       params: { axes?: readonly ExpressionAxis[]; duration?: number };
     };
-
-export interface FacialStatePayload {
-  mood?: {
-    value: FacialMood;
-    duration?: number;
-  };
-  action?: {
-    type: Exclude<FacialAction, "none">;
-    duration?: number;
-  };
-  clearAction?: boolean;
-  headPose?: {
-    yaw?: number;
-    pitch?: number;
-    duration?: number;
-  };
-}
-
-export interface JointCommand {
-  joint: JointName;
-  angle?: Vector3Like;
-  rotation?: { x: number; y: number; z: number };
-}

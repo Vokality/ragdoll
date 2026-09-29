@@ -1,7 +1,7 @@
 import type { HeadPose } from "../types";
 import { RagdollSkeleton } from "../models/ragdoll-skeleton";
 
-const MAX_YAW = (35 * Math.PI) / 180;
+export const MAX_YAW = (35 * Math.PI) / 180;
 const MAX_PITCH = (20 * Math.PI) / 180;
 // Below this distance and speed the spring is visually at rest.
 const SETTLE_EPSILON = 1e-5;

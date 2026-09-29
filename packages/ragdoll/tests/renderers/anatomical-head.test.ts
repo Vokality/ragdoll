@@ -154,9 +154,16 @@ describe("anatomical head", () => {
       expect(painted.size).toBeLessThanOrEqual(7);
       expect(eyeMaps()[0]).toBe(left);
 
+      const skinColors = head.skin.geometry.getAttribute("color");
+      const skinUvs = head.skin.geometry.getAttribute("uv");
+      const firstColor = skinColors.getX(0);
       controller.setTheme("robot");
       head.update(computeRenderData(controller));
       expect(head.skin.material.bumpMap).toBe(relief);
+      // Repainting writes into the existing buffers so no GPU buffer is orphaned.
+      expect(head.skin.geometry.getAttribute("color")).toBe(skinColors);
+      expect(head.skin.geometry.getAttribute("uv")).toBe(skinUvs);
+      expect(skinColors.getX(0)).not.toBe(firstColor);
       expect(eyeMaps()[0]).not.toBe(left);
     } finally {
       head.dispose();

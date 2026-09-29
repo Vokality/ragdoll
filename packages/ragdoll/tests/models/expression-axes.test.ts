@@ -8,6 +8,7 @@ import {
 } from "../../src/models/expression-axes";
 import { RagdollGeometry } from "../../src/models/ragdoll-geometry";
 import { getDefaultVariant } from "../../src/variants";
+import { expectValidMouth } from "../support/expression-invariants";
 
 function geometry(): RagdollGeometry {
   return new RagdollGeometry(getDefaultVariant());
@@ -88,7 +89,7 @@ describe("applyAxes", () => {
       const base = geo.getExpressionForMood(mood);
       for (const jaw of [0, 0.5, 1]) {
         const mixed = applyAxes(base, { jaw });
-        expect(() => geo.getMouthPath(mixed.mouth)).not.toThrow();
+        expectValidMouth(mixed.mouth, geo.dimensions);
         if (jaw === 1) {
           expect(jawOpen(mixed.mouth)).toBeGreaterThan(0.9);
         }
@@ -103,7 +104,7 @@ describe("applyAxes", () => {
     const end = applyAxes(laugh, { jaw: 1 });
     for (const t of [0, 0.1, 0.35, 0.5, 0.9, 1]) {
       const frame = RagdollGeometry.interpolateExpression(start, end, t);
-      expect(() => geo.getMouthPath(frame.mouth)).not.toThrow();
+      expectValidMouth(frame.mouth, geo.dimensions);
     }
   });
 });

@@ -45,7 +45,7 @@ function App() {
 
 ## Architecture & DDD
 
-`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry exposes outline paths for host renderers; `RagdollCharacter` maps expression values to anatomical facial morph targets. Hair roots are fitted to the neutral skull through a spatial index, and facial normal templates are reused between instances. The bundled mesh requires no runtime model download. Hosts can also subscribe to `CharacterController` events and render their own UI.
+`@vokality/ragdoll` is a React/Three.js character package. Controllers, models, themes, and variants are UI-free TypeScript. Geometry defines face proportions and mood expressions; `RagdollCharacter` maps expression values to anatomical facial morph targets. Hair roots are fitted to the neutral skull through a spatial index, and facial normal templates are reused between instances. The bundled mesh requires no runtime model download. Hosts can also subscribe to `CharacterController` events and render their own UI.
 
 ## API
 
@@ -82,7 +82,7 @@ controller.setHeadPose({ yaw: 0.2, pitch: -0.1 }, 0.5);
 // Theme
 controller.setTheme("robot");
 
-// Cleanup (stops internal timers/listeners)
+// Cleanup (destroys plugins and drops event subscribers)
 controller.destroy();
 ```
 
@@ -126,8 +126,9 @@ Themes merge with variant color overrides at runtime, so domain logic never need
 ```ts
 import { getVariant, registerVariant } from "@vokality/ragdoll";
 
-const customVariant = registerVariant({
+registerVariant({
   id: "scientist",
+  name: "Scientist",
   dimensions: {/* overrides */},
   colorOverrides: { hair: { light: "#eee", mid: "#ccc", dark: "#999" } },
 });
@@ -144,15 +145,17 @@ Use `FeaturePlugin` to add integration-specific behavior without modifying the c
 ```ts
 import type { FeaturePlugin } from "@vokality/ragdoll";
 
+let unsubscribe: (() => void) | undefined;
+
 const telemetryPlugin: FeaturePlugin = {
   name: "telemetry",
   initialize(controller) {
-    this.unsubscribe = controller.getEventBus().subscribe((event) => {
+    unsubscribe = controller.getEventBus().subscribe((event) => {
       // forward to analytics
     });
   },
   destroy() {
-    this.unsubscribe?.();
+    unsubscribe?.();
   },
 };
 
@@ -163,13 +166,12 @@ Plugins are optional and run inside the controller's update loop.
 
 ### Testing utilities
 
-`@vokality/ragdoll/testing` exposes builders, clocks, mocks, and a spy event bus for pure domain tests:
+`@vokality/ragdoll/testing` exposes builders, mocks, and a spy event bus for pure domain tests:
 
 ```ts
 import {
   CharacterStateBuilder,
   HeadPoseBuilder,
-  MockClock,
   SpyEventBus,
 } from "@vokality/ragdoll/testing";
 ```

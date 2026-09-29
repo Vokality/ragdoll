@@ -1,3 +1,5 @@
+import { easeInQuad, easeOutQuad } from "../animation/easing";
+
 /**
  * Idle animation controller for natural micro-movements
  * Handles breathing, blinking, eye saccades, and subtle head movements
@@ -50,7 +52,9 @@ export class IdleController {
 
   // Breathing configuration
   private readonly breathCycleDuration = 3.5; // Seconds per breath cycle
-  private breathPhase = Math.random(); // Start at random phase
+  private breathPhase = 0;
+  // Desynchronizes characters that start breathing at the same moment.
+  private breathPhaseOffset = Math.random();
 
   // Saccade configuration
   private readonly saccadeMaxOffset = 3;
@@ -127,14 +131,14 @@ export class IdleController {
     switch (bs.blinkPhase) {
       case "closing":
         // Fast close with ease-in
-        this.currentState.blinkAmount = this.easeInQuad(bs.blinkProgress);
+        this.currentState.blinkAmount = easeInQuad(bs.blinkProgress);
         break;
       case "closed":
         this.currentState.blinkAmount = 1;
         break;
       case "opening":
         // Slower open with ease-out
-        this.currentState.blinkAmount = 1 - this.easeOutQuad(bs.blinkProgress);
+        this.currentState.blinkAmount = 1 - easeOutQuad(bs.blinkProgress);
         break;
       default:
         this.currentState.blinkAmount = 0;
@@ -143,7 +147,8 @@ export class IdleController {
 
   private updateBreathing(): void {
     // Smooth sinusoidal breathing
-    this.breathPhase = (this.elapsed / this.breathCycleDuration) % 1;
+    this.breathPhase =
+      (this.elapsed / this.breathCycleDuration + this.breathPhaseOffset) % 1;
 
     // Use a modified sine wave for more natural breathing rhythm
     // Inhale is slightly faster than exhale
@@ -216,14 +221,6 @@ export class IdleController {
     );
   }
 
-  private easeInQuad(t: number): number {
-    return t * t;
-  }
-
-  private easeOutQuad(t: number): number {
-    return 1 - (1 - t) * (1 - t);
-  }
-
   public getState(): IdleState {
     return { ...this.currentState };
   }
@@ -257,7 +254,8 @@ export class IdleController {
       blinkPhase: "idle",
       blinkProgress: 0,
     };
-    this.breathPhase = Math.random();
+    this.breathPhase = 0;
+    this.breathPhaseOffset = Math.random();
     this.saccadeState = {
       targetX: 0,
       targetY: 0,

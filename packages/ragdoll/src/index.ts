@@ -14,7 +14,11 @@ export type { IHeadPoseController } from "./controllers/interfaces";
 // State Management
 export { StateManager } from "./state/state-manager";
 export { EventBus } from "./state/event-bus";
-export type { StateEvent, EventSubscriber, StateSnapshot } from "./state/types";
+export type {
+  StateEvent,
+  EventSubscriber,
+  StateEventEmitter,
+} from "./state/types";
 
 // Models
 export { RagdollGeometry } from "./models/ragdoll-geometry";
@@ -33,12 +37,7 @@ export {
   alienTheme,
   monochromeTheme,
 } from "./themes/default-themes";
-export type {
-  RagdollTheme,
-  ThemeColors,
-  GradientDef,
-  GradientStop,
-} from "./themes/types";
+export type { RagdollTheme, ThemeColors } from "./themes/types";
 
 // Variants
 export {
@@ -64,8 +63,6 @@ export type {
   FacialCommand,
   FacialMood,
   FacialAction,
-  FacialStatePayload,
-  JointCommand,
   JointName,
   HeadPose,
   Vector3Like,
@@ -75,8 +72,6 @@ export type {
   GazeAxis,
   ExpressionAxis,
 } from "./types";
-
-export * from "./animation/easing";
 
 // Plugins
 export type { FeaturePlugin } from "./plugins/plugin-interface";

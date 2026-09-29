@@ -96,86 +96,14 @@ describe("EventBus", () => {
     });
   });
 
-  describe("event history tracking", () => {
-    it("should track event history", () => {
-      eventBus.emit({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-      const history = eventBus.getHistory();
-      expect(history.length).toBe(1);
-      expect(history[0]).toMatchObject({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-    });
-
-    it("should limit history to max size", () => {
-      // Emit more than maxHistorySize (100) events
-      for (let i = 0; i < 150; i++) {
-        eventBus.emit({
-          type: "moodChanged",
-          mood: "smile",
-          previousMood: "neutral",
-        });
-      }
-      const history = eventBus.getHistory();
-      expect(history.length).toBeLessThanOrEqual(100);
-    });
-
-    it("should maintain recent events when limit exceeded", () => {
-      // Emit events
-      for (let i = 0; i < 50; i++) {
-        eventBus.emit({
-          type: "moodChanged",
-          mood: "smile",
-          previousMood: "neutral",
-        });
-      }
-      eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
-      const history = eventBus.getHistory();
-      // Most recent event should be in history
-      expect(history[history.length - 1].type).toBe("actionTriggered");
-    });
-
-    it("should return readonly history", () => {
-      eventBus.emit({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-      const history = eventBus.getHistory();
-      // History is returned as a copy, so mutations won't affect the original
-      // But we can't test readonly in JavaScript, so we just verify it's an array
-      expect(Array.isArray(history)).toBe(true);
-    });
-  });
-
-  describe("history clearing", () => {
-    it("should clear event history", () => {
-      eventBus.emit({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-      eventBus.clearHistory();
-      const history = eventBus.getHistory();
-      expect(history.length).toBe(0);
-    });
-
-    it("should continue emitting after clearing history", () => {
-      eventBus.emit({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-      eventBus.clearHistory();
-      eventBus.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
-      const history = eventBus.getHistory();
-      expect(history.length).toBe(1);
-      expect(history[0].type).toBe("actionTriggered");
+  describe("clearSubscribers", () => {
+    it("stops notifying every subscriber", () => {
+      let calls = 0;
+      eventBus.subscribe(() => calls++);
+      eventBus.subscribe(() => calls++);
+      eventBus.clearSubscribers();
+      eventBus.emit({ type: "actionCleared" });
+      expect(calls).toBe(0);
     });
   });
 

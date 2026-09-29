@@ -21,13 +21,14 @@ export function createEyeTexture(
   const inner = new Color(colors.eyes.iris),
     outer = new Color(colors.eyes.irisDark),
     pupil = new Color(colors.eyes.pupil);
+  const color = new Color();
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       const nx = ((x + 0.5) / size) * 2 - 1,
         ny = ((y + 0.5) / size) * 2 - 1;
       const r = Math.hypot(nx, ny),
         angle = Math.atan2(ny, nx);
-      const color = white.clone();
+      color.copy(white);
       if (r < 0.46) {
         const fiber =
           (Math.sin(angle * 67 + r * 15) + Math.sin(angle * 103 - r * 21)) *

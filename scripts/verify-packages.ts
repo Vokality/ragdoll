@@ -81,7 +81,7 @@ try {
     `${temporaryDirectory}/verify.ts`,
     `
 import { RagdollCharacter } from "@vokality/ragdoll";
-import { MockClock } from "@vokality/ragdoll/testing";
+import { SpyEventBus } from "@vokality/ragdoll/testing";
 import { createRegistry } from "@vokality/ragdoll-extensions";
 import {
   createExtensionPackageDescriptor,
@@ -114,7 +114,7 @@ import weatherManifest from "@example/ragdoll-extension-weather/manifest" with {
 
 const exportsToCheck = [
   RagdollCharacter,
-  MockClock,
+  SpyEventBus,
   createRegistry,
   createLoader,
   createSlotState,

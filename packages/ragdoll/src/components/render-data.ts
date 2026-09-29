@@ -1,5 +1,8 @@
 import type { CharacterController } from "../controllers/character-controller";
-import type { ExpressionConfig } from "../models/ragdoll-geometry";
+import type {
+  ExpressionConfig,
+  FaceDimensions,
+} from "../models/ragdoll-geometry";
 import type { CharacterAppearance } from "../variants/types";
 import type { RagdollTheme } from "../themes/types";
 
@@ -31,53 +34,13 @@ export function applyIdleToExpression(
   };
 }
 
-function creasePath(
-  centerX: number,
-  eyeY: number,
-  eyeWidth: number,
-  eyeHeight: number,
-  leftLift: number,
-  rightLift: number,
-): string {
-  const half = eyeWidth / 2;
-  const baseY = eyeY - eyeHeight / 2;
-  return `M ${centerX - half - 2} ${baseY - leftLift}
-    Q ${centerX} ${baseY - 8}
-    ${centerX + half + 2} ${baseY - rightLift}`;
-}
-
 export interface RenderData {
   appearance: CharacterAppearance;
-  dims: ReturnType<CharacterController["getGeometry"]>["dimensions"];
+  dims: FaceDimensions;
   expression: ExpressionConfig;
   yaw: number;
   pitch: number;
   headRoll: number;
-  facePath: string;
-  hairPath: string;
-  nosePath: string;
-  mustachePath: string;
-  leftEarPath: string;
-  rightEarPath: string;
-  leftEyePaths: ReturnType<
-    ReturnType<CharacterController["getGeometry"]>["getEyePath"]
-  >;
-  rightEyePaths: ReturnType<
-    ReturnType<CharacterController["getGeometry"]>["getEyePath"]
-  >;
-  leftIris: ReturnType<
-    ReturnType<CharacterController["getGeometry"]>["getIrisPosition"]
-  >;
-  rightIris: ReturnType<
-    ReturnType<CharacterController["getGeometry"]>["getIrisPosition"]
-  >;
-  leftEyebrowPath: string;
-  rightEyebrowPath: string;
-  leftCreasePath: string;
-  rightCreasePath: string;
-  mouthPaths: ReturnType<
-    ReturnType<CharacterController["getGeometry"]>["getMouthPath"]
-  >;
   currentTheme: RagdollTheme;
   breathingOffsetY: number;
   breathingScale: number;
@@ -119,35 +82,6 @@ export function computeRenderData(controller: CharacterController): RenderData {
     yaw,
     pitch,
     headRoll,
-    facePath: geometry.getFacePath(),
-    hairPath: geometry.getHairPath(),
-    nosePath: geometry.getNosePath(expression.noseScrunch),
-    mustachePath: geometry.getMustachePath(),
-    leftEarPath: geometry.getEarPath(true),
-    rightEarPath: geometry.getEarPath(false),
-    leftEyePaths: geometry.getEyePath(true, expression.leftEye),
-    rightEyePaths: geometry.getEyePath(false, expression.rightEye),
-    leftIris: geometry.getIrisPosition(true, expression.leftEye),
-    rightIris: geometry.getIrisPosition(false, expression.rightEye),
-    leftEyebrowPath: geometry.getEyebrowPath(true, expression.leftEyebrow),
-    rightEyebrowPath: geometry.getEyebrowPath(false, expression.rightEyebrow),
-    leftCreasePath: creasePath(
-      dims.eyeSpacing / 2,
-      dims.eyeY,
-      dims.eyeWidth,
-      dims.eyeHeight,
-      6,
-      5,
-    ),
-    rightCreasePath: creasePath(
-      -dims.eyeSpacing / 2,
-      dims.eyeY,
-      dims.eyeWidth,
-      dims.eyeHeight,
-      5,
-      6,
-    ),
-    mouthPaths: geometry.getMouthPath(expression.mouth),
     currentTheme: controller.getTheme(),
     breathingOffsetY,
     breathingScale,

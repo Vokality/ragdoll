@@ -1,9 +1,4 @@
-import type {
-  CharacterState,
-  FacialMood,
-  FacialAction,
-  HeadPose,
-} from "../types";
+import type { FacialMood, FacialAction, HeadPose } from "../types";
 
 /**
  * State change events that can be emitted
@@ -25,9 +20,8 @@ export type StateEvent =
 export type EventSubscriber = (event: StateEvent) => void;
 
 /**
- * State snapshot for debugging/undo-redo
+ * Destination for state change events
  */
-export interface StateSnapshot {
-  timestamp: number;
-  state: CharacterState;
+export interface StateEventEmitter {
+  emit(event: StateEvent): void;
 }

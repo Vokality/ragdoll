@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { RagdollSkeleton } from "../../src/models/ragdoll-skeleton";
-import type { JointName } from "../../src/types";
 
 describe("RagdollSkeleton", () => {
   let skeleton: RagdollSkeleton;
@@ -10,11 +9,6 @@ describe("RagdollSkeleton", () => {
   });
 
   describe("skeleton initialization", () => {
-    it("should initialize with default joints", () => {
-      expect(skeleton.skeleton).toBeDefined();
-      expect(skeleton.skeleton.joints).toBeDefined();
-    });
-
     it("should initialize headPivot joint", () => {
       const rotation = skeleton.getJointRotation("headPivot");
       expect(rotation).toBe(0);
@@ -33,27 +27,10 @@ describe("RagdollSkeleton", () => {
       expect(rotation).toBeDefined();
     });
 
-    it("should set joint rotation immediately", () => {
-      skeleton.setJointRotationImmediate("headPivot", 0.5);
-      const rotation = skeleton.getJointRotation("headPivot");
-      expect(rotation).toBe(0.5);
-    });
-
     it("should get joint rotation", () => {
       skeleton.setJointRotation("headPivot", 0.3);
       const rotation = skeleton.getJointRotation("headPivot");
       expect(rotation).toBeDefined();
-    });
-
-    it("should get joint target rotation", () => {
-      skeleton.setJointRotation("headPivot", 0.5);
-      const target = skeleton.getJointTargetRotation("headPivot");
-      expect(target).toBe(0.5);
-    });
-
-    it("should return null for invalid joint", () => {
-      const rotation = skeleton.getJointRotation("invalid" as JointName);
-      expect(rotation).toBeNull();
     });
   });
 
@@ -70,7 +47,7 @@ describe("RagdollSkeleton", () => {
       const initialRotation = skeleton.getJointRotation("headPivot");
       skeleton.update(0.1);
       const afterUpdate = skeleton.getJointRotation("headPivot");
-      expect(afterUpdate).toBeGreaterThan(initialRotation!);
+      expect(afterUpdate).toBeGreaterThan(initialRotation);
     });
 
     it("should handle multiple update calls", () => {
@@ -79,7 +56,7 @@ describe("RagdollSkeleton", () => {
         skeleton.update(0.1);
         const rotation = skeleton.getJointRotation("headPivot");
         expect(rotation).toBeDefined();
-        expect(isNaN(rotation!)).toBe(false);
+        expect(isNaN(rotation)).toBe(false);
       }
     });
 
@@ -88,30 +65,7 @@ describe("RagdollSkeleton", () => {
       skeleton.update(1.0); // Large deltaTime
       const rotation = skeleton.getJointRotation("headPivot");
       expect(rotation).toBeDefined();
-      expect(isNaN(rotation!)).toBe(false);
-    });
-  });
-
-  describe("isAnimating", () => {
-    it("should return false when joints are at target", () => {
-      skeleton.setJointRotationImmediate("headPivot", 0.5);
-      skeleton.setJointRotation("headPivot", 0.5);
-      skeleton.update(0.1);
-      expect(skeleton.isAnimating()).toBe(false);
-    });
-
-    it("should return true when joints are animating", () => {
-      skeleton.setJointRotation("headPivot", 0.5);
-      expect(skeleton.isAnimating()).toBe(true);
-    });
-
-    it("should return false after animation completes", () => {
-      skeleton.setJointRotation("headPivot", 0.5);
-      // Update many times to complete animation
-      for (let i = 0; i < 100; i++) {
-        skeleton.update(0.1);
-      }
-      expect(skeleton.isAnimating()).toBe(false);
+      expect(isNaN(rotation)).toBe(false);
     });
   });
 
@@ -121,7 +75,7 @@ describe("RagdollSkeleton", () => {
       const rotations: number[] = [];
       for (let i = 0; i < 10; i++) {
         skeleton.update(0.05);
-        rotations.push(skeleton.getJointRotation("headPivot")!);
+        rotations.push(skeleton.getJointRotation("headPivot"));
       }
       // Should show smooth acceleration/deceleration
       expect(rotations.length).toBe(10);
@@ -184,4 +138,3 @@ describe("RagdollSkeleton", () => {
     });
   });
 });
-

@@ -3,10 +3,6 @@
  * @packageDocumentation
  */
 
-// Clock utilities
-export type { IClock } from "./clock";
-export { SystemClock, MockClock } from "./clock";
-
 // Test builders
 export { CharacterStateBuilder, HeadPoseBuilder } from "./builders";
 

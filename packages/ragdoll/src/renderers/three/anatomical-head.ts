@@ -85,6 +85,28 @@ const normalTemplates = new Map<AnatomicalPart, Float32BufferAttribute[]>();
 const PUPIL_STEPS_PER_UNIT = 20;
 
 /** Artist-authored topology with complete eyelids, lips, ears, jaw, and expression shapes. */
+/**
+ * Rewrites a per-vertex attribute in place. Replacing the attribute object
+ * would orphan its GPU buffer, which `geometry.dispose()` no longer reaches.
+ */
+function writeAttribute(
+  geometry: BufferGeometry,
+  name: string,
+  values: number[],
+  itemSize: number,
+): void {
+  const existing = geometry.getAttribute(name);
+  if (
+    existing instanceof Float32BufferAttribute &&
+    existing.array.length === values.length
+  ) {
+    existing.array.set(values);
+    existing.needsUpdate = true;
+    return;
+  }
+  geometry.setAttribute(name, new Float32BufferAttribute(values, itemSize));
+}
+
 export class AnatomicalHead {
   readonly root = new Group();
   readonly skin: Mesh<BufferGeometry, MeshStandardMaterial>;
@@ -278,8 +300,7 @@ export class AnatomicalHead {
           }
           vertexColors.push(color.r, color.g, color.b);
         }
-        if (eye || skin)
-          mesh.geometry.setAttribute("uv", new Float32BufferAttribute(uv, 2));
+        if (eye || skin) writeAttribute(mesh.geometry, "uv", uv, 2);
         // The relief depends on age alone; a theme change must not repaint it.
         if (skin && this.skinDetailAge !== data.appearance.age) {
           this.skinDetailAge = data.appearance.age;
@@ -288,10 +309,7 @@ export class AnatomicalHead {
           mesh.material.bumpScale = 0.5;
         }
         positions.needsUpdate = true;
-        mesh.geometry.setAttribute(
-          "color",
-          new Float32BufferAttribute(vertexColors, 3),
-        );
+        writeAttribute(mesh.geometry, "color", vertexColors, 3);
         mesh.material.needsUpdate = true;
         mesh.geometry.computeVertexNormals();
         mesh.geometry.computeBoundingSphere();

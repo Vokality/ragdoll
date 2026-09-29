@@ -4,7 +4,6 @@ import {
   getDefaultTheme,
   getAllThemes,
   registerTheme,
-  hasTheme,
 } from "../../src/themes/theme-registry";
 import type { RagdollTheme } from "../../src/themes/types";
 
@@ -89,29 +88,6 @@ describe("Theme Registry", () => {
         registerTheme(original);
       }
       expect(getTheme("default")).toBe(original);
-    });
-  });
-
-  describe("hasTheme", () => {
-    it("should return true for existing theme", () => {
-      expect(hasTheme("default")).toBe(true);
-      expect(hasTheme("robot")).toBe(true);
-      expect(hasTheme("alien")).toBe(true);
-      expect(hasTheme("monochrome")).toBe(true);
-    });
-
-    it("should return false for nonexistent theme", () => {
-      expect(hasTheme("nonexistent")).toBe(false);
-    });
-
-    it("should return true for registered custom theme", () => {
-      const customTheme: RagdollTheme = {
-        ...structuredClone(getDefaultTheme()),
-        id: "custom-test",
-        name: "Custom Test",
-      };
-      registerTheme(customTheme);
-      expect(hasTheme("custom-test")).toBe(true);
     });
   });
 

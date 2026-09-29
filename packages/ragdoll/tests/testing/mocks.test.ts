@@ -139,42 +139,6 @@ describe("SpyEventBus", () => {
     });
   });
 
-  describe("getHistory", () => {
-    it("should return event history", () => {
-      spy.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
-      const history = spy.getHistory();
-      expect(history.length).toBe(1);
-      expect(history[0]).toMatchObject({
-        type: "moodChanged",
-        mood: "smile",
-        previousMood: "neutral",
-      });
-    });
-
-    it("should return copy of history", () => {
-      spy.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
-      const history1 = spy.getHistory();
-      const history2 = spy.getHistory();
-      expect(history1).not.toBe(history2);
-      expect(history1).toEqual(history2);
-    });
-  });
-
-  describe("clearHistory", () => {
-    it("should clear event history", () => {
-      spy.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
-      spy.clearHistory();
-      expect(spy.emittedEvents.length).toBe(0);
-    });
-
-    it("should continue tracking after clearing", () => {
-      spy.emit({ type: "moodChanged", mood: "smile", previousMood: "neutral" });
-      spy.clearHistory();
-      spy.emit({ type: "actionTriggered", action: "wink", duration: 0.5 });
-      expect(spy.emittedEvents.length).toBe(1);
-    });
-  });
-
   describe("reset", () => {
     it("should clear events and subscribers", () => {
       let called = false;
@@ -192,4 +156,3 @@ describe("SpyEventBus", () => {
     });
   });
 });
-

@@ -18,7 +18,6 @@ import type {
   FacialCommand,
   FacialMood,
   FacialAction,
-  JointCommand,
   JointName,
   HeadPose,
   ExpressionAxes,
@@ -34,6 +33,8 @@ export class CharacterController {
   private headPoseController: HeadPoseController;
   private idleController: IdleController;
   private theme: RagdollTheme;
+  // The theme with variant color overrides applied; read every frame.
+  private resolvedTheme: RagdollTheme;
   private variant: CharacterVariant;
   private stateManager: StateManager;
   private eventBus: EventBus;
@@ -48,6 +49,7 @@ export class CharacterController {
     this.variant = getVariant(config.variantId);
     this.geometry = new RagdollGeometry(this.variant);
     this.theme = getTheme(config.themeId);
+    this.resolvedTheme = this.resolveTheme(this.theme);
     this.headPoseController = new HeadPoseController(this.skeleton);
     this.actionController = new ActionController(this.headPoseController);
     this.expressionController = new ExpressionController(
@@ -139,21 +141,6 @@ export class CharacterController {
   public nudgeHead(delta: Partial<HeadPose>, duration?: number): void {
     this.headPoseController.nudge(delta, duration);
   }
-  public setJointRotation(command: JointCommand): void {
-    const angle = command.angle ?? command.rotation;
-    if (!angle) return;
-
-    // The head pose controller drives both joints every frame, so a joint
-    // command has to retarget the pose or the next update overwrites it.
-    this.headPoseController.setTargetPose(
-      command.joint === "headPivot" ? { yaw: angle.y } : { pitch: angle.y },
-    );
-  }
-
-  public getJointRotation(joint: JointName): number | null {
-    return this.skeleton.getJointRotation(joint);
-  }
-
   public update(deltaTime: number): void {
     // Update action controller (handles shake and other actions)
     this.actionController.update(deltaTime);
@@ -191,15 +178,15 @@ export class CharacterController {
 
   public getState(): CharacterState {
     // Update joints from skeleton
-    const joints: Record<JointName, { x: number; y: number; z: number }> =
-      {} as Record<JointName, { x: number; y: number; z: number }>;
-    this.skeleton.skeleton.joints.forEach((_joint, name) => {
-      const rotation = this.skeleton.getJointRotation(name);
-      if (rotation !== null) {
-        joints[name] = { x: 0, y: rotation, z: 0 };
-      }
+    const joint = (name: JointName) => ({
+      x: 0,
+      y: this.skeleton.getJointRotation(name),
+      z: 0,
     });
-    this.stateManager.setJoints(joints);
+    this.stateManager.setJoints({
+      headPivot: joint("headPivot"),
+      neck: joint("neck"),
+    });
 
     // Get state from StateManager (single source of truth)
     return this.stateManager.getState();
@@ -210,10 +197,6 @@ export class CharacterController {
    */
   public getEventBus(): EventBus {
     return this.eventBus;
-  }
-
-  public getHeadWorldPosition(): { x: number; y: number; z: number } {
-    return { x: 0, y: -200, z: 0 };
   }
 
   public getExpression(): ExpressionConfig {
@@ -248,10 +231,6 @@ export class CharacterController {
     return this.idleController.getState();
   }
 
-  public getIdleController(): IdleController {
-    return this.idleController;
-  }
-
   public triggerBlink(): void {
     this.idleController.triggerBlink();
   }
@@ -261,141 +240,32 @@ export class CharacterController {
   }
 
   public getTheme(): RagdollTheme {
-    // Merge variant color overrides into theme
-    if (!this.variant.colorOverrides) {
-      return this.theme;
-    }
+    return this.resolvedTheme;
+  }
 
-    // Merge color overrides
-    const mergedColors = {
-      ...this.theme.colors,
-      ...(this.variant.colorOverrides.hair && {
-        hair: {
-          ...this.theme.colors.hair,
-          ...this.variant.colorOverrides.hair,
-        },
-      }),
-      ...(this.variant.colorOverrides.eyes && {
-        eyes: {
-          ...this.theme.colors.eyes,
-          ...this.variant.colorOverrides.eyes,
-        },
-      }),
-      ...(this.variant.colorOverrides.skin && {
-        skin: {
-          ...this.theme.colors.skin,
-          ...this.variant.colorOverrides.skin,
-        },
-      }),
-      ...(this.variant.colorOverrides.lips && {
-        lips: {
-          ...this.theme.colors.lips,
-          ...this.variant.colorOverrides.lips,
-        },
-      }),
+  private resolveTheme(theme: RagdollTheme): RagdollTheme {
+    const overrides = this.variant.colorOverrides;
+    if (!overrides) {
+      return theme;
+    }
+    const { colors } = theme;
+    return {
+      ...theme,
+      colors: {
+        ...colors,
+        hair: { ...colors.hair, ...overrides.hair },
+        eyes: { ...colors.eyes, ...overrides.eyes },
+        skin: { ...colors.skin, ...overrides.skin },
+        lips: { ...colors.lips, ...overrides.lips },
+      },
     };
-
-    // Rebuild gradients that use overridden colors
-    const mergedGradients = { ...this.theme.gradients };
-
-    // Rebuild hair gradient if hair colors were overridden
-    if (this.variant.colorOverrides.hair) {
-      mergedGradients.hairGradient = {
-        type: "linear",
-        x1: "0%",
-        y1: "0%",
-        x2: "0%",
-        y2: "100%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.hair.light },
-          { offset: "40%", stopColor: mergedColors.hair.mid },
-          { offset: "100%", stopColor: mergedColors.hair.dark },
-        ],
-      };
-    }
-
-    // Rebuild iris gradient if eye colors were overridden
-    if (this.variant.colorOverrides.eyes) {
-      mergedGradients.irisGradient = {
-        type: "radial",
-        cx: "50%",
-        cy: "50%",
-        r: "50%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.eyes.iris },
-          { offset: "50%", stopColor: mergedColors.eyes.irisMid },
-          { offset: "100%", stopColor: mergedColors.eyes.irisDark },
-        ],
-      };
-    }
-
-    // Rebuild skin gradients if skin colors were overridden
-    if (this.variant.colorOverrides.skin) {
-      mergedGradients.skinGradient = {
-        type: "linear",
-        x1: "0%",
-        y1: "0%",
-        x2: "0%",
-        y2: "100%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.skin.light },
-          { offset: "50%", stopColor: mergedColors.skin.mid },
-          { offset: "100%", stopColor: mergedColors.skin.dark },
-        ],
-      };
-
-      mergedGradients.skinRadial = {
-        type: "radial",
-        cx: "40%",
-        cy: "30%",
-        r: "70%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.skin.radial },
-          { offset: "100%", stopColor: mergedColors.skin.dark },
-        ],
-      };
-    }
-
-    // Rebuild lip gradients if lip colors were overridden
-    if (this.variant.colorOverrides.lips) {
-      mergedGradients.upperLipGradient = {
-        type: "linear",
-        x1: "0%",
-        y1: "0%",
-        x2: "0%",
-        y2: "100%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.lips.upper },
-          { offset: "100%", stopColor: mergedColors.lips.upperDark },
-        ],
-      };
-
-      mergedGradients.lowerLipGradient = {
-        type: "linear",
-        x1: "0%",
-        y1: "0%",
-        x2: "0%",
-        y2: "100%",
-        stops: [
-          { offset: "0%", stopColor: mergedColors.lips.lower },
-          { offset: "100%", stopColor: mergedColors.lips.lowerDark },
-        ],
-      };
-    }
-
-    const mergedTheme: RagdollTheme = {
-      ...this.theme,
-      colors: mergedColors,
-      gradients: mergedGradients,
-    };
-
-    return mergedTheme;
   }
 
   public setTheme(themeId: string): void {
     const theme = getTheme(themeId);
     if (theme === this.theme) return;
     this.theme = theme;
+    this.resolvedTheme = this.resolveTheme(theme);
     this.eventBus.emit({ type: "themeChanged", themeId: theme.id });
   }
 
@@ -428,17 +298,11 @@ export class CharacterController {
   }
 
   /**
-   * Get a registered plugin by name
-   */
-  public getPlugin<T extends FeaturePlugin>(pluginName: string): T | undefined {
-    return this.plugins.get(pluginName) as T | undefined;
-  }
-
-  /**
-   * Cleanup resources (timers, subscriptions)
+   * Destroy registered plugins and drop event subscribers
    */
   public destroy(): void {
     this.idleController.reset();
+    this.eventBus.clearSubscribers();
 
     // Destroy all plugins
     for (const plugin of this.plugins.values()) {

@@ -4,6 +4,11 @@
 
 import type { HeadPose } from "../types";
 import type { IHeadPoseController } from "../controllers/interfaces";
+import type {
+  EventSubscriber,
+  StateEvent,
+  StateEventEmitter,
+} from "../state/types";
 
 /**
  * Mock HeadPoseController for testing ActionController
@@ -48,30 +53,22 @@ export class MockHeadPoseController implements IHeadPoseController {
 /**
  * Spy EventBus that tracks all emitted events
  */
-export class SpyEventBus {
-  public emittedEvents: unknown[] = [];
-  private subscribers = new Set<(event: unknown) => void>();
+export class SpyEventBus implements StateEventEmitter {
+  public emittedEvents: StateEvent[] = [];
+  private subscribers = new Set<EventSubscriber>();
 
-  subscribe(subscriber: (event: unknown) => void): () => void {
+  subscribe(subscriber: EventSubscriber): () => void {
     this.subscribers.add(subscriber);
     return () => {
       this.subscribers.delete(subscriber);
     };
   }
 
-  emit(event: unknown): void {
+  emit(event: StateEvent): void {
     this.emittedEvents.push(event);
     for (const subscriber of this.subscribers) {
       subscriber(event);
     }
-  }
-
-  getHistory(): readonly unknown[] {
-    return [...this.emittedEvents];
-  }
-
-  clearHistory(): void {
-    this.emittedEvents = [];
   }
 
   reset(): void {

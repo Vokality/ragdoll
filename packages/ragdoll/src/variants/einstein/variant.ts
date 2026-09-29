@@ -18,18 +18,13 @@ export const einsteinVariant: CharacterVariant = {
     skin: {
       light: "#edd2b8",
       mid: "#d4b295",
-      dark: "#a98168",
-      radial: "#e1bea1",
     },
     lips: {
       upper: "#9a7063",
       upperDark: "#644b42",
-      lower: "#b98c7d",
-      lowerDark: "#8a6557",
     },
     eyes: {
       iris: "#8b7355", // Brown eyes
-      irisMid: "#6b5335",
       irisDark: "#4b3315",
     },
   },

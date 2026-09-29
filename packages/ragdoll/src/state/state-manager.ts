@@ -4,7 +4,7 @@ import type {
   FacialAction,
   HeadPose,
 } from "../types";
-import { EventBus } from "./event-bus";
+import type { StateEventEmitter } from "./types";
 
 function cloneState(state: CharacterState): CharacterState {
   return {
@@ -24,9 +24,9 @@ function cloneState(state: CharacterState): CharacterState {
  */
 export class StateManager {
   private currentState: CharacterState;
-  private eventBus: EventBus;
+  private eventBus: StateEventEmitter;
 
-  constructor(initialState: CharacterState, eventBus: EventBus) {
+  constructor(initialState: CharacterState, eventBus: StateEventEmitter) {
     this.currentState = cloneState(initialState);
     this.eventBus = eventBus;
   }
@@ -36,13 +36,6 @@ export class StateManager {
    */
   public getState(): CharacterState {
     return cloneState(this.currentState);
-  }
-
-  /**
-   * Get the event bus for subscribing to state changes
-   */
-  public getEventBus(): EventBus {
-    return this.eventBus;
   }
 
   /**
@@ -64,7 +57,7 @@ export class StateManager {
     if (action && action !== "none") {
       this.eventBus.emit({
         type: "actionTriggered",
-        action: action as Exclude<FacialAction, "none">,
+        action,
         duration,
       });
     } else if (previousAction && previousAction !== "none") {
@@ -101,12 +94,5 @@ export class StateManager {
    */
   public setJoints(joints: CharacterState["joints"]): void {
     this.currentState.joints = { ...joints };
-  }
-
-  /**
-   * Batch update multiple state properties
-   */
-  public updateState(updates: Partial<CharacterState>): void {
-    this.currentState = { ...this.currentState, ...updates };
   }
 }

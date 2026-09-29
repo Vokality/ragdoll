@@ -1,6 +1,8 @@
 import type { FacialAction } from "../types";
 import type { ExpressionConfig } from "../models/ragdoll-geometry";
 import type { IHeadPoseController } from "./interfaces";
+import { MAX_YAW } from "./head-pose-controller";
+import { easeInOutCubic, easeOutCubic, smoothStep } from "../animation/easing";
 
 type ExpressionAction = Extract<FacialAction, "wink" | "talk">;
 
@@ -94,12 +96,11 @@ export class ActionController {
         const progress = this.actionState.elapsed / this.actionState.duration;
         const frequency = 3; // Number of shakes per duration
         const amplitude = 0.4; // How far to shake (40% of max yaw)
-        const MAX_YAW_RAD = (35 * Math.PI) / 180;
         const envelope = Math.sin(Math.PI * progress);
         const yaw =
           Math.sin(progress * frequency * Math.PI * 2) *
           amplitude *
-          MAX_YAW_RAD *
+          MAX_YAW *
           envelope;
         this.headPoseController.setTargetPose({ yaw }, 0.15);
       }
@@ -134,13 +135,6 @@ export class ActionController {
   }
 
   /**
-   * Get elapsed time for current action
-   */
-  public getActionElapsed(): number {
-    return this.actionState?.elapsed ?? 0;
-  }
-
-  /**
    * Get expression overlay for current action
    */
   public getExpressionOverlay(
@@ -151,7 +145,7 @@ export class ActionController {
       weight: number;
     }> = this.releasingActions.map((state) => ({
       state,
-      weight: 1 - this.smoothstep(state.releaseElapsed / state.releaseDuration),
+      weight: 1 - smoothStep(state.releaseElapsed / state.releaseDuration),
     }));
 
     const activeAction = this.actionState;
@@ -180,8 +174,8 @@ export class ActionController {
         hasWink = true;
         const curve =
           progress < 0.3
-            ? this.easeOutCubic(progress / 0.3)
-            : 1 - this.easeInOutCubic((progress - 0.3) / 0.7);
+            ? easeOutCubic(progress / 0.3)
+            : 1 - easeInOutCubic((progress - 0.3) / 0.7);
         winkAmount = Math.max(winkAmount, curve * weight);
         continue;
       }
@@ -192,8 +186,8 @@ export class ActionController {
       const cycle2 = Math.sin(state.elapsed * baseFreq * 1.3);
       const envelope = Math.min(
         1,
-        this.smoothstep(progress / 0.12),
-        this.smoothstep((1 - progress) / 0.15),
+        smoothStep(progress / 0.12),
+        smoothStep((1 - progress) / 0.15),
       );
       const openAmount =
         (Math.abs(cycle) * 0.7 + Math.abs(cycle2) * 0.3) * envelope * weight;
@@ -247,21 +241,5 @@ export class ActionController {
 
   private isExpressionAction(action: FacialAction): action is ExpressionAction {
     return action === "wink" || action === "talk";
-  }
-
-  private easeOutCubic(t: number): number {
-    return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
-  }
-
-  private easeInOutCubic(t: number): number {
-    const clamped = Math.max(0, Math.min(1, t));
-    return clamped < 0.5
-      ? 4 * clamped * clamped * clamped
-      : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
-  }
-
-  private smoothstep(t: number): number {
-    const clamped = Math.max(0, Math.min(1, t));
-    return clamped * clamped * (3 - 2 * clamped);
   }
 }

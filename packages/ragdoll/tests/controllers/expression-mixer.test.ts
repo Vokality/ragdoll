@@ -3,6 +3,7 @@ import { ExpressionController } from "../../src/controllers/expression-controlle
 import { ActionController } from "../../src/controllers/action-controller";
 import { CharacterController } from "../../src/controllers/character-controller";
 import { RagdollGeometry } from "../../src/models/ragdoll-geometry";
+import { expectValidMouth } from "../support/expression-invariants";
 import {
   cloneExpression,
   FACE_AXES_CLEARED_ON_SET_MOOD,
@@ -326,7 +327,7 @@ describe("expression mixer", () => {
       settle(controller);
       controller.setExpression({ jaw: 1 }, 0);
       const mixed = controller.getMixedExpression();
-      expect(() => geometry.getMouthPath(mixed.mouth)).not.toThrow();
+      expectValidMouth(mixed.mouth, geometry.dimensions);
       expect(jawOpen(mixed.mouth)).toBeGreaterThan(0.9);
     }
   });
@@ -336,12 +337,13 @@ describe("expression mixer", () => {
     settle(controller);
     controller.setExpression({ jaw: 1, duration: 0.35 });
     controller.update(0.1);
-    expect(() =>
-      geometry.getMouthPath(controller.getMixedExpression().mouth),
-    ).not.toThrow();
+    expectValidMouth(
+      controller.getMixedExpression().mouth,
+      geometry.dimensions,
+    );
   });
 
-  it("keeps talk plus jaw valid through getMouthPath and computeRenderData", () => {
+  it("keeps talk plus jaw valid through the mouth invariants and computeRenderData", () => {
     const character = createCharacter();
     try {
       character.setMood("laugh");
@@ -350,9 +352,7 @@ describe("expression mixer", () => {
       character.triggerAction("talk");
       character.update(0.2);
       const withAction = character.getExpressionWithAction();
-      expect(() =>
-        character.getGeometry().getMouthPath(withAction.mouth),
-      ).not.toThrow();
+      expectValidMouth(withAction.mouth, character.getGeometry().dimensions);
       expect(() => computeRenderData(character)).not.toThrow();
       expect(character.getExpression().mouth.lowerLipTop).toBe(
         character.getGeometry().getExpressionForMood("laugh").mouth.lowerLipTop,

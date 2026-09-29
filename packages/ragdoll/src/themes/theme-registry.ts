@@ -42,13 +42,6 @@ export function getDefaultTheme(): RagdollTheme {
 }
 
 /**
- * Check if a theme exists
- */
-export function hasTheme(themeId: string): boolean {
-  return themes.has(themeId);
-}
-
-/**
  * Register a custom theme (for future extensibility)
  */
 export function registerTheme(theme: RagdollTheme): void {

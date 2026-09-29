@@ -48,9 +48,7 @@ describe("computeRenderData", () => {
     human.update(1);
     const smile = computeRenderData(human);
     expect(smile.currentTheme.id).toBe("monochrome");
-    expect(smile.facePath.length).toBeGreaterThan(0);
-    expect(smile.hairPath.length).toBeGreaterThan(0);
-    expect(smile.mustachePath).toBe("");
+    expect(smile.appearance.mustacheStyle).toBe("none");
     expect(smile.expression.mouth.cornerPull).toBeGreaterThan(0);
     expect(Number.isFinite(smile.yaw)).toBe(true);
     expect(Number.isFinite(smile.pitch)).toBe(true);
@@ -69,16 +67,19 @@ describe("computeRenderData", () => {
     human.triggerAction("talk", 1);
     human.update(0.2);
     const talk = computeRenderData(human);
-    expect(talk.mouthPaths.openingHeight).toBeGreaterThan(1);
-    expect(talk.mouthPaths.opening.length).toBeGreaterThan(0);
+    expect(
+      talk.expression.mouth.lowerLipTop - talk.expression.mouth.upperLipBottom,
+    ).toBeGreaterThan(1);
 
     const einstein = tracked(
       createController({ themeId: "alien", variantId: "einstein" }),
     );
     const einsteinData = computeRenderData(einstein);
     expect(einsteinData.currentTheme.id).toBe("alien");
-    expect(einsteinData.mustachePath.length).toBeGreaterThan(0);
-    expect(einsteinData.hairPath).not.toBe(smile.hairPath);
+    expect(einsteinData.appearance.mustacheStyle).not.toBe("none");
+    expect(einsteinData.appearance.hairStyle).not.toBe(
+      smile.appearance.hairStyle,
+    );
     expect(einsteinData.dims.headHeight).toBeGreaterThan(smile.dims.headHeight);
 
     const robot = tracked(createController({ themeId: "robot" }));

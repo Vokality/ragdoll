@@ -279,22 +279,6 @@ describe("CharacterController", () => {
     });
   });
 
-  describe("joint management", () => {
-    it("should set joint rotation", () => {
-      controller.setJointRotation({
-        joint: "headPivot",
-        angle: { x: 0, y: 0.3, z: 0 },
-      });
-      const rotation = controller.getJointRotation("headPivot");
-      expect(rotation).toBeDefined();
-    });
-
-    it("should get joint rotation", () => {
-      const rotation = controller.getJointRotation("headPivot");
-      expect(rotation).toBeDefined();
-    });
-  });
-
   describe("getState", () => {
     it("should return current state", () => {
       const state = controller.getState();
@@ -386,19 +370,13 @@ describe("CharacterController", () => {
     });
   });
 
-  describe("joint commands", () => {
-    it("keeps a commanded joint rotation through the update loop", () => {
-      controller.setJointRotation({
-        joint: "neck",
-        angle: { x: 0, y: 0.2, z: 0 },
-      });
-      controller.setJointRotation({
-        joint: "headPivot",
-        angle: { x: 0, y: -0.3, z: 0 },
-      });
+  describe("joints", () => {
+    it("drives both joints from the commanded head pose", () => {
+      controller.setHeadPose({ yaw: -0.3, pitch: 0.2 });
       for (let i = 0; i < 600; i++) controller.update(1 / 60);
-      expect(controller.getJointRotation("neck")).toBeCloseTo(0.2, 3);
-      expect(controller.getJointRotation("headPivot")).toBeCloseTo(-0.3, 3);
+      const { joints } = controller.getState();
+      expect(joints.neck.y).toBeCloseTo(0.2, 3);
+      expect(joints.headPivot.y).toBeCloseTo(-0.3, 3);
     });
   });
 

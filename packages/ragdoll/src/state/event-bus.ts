@@ -1,12 +1,10 @@
-import type { StateEvent, EventSubscriber } from "./types";
+import type { StateEvent, EventSubscriber, StateEventEmitter } from "./types";
 
 /**
  * Simple pub/sub event bus for state change notifications
  */
-export class EventBus {
+export class EventBus implements StateEventEmitter {
   private subscribers: Set<EventSubscriber> = new Set();
-  private eventHistory: StateEvent[] = [];
-  private maxHistorySize = 100;
 
   constructor(private readonly onSubscriberError: (error: unknown) => void) {}
 
@@ -24,13 +22,6 @@ export class EventBus {
    * Emit a state change event
    */
   public emit(event: StateEvent): void {
-    // Add to history
-    this.eventHistory.push(event);
-    if (this.eventHistory.length > this.maxHistorySize) {
-      this.eventHistory.shift();
-    }
-
-    // Notify all subscribers
     for (const subscriber of this.subscribers) {
       try {
         subscriber(event);
@@ -41,16 +32,9 @@ export class EventBus {
   }
 
   /**
-   * Get recent event history (for debugging)
+   * Drop every subscriber, e.g. when the owning character is destroyed
    */
-  public getHistory(): readonly StateEvent[] {
-    return [...this.eventHistory];
-  }
-
-  /**
-   * Clear event history
-   */
-  public clearHistory(): void {
-    this.eventHistory = [];
+  public clearSubscribers(): void {
+    this.subscribers.clear();
   }
 }

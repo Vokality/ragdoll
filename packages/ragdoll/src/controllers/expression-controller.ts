@@ -19,6 +19,7 @@ import {
   FACE_AXES_CLEARED_ON_SET_MOOD,
 } from "../models/expression-axes";
 import { ActionController } from "./action-controller";
+import { easeInOutCubic } from "../animation/easing";
 
 // Slower than a mood change: a thought drifting, not a reaction.
 const POSE_TRANSITION_SECONDS = 0.6;
@@ -56,7 +57,6 @@ export class ExpressionController {
     this.transitionStartExpression = this.currentExpression;
     this.targetExpression = geometry.getExpressionForMood("neutral");
     this.overlayVisualStart = cloneExpression(this.currentExpression);
-    this.geometry.setExpression(this.currentExpression);
   }
 
   public setMood(mood: FacialMood, transitionDuration: number = 0.35): void {
@@ -147,17 +147,13 @@ export class ExpressionController {
     this.overlayProgress = duration <= 0 ? 1 : 0;
   }
 
-  public getActionController(): ActionController {
-    return this.actionController;
-  }
-
   public update(deltaTime: number): void {
     if (this.transitionProgress < 1) {
       this.transitionProgress = Math.min(
         1,
         this.transitionProgress + deltaTime / this.transitionDuration,
       );
-      const t = this.easeInOutCubic(this.transitionProgress);
+      const t = easeInOutCubic(this.transitionProgress);
       this.interpolateExpression(t);
       // Land exactly on the target; a lerp at t=1 can miss it by a rounding.
       this.headOffset =
@@ -178,8 +174,6 @@ export class ExpressionController {
         this.overlayProgress + deltaTime / Math.max(this.overlayDuration, 1e-6),
       );
     }
-
-    this.geometry.setExpression(this.currentExpression);
   }
 
   /** Head movement the current mood adds on top of the commanded pose. */
@@ -214,22 +208,6 @@ export class ExpressionController {
     return this.currentMood;
   }
 
-  public getActiveAction() {
-    return this.actionController.getActiveAction();
-  }
-
-  public isTalking(): boolean {
-    return this.actionController.isTalking();
-  }
-
-  public getActionProgress(): number {
-    return this.actionController.getActionProgress();
-  }
-
-  public getActionElapsed(): number {
-    return this.actionController.getActionElapsed();
-  }
-
   public getExpression(): ExpressionConfig {
     return this.currentExpression;
   }
@@ -244,7 +222,7 @@ export class ExpressionController {
     return RagdollGeometry.interpolateExpression(
       this.overlayVisualStart,
       settled,
-      this.easeInOutCubic(this.overlayProgress),
+      easeInOutCubic(this.overlayProgress),
     );
   }
 
@@ -252,28 +230,6 @@ export class ExpressionController {
     const mixed = this.getMixedExpression();
     const overlay = this.actionController.getExpressionOverlay(mixed);
     return this.mergeExpressionOverlay(mixed, overlay);
-  }
-
-  /**
-   * Apply a blink to the current expression (for idle animation)
-   */
-  public applyBlink(blinkAmount: number): ExpressionConfig {
-    const expr = this.getExpressionWithAction();
-
-    if (blinkAmount <= 0) return expr;
-    const blink = Math.min(1, blinkAmount);
-
-    return {
-      ...expr,
-      leftEye: {
-        ...expr.leftEye,
-        openness: expr.leftEye.openness * (1 - blink),
-      },
-      rightEye: {
-        ...expr.rightEye,
-        openness: expr.rightEye.openness * (1 - blink),
-      },
-    };
   }
 
   private mergeExpressionOverlay(
@@ -297,9 +253,5 @@ export class ExpressionController {
       this.targetExpression,
       t,
     );
-  }
-
-  private easeInOutCubic(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 }

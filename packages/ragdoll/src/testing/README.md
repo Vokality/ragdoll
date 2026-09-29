@@ -10,36 +10,6 @@ bun add --dev @vokality/ragdoll
 
 ## Usage
 
-### MockClock - control time in tests
-
-```ts
-import { MockClock } from "@vokality/ragdoll/testing";
-import { CharacterController } from "@vokality/ragdoll";
-
-describe("character update loop", () => {
-  it("can be stepped deterministically", () => {
-    const controller = new CharacterController({
-      themeId: "default",
-      variantId: "human",
-      onEventSubscriberError: (error) => {
-        throw error;
-      },
-    });
-    const clock = new MockClock();
-
-    // Run the controller update at a fixed cadence
-    clock.setInterval(() => {
-      controller.update(1 / 60); // 60 FPS delta in seconds
-    }, 16);
-
-    // Simulate one second of time
-    clock.advance(1000);
-
-    expect(controller.getState().animation).toBeDefined();
-  });
-});
-```
-
 ### Builders - create test data
 
 ```ts
@@ -122,16 +92,6 @@ describe("state events", () => {
 
 ## Available utilities
 
-### Clock
-
-- `IClock`: Interface for clock implementations
-- `SystemClock`: Real clock using system time
-- `MockClock`: Controllable clock for testing
-  - `now()`: Get current time
-  - `advance(ms)`: Move time forward
-  - `setTime(time)`: Set absolute time
-  - `reset()`: Reset to time 0
-
 ### Builders
 
 - `CharacterStateBuilder`: Build CharacterState objects
@@ -152,7 +112,6 @@ describe("state events", () => {
   - Provides simplified implementation
   - `reset()`: Clear call history
 
-- `SpyEventBus`: EventBus that records events
+- `SpyEventBus`: `StateEventEmitter` that records events; pass it to `StateManager`
   - `emittedEvents`: Array of all emitted events
-  - `clearHistory()`: Clear event history
   - `reset()`: Clear events and subscribers

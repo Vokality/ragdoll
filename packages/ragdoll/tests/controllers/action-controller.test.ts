@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { ActionController } from "../../src/controllers/action-controller";
 import { RagdollGeometry } from "../../src/models/ragdoll-geometry";
 import { MockHeadPoseController } from "../../src/testing/mocks";
+import { expectValidExpression } from "../support/expression-invariants";
 import type { FacialMood } from "../../src/types";
 import {
   einsteinVariant,
@@ -131,9 +132,9 @@ describe("ActionController", () => {
     it("should reset elapsed time when replacing action", () => {
       controller.triggerAction("wink", 0.5);
       controller.update(0.2);
-      expect(controller.getActionElapsed()).toBeCloseTo(0.2, 2);
+      expect(controller.getActionProgress()).toBeCloseTo(0.4, 2);
       controller.triggerAction("talk", 0.5);
-      expect(controller.getActionElapsed()).toBe(0);
+      expect(controller.getActionProgress()).toBe(0);
     });
 
     it("should release an interrupted expression without a visual jump", () => {
@@ -240,12 +241,12 @@ describe("ActionController", () => {
       expect(controller.getActiveAction()).toBeNull();
     });
 
-    it("should track elapsed time", () => {
+    it("should track progress over time", () => {
       controller.triggerAction("wink", 1.0);
       controller.update(0.3);
-      expect(controller.getActionElapsed()).toBeCloseTo(0.3, 2);
+      expect(controller.getActionProgress()).toBeCloseTo(0.3, 2);
       controller.update(0.2);
-      expect(controller.getActionElapsed()).toBeCloseTo(0.5, 2);
+      expect(controller.getActionProgress()).toBeCloseTo(0.5, 2);
     });
   });
 
@@ -354,37 +355,15 @@ describe("ActionController", () => {
                 actionController.triggerAction(action, duration);
                 actionController.update(duration * progress);
                 const overlay = actionController.getExpressionOverlay(base);
-                const leftEye = geometry.getEyePath(
-                  true,
-                  overlay.leftEye ?? base.leftEye,
+                expectValidExpression(
+                  {
+                    ...base,
+                    leftEye: overlay.leftEye ?? base.leftEye,
+                    rightEye: overlay.rightEye ?? base.rightEye,
+                    mouth: overlay.mouth ?? base.mouth,
+                  },
+                  geometry.dimensions,
                 );
-                const rightEye = geometry.getEyePath(
-                  false,
-                  overlay.rightEye ?? base.rightEye,
-                );
-                const mouthState = overlay.mouth ?? base.mouth;
-                const mouth = geometry.getMouthPath(mouthState);
-                const faceBottom =
-                  geometry.dimensions.headHeight * 0.25 +
-                  geometry.dimensions.chinHeight;
-                const mouthBottom =
-                  geometry.dimensions.mouthY +
-                  mouthState.lowerLipBottom +
-                  Math.max(0, mouthState.lowerLipCurve * 4);
-
-                for (const path of [
-                  leftEye.sclera,
-                  rightEye.sclera,
-                  mouth.upperLip,
-                  mouth.lowerLip,
-                  mouth.opening,
-                ]) {
-                  expect(path).not.toMatch(/NaN|Infinity/);
-                }
-                expect(leftEye.aperture.height).toBeGreaterThanOrEqual(0);
-                expect(rightEye.aperture.height).toBeGreaterThanOrEqual(0);
-                expect(mouth.openingHeight).toBeGreaterThanOrEqual(0);
-                expect(mouthBottom).toBeLessThanOrEqual(faceBottom);
               }
             }
           }
