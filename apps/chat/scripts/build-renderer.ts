@@ -1,9 +1,13 @@
-import { $ } from "bun";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 
-await $`rm -rf ${import.meta.dir}/../dist/renderer`.quiet();
+const outputDirectory = join(import.meta.dir, "..", "dist", "renderer");
+
+// Bun Shell rm rejects mixed-separator paths on Windows.
+await rm(outputDirectory, { recursive: true, force: true });
 const result = await Bun.build({
   entrypoints: [`${import.meta.dir}/../index.html`],
-  outdir: `${import.meta.dir}/../dist/renderer`,
+  outdir: outputDirectory,
   target: "browser",
   minify: true,
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
